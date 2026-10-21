@@ -117,7 +117,10 @@ if (maek.OS === 'windows') {
 const game_names = [
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('main.cpp'),
-	maek.CPP('LitColorTextureProgram.cpp')
+	maek.CPP('LitColorTextureProgram.cpp'),
+	maek.CPP('ColorTextureProgram.cpp'),
+	maek.CPP('BigFish.cpp'),
+	maek.CPP('BigFishMode.cpp')
 	//, maek.CPP('ColorTextureProgram.cpp')  //not used right now, but you might want it
 ];
 

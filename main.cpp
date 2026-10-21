@@ -3,6 +3,7 @@
 
 //The 'PlayMode' mode plays the game:
 #include "PlayMode.hpp"
+#include "BigFishMode.hpp"
 
 //For asset loading:
 #include "Load.hpp"
@@ -23,6 +24,7 @@
 #include <stdexcept>
 #include <memory>
 #include <algorithm>
+#include <string>
 
 #ifdef _WIN32
 extern "C" { uint32_t GetACP(); }
@@ -109,7 +111,12 @@ int main(int argc, char **argv) {
 	call_load_functions();
 
 	//------------ create game mode + make current --------------
-	Mode::set_current(std::make_shared< PlayMode >());
+	//run with --big-fish to open the big fish test scene
+	if (argc > 1 && std::string(argv[1]) == "--big-fish") {
+		Mode::set_current(std::make_shared< BigFishMode >());
+	} else {
+		Mode::set_current(std::make_shared< PlayMode >());
+	}
 
 	//------------ main loop ------------
 
