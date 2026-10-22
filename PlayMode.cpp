@@ -16,6 +16,8 @@ PlayMode::PlayMode()
 		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.8f},
 		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.576f}
 	};
+	// the big fish waits just off the left side of the world
+	big_fish.reset(glm::vec2(physics.bounds_min.x - 0.5f * big_fish.size, 0.0f));
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
@@ -48,6 +50,8 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
 void PlayMode::update(float elapsed) {
 	if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
 	glm::vec2 move(float(input.right) - float(input.left), float(input.up) - float(input.down));
+	// no swimming away once the big fish has you
+	if (caught_by_big_fish) move = glm::vec2(0.0f);
 	if (move != glm::vec2(0.0f)) {
 		move = glm::normalize(move);
 		// facing follows intent even while momentum carries the fish the other way
@@ -64,6 +68,21 @@ void PlayMode::update(float elapsed) {
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
 		accumulated_time -= UnderwaterPhysics::fixed_step;
+	}
+
+	big_fish.update(elapsed);
+	{ // the big fish pulls the small fish into its mouth and eats it
+		auto &fish = physics.bodies[fish_body];
+		if (fish.active && big_fish.can_suck(fish.position)) caught_by_big_fish = true;
+		if (fish.active && caught_by_big_fish) {
+			constexpr float SuckSpeed = 6.0f;
+			glm::vec2 to_mouth = big_fish.position - fish.position;
+			float dist = glm::length(to_mouth);
+			fish.velocity = glm::vec2(0.0f);
+			// dead for now. later this could send you into the big fish's stomach level
+			if (dist <= 0.5f) fish.active = false;
+			else fish.position += to_mouth / dist * std::min(dist, SuckSpeed * elapsed);
+		}
 	}
 }
 
@@ -166,6 +185,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	if (state == FishState::Kirby) fish_size *= glm::vec2(1.05f, 1.15f);
 	if (state == FishState::Fat) fish_size *= glm::vec2(1.1f, 1.45f);
 	if (fish.active) sprites.draw(fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x);
+	// drawn over the small fish so it disappears behind the jaws
+	big_fish.draw(sprites, world_to_clip);
 
 	glDisable(GL_BLEND);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);

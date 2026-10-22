@@ -17,15 +17,16 @@ struct BigFishMode : Mode {
 	void restart();
 
 	//the screen is ViewHeight units tall with (0,0) in the middle
-	static constexpr float ViewHeight = 10.0f;
+	static constexpr float ViewHeight = 18.0f;
 	float aspect = 16.0f / 9.0f;
 
+	DrawSprites sprites;
 	BigFish big_fish;
 
 	//placeholder for something the big fish can eat
 	struct Ball {
 		glm::vec2 position = glm::vec2(0.0f);
-		float radius = 0.3f;
+		float radius = 0.5f;
 		bool caught = false;
 		bool eaten = false;
 	} ball;

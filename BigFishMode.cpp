@@ -72,7 +72,10 @@ void BigFishMode::draw(glm::uvec2 const &drawable_size) {
 		0.0f, 0.0f, 0.0f, 1.0f
 	);
 
-	big_fish.draw(world_to_clip);
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+	big_fish.draw(sprites, world_to_clip);
+	glDisable(GL_BLEND);
 
 	{ //draw the ball as a circle
 		DrawLines lines(world_to_clip);

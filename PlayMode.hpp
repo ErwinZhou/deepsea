@@ -3,6 +3,7 @@
 #include "Mode.hpp"
 #include "DrawSprites.hpp"
 #include "UnderwaterPhysics.hpp"
+#include "BigFish.hpp"
 
 #include <optional>
 
@@ -28,6 +29,8 @@ struct PlayMode : Mode {
 	glm::vec2 facing{1.0f, 0.0f};
 	FishState state = FishState::Normal; // initial state
 	std::optional<size_t> carried_body;
+	BigFish big_fish;
+	bool caught_by_big_fish = false;
 
 private:
 	void update_interaction();

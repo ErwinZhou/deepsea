@@ -1,9 +1,13 @@
 #pragma once
 
+#include "DrawSprites.hpp"
+
 #include <glm/glm.hpp>
 
 //the big fish that chases the player. it's just a mouth facing right
 struct BigFish {
+	BigFish();
+
 	enum State {
 		Waiting, //hidden off screen until its timer runs out
 		Normal, //swims right
@@ -14,7 +18,7 @@ struct BigFish {
 	//middle of the mouth
 	glm::vec2 position = glm::vec2(0.0f);
 	//how wide each jaw is. the height follows the png's shape
-	float size = 3.0f;
+	float size = 6.0f;
 	float speed = 2.0f;
 
 	//counts down while waiting, rocked or stunned
@@ -39,5 +43,8 @@ struct BigFish {
 	//true if p is between the open jaws or a bit in front of them, and the fish isn't stopped
 	bool can_suck(glm::vec2 const &p) const;
 
-	void draw(glm::mat4 const &world_to_clip) const;
+	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
+
+	//this png is the top jaw. the bottom jaw is the same png flipped
+	SpriteTexture jaw_texture;
 };
