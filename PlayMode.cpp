@@ -11,7 +11,7 @@
 PlayMode::PlayMode()
 	: fish_texture(data_path("small-fish.png")), stone_texture(data_path("stone.png")) {
 	physics.bodies = {
-		{.position = {-8.0f, 0.0f}, .radius = 1.7f, .drag = 1.8f, .current_scale = 0.0f},
+		{.position = {-8.0f, 0.0f}, .radius = 1.7f, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.64f},
 		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.8f},
 		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.576f}
@@ -76,12 +76,29 @@ void PlayMode::update(float elapsed) {
 		if (fish.active && big_fish.can_suck(fish.position)) caught_by_big_fish = true;
 		if (fish.active && caught_by_big_fish) {
 			constexpr float SuckSpeed = 6.0f;
+			// this close to the middle of the mouth counts as swallowed
+			constexpr float EatDistance = 0.5f;
 			glm::vec2 to_mouth = big_fish.position - fish.position;
 			float dist = glm::length(to_mouth);
 			fish.velocity = glm::vec2(0.0f);
 			// dead for now. later this could send you into the big fish's stomach level
-			if (dist <= 0.5f) fish.active = false;
+			if (dist <= EatDistance) fish.active = false;
 			else fish.position += to_mouth / dist * std::min(dist, SuckSpeed * elapsed);
+		}
+	}
+
+	{ // a rock thrown or pushed into the big fish stuns it
+		// slower than this and the rock is just drifting
+		constexpr float RockHitSpeed = 3.0f;
+		constexpr float RockStunTime = 5.0f;
+		for (auto &body : physics.bodies) {
+			if (!body.active || body.kind != Body2D::Rock) continue;
+			if (big_fish.state != BigFish::Normal) break;
+			if (glm::length(body.velocity) < RockHitSpeed) continue;
+			if (!big_fish.hits(body.position, body.radius)) continue;
+			big_fish.stun(RockStunTime);
+			// the rock breaks so it can't stun again right away
+			body.active = false;
 		}
 	}
 }

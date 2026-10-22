@@ -14,6 +14,8 @@ struct Body2D {
 	float drag = 0.8f;
 	float current_scale = 1.0f;
 	bool active = true;
+	// what this body is, so game code can tell rocks from the fish
+	enum Kind { Fish, Rock } kind = Rock;
 
 	void add_force(glm::vec2 const &value);
 	void apply_impulse(glm::vec2 const &value);
