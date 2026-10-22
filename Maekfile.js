@@ -117,6 +117,7 @@ if (maek.OS === 'windows') {
 const game_names = [
 	maek.CPP('PlayMode.cpp'),
 	maek.CPP('DrawSprites.cpp'),
+	maek.CPP('UnderwaterPhysics.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('ColorTextureProgram.cpp') //unlit textured quads for the fish and props
 ];
