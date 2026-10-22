@@ -19,19 +19,41 @@ PlayMode::PlayMode()
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
-	if (evt.type != SDL_EVENT_KEY_DOWN || evt.key.repeat) return false;
-	if (evt.key.key == SDLK_ESCAPE) {
-		Mode::set_current(nullptr);
+	if (evt.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+		input = {};
 		return true;
 	}
-	return false;
+	if (evt.type != SDL_EVENT_KEY_DOWN && evt.type != SDL_EVENT_KEY_UP) return false;
+	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.repeat) return false;
+	bool pressed = evt.type == SDL_EVENT_KEY_DOWN;
+	switch (evt.key.key) {
+	case SDLK_W: input.up = pressed; break;
+	case SDLK_S: input.down = pressed; break;
+	case SDLK_A: input.left = pressed; break;
+	case SDLK_D: input.right = pressed; break;
+	case SDLK_ESCAPE:
+		if (pressed) Mode::set_current(nullptr);
+		break;
+	default: return false;
+	}
+	return true;
 }
 
 void PlayMode::update(float elapsed) {
 	if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
+	glm::vec2 move(float(input.right) - float(input.left), float(input.up) - float(input.down));
+	if (move != glm::vec2(0.0f)) {
+		move = glm::normalize(move);
+		// facing follows intent even while momentum carries the fish the other way
+		facing = move;
+	}
 	accumulated_time += std::min(elapsed, 0.1f);
 	while (accumulated_time >= UnderwaterPhysics::fixed_step) {
+		auto &fish = physics.bodies[fish_body];
+		fish.add_force(move * swim_force);
 		physics.step();
+		float speed = glm::length(fish.velocity);
+		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
 		accumulated_time -= UnderwaterPhysics::fixed_step;
 	}
 }
@@ -50,11 +72,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::mat4 world_to_clip = glm::ortho(-16.0f, 16.0f, -9.0f, 9.0f);
 
 	glDisable(GL_DEPTH_TEST);
-	glDisable(GL_CULL_FACE); // a horizontal flip reverses the quad's winding
+	glDisable(GL_CULL_FACE); // a horizontal flip reverses the quad winding
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	// use the image's aspect ratio instead of stretching future replacement art
+	// use aspect ratio
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
 		return glm::vec2(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
 	};
@@ -63,9 +85,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		auto const &body = physics.bodies[i + 1];
 		if (body.active) sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, stone_heights[i]));
 	}
-	// turns the fish to face right
 	auto const &fish = physics.bodies[fish_body];
-	if (fish.active) sprites.draw(fish_texture, world_to_clip, fish.position, sprite_size(fish_texture, 4.0f), 0.0f, true);
+	// switch the mirror direction so swimming left keeps the belly down
+	bool flip_x = facing.x >= 0.0f;
+	glm::vec2 rotation_direction = flip_x ? facing : -facing;
+	float angle = std::atan2(rotation_direction.y, rotation_direction.x);
+	if (fish.active) sprites.draw(fish_texture, world_to_clip, fish.position, sprite_size(fish_texture, 4.0f), angle, flip_x);
 
 	glDisable(GL_BLEND);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);

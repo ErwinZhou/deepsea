@@ -74,5 +74,6 @@ Testing/
 /screenshot.png
 .DS_Store
 
-# Local development docs
-docs/
+# Local development docs and tests
+/docs/
+/tests/
