@@ -98,7 +98,9 @@ if (maek.OS === "windows") {
 let copies = [
 	maek.COPY(`${NEST_LIBS}/SDL3/dist/README-SDL.txt`, `dist/README-SDL.txt`),
 	maek.COPY(`${NEST_LIBS}/libpng/dist/README-libpng.txt`, `dist/README-libpng.txt`),
-	maek.COPY(`${NEST_LIBS}/glm/dist/README-glm.txt`, `dist/README-glm.txt`)
+	maek.COPY(`${NEST_LIBS}/glm/dist/README-glm.txt`, `dist/README-glm.txt`),
+	maek.COPY('assets/small-fish.png', 'dist/small-fish.png'),
+	maek.COPY('assets/stone.png', 'dist/stone.png')
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL3/dist/SDL3.dll`, `dist/SDL3.dll`) );
@@ -114,6 +116,7 @@ if (maek.OS === 'windows') {
 //returns objFile: objFileBase + a platform-dependant suffix ('.o' or '.obj')
 const game_names = [
 	maek.CPP('PlayMode.cpp'),
+	maek.CPP('DrawSprites.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('ColorTextureProgram.cpp') //unlit textured quads for the fish and props
 ];
