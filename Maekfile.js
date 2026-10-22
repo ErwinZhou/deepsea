@@ -121,8 +121,7 @@ const game_names = [
 	maek.CPP('UnderwaterPhysics.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('ColorTextureProgram.cpp'), //unlit textured quads for the fish and props
-	maek.CPP('BigFish.cpp'),
-	maek.CPP('BigFishMode.cpp')
+	maek.CPP('BigFish.cpp')
 ];
 
 const common_names = [
