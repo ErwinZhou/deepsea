@@ -4,7 +4,11 @@
 #include "DrawSprites.hpp"
 #include "UnderwaterPhysics.hpp"
 
+#include <optional>
+
 struct PlayMode : Mode {
+	enum class FishState { Normal, Kirby, Fat };
+
 	PlayMode();
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
 	void update(float elapsed) override;
@@ -13,15 +17,30 @@ struct PlayMode : Mode {
 	static constexpr size_t fish_body = 0;
 	static constexpr float swim_force = 14.0f;
 	static constexpr float max_swim_speed = 6.0f;
+	static constexpr float mouth_offset = 1.6f; // for enlarging the fish, subject to change
+	static constexpr float suction_range = 9.0f;
+	static constexpr float suction_half_angle = 35.0f;
+	static constexpr float suction_force = 18.0f;
+	static constexpr float capture_distance = 0.25f;
+	static constexpr float spit_impulse = 14.0f;
+	static constexpr float spit_clearance = 0.1f;
 	UnderwaterPhysics physics;
 	glm::vec2 facing{1.0f, 0.0f};
+	FishState state = FishState::Normal; // initial state
+	std::optional<size_t> carried_body;
 
 private:
+	void update_interaction();
+	void spit();
+
 	struct {
 		bool up = false;
 		bool down = false;
 		bool left = false;
 		bool right = false;
+		bool space = false;
+		bool space_pressed = false;
+		bool suppress_suction = false;
 	} input;
 	double accumulated_time = 0.0;
 	DrawSprites sprites;
