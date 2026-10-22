@@ -1,42 +1,49 @@
+#pragma once
+
 #include "Mode.hpp"
+#include "DrawSprites.hpp"
+#include "UnderwaterPhysics.hpp"
 
-#include "Scene.hpp"
-
-#include <glm/glm.hpp>
-
-#include <vector>
-#include <deque>
+#include <optional>
 
 struct PlayMode : Mode {
+	enum class FishState { Normal, Kirby, Fat };
+
 	PlayMode();
-	virtual ~PlayMode();
+	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
+	void update(float elapsed) override;
+	void draw(glm::uvec2 const &drawable_size) override;
 
-	//functions called by main loop:
-	virtual bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
-	virtual void update(float elapsed) override;
-	virtual void draw(glm::uvec2 const &drawable_size) override;
+	static constexpr size_t fish_body = 0;
+	static constexpr float swim_force = 14.0f;
+	static constexpr float max_swim_speed = 6.0f;
+	static constexpr float mouth_offset = 1.6f; // for enlarging the fish, subject to change
+	static constexpr float suction_range = 9.0f;
+	static constexpr float suction_half_angle = 35.0f;
+	static constexpr float suction_force = 18.0f;
+	static constexpr float capture_distance = 0.25f;
+	static constexpr float spit_impulse = 14.0f;
+	static constexpr float spit_clearance = 0.1f;
+	UnderwaterPhysics physics;
+	glm::vec2 facing{1.0f, 0.0f};
+	FishState state = FishState::Normal; // initial state
+	std::optional<size_t> carried_body;
 
-	//----- game state -----
+private:
+	void update_interaction();
+	void spit();
 
-	//input tracking:
-	struct Button {
-		uint8_t downs = 0;
-		uint8_t pressed = 0;
-	} left, right, down, up;
-
-	//local copy of the game scene (so code can change it during gameplay):
-	Scene scene;
-
-	//hexapod leg to wobble:
-	Scene::Transform *hip = nullptr;
-	Scene::Transform *upper_leg = nullptr;
-	Scene::Transform *lower_leg = nullptr;
-	glm::quat hip_base_rotation;
-	glm::quat upper_leg_base_rotation;
-	glm::quat lower_leg_base_rotation;
-	float wobble = 0.0f;
-	
-	//camera:
-	Scene::Camera *camera = nullptr;
-
+	struct {
+		bool up = false;
+		bool down = false;
+		bool left = false;
+		bool right = false;
+		bool space = false;
+		bool space_pressed = false;
+		bool suppress_suction = false;
+	} input;
+	double accumulated_time = 0.0;
+	DrawSprites sprites;
+	SpriteTexture fish_texture;
+	SpriteTexture stone_texture;
 };

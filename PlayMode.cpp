@@ -1,214 +1,173 @@
 #include "PlayMode.hpp"
 
-#include "LitColorTextureProgram.hpp"
-
-#include "DrawLines.hpp"
-#include "Mesh.hpp"
-#include "Load.hpp"
-#include "gl_errors.hpp"
 #include "data_path.hpp"
+#include "gl_errors.hpp"
 
-#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
-#include <random>
+#include <algorithm>
+#include <cmath>
 
-GLuint hexapod_meshes_for_lit_color_texture_program = 0;
-Load< MeshBuffer > hexapod_meshes(LoadTagDefault, []() -> MeshBuffer const * {
-	MeshBuffer const *ret = new MeshBuffer(data_path("hexapod.pnct"));
-	hexapod_meshes_for_lit_color_texture_program = ret->make_vao_for_program(lit_color_texture_program->program);
-	return ret;
-});
-
-Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
-	return new Scene(data_path("hexapod.scene"), [&](Scene &scene, Scene::Transform *transform, std::string const &mesh_name){
-		Mesh const &mesh = hexapod_meshes->lookup(mesh_name);
-
-		scene.drawables.emplace_back(transform);
-		Scene::Drawable &drawable = scene.drawables.back();
-
-		drawable.pipeline = lit_color_texture_program_pipeline;
-
-		drawable.pipeline.vao = hexapod_meshes_for_lit_color_texture_program;
-		drawable.pipeline.type = mesh.type;
-		drawable.pipeline.start = mesh.start;
-		drawable.pipeline.count = mesh.count;
-
-	});
-});
-
-PlayMode::PlayMode() : scene(*hexapod_scene) {
-	//get pointers to leg for convenience:
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
-	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
-
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
-
-	//get pointer to camera for convenience:
-	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
-	camera = &scene.cameras.front();
+PlayMode::PlayMode()
+	: fish_texture(data_path("small-fish.png")), stone_texture(data_path("stone.png")) {
+	physics.bodies = {
+		{.position = {-8.0f, 0.0f}, .radius = 1.7f, .drag = 1.8f, .current_scale = 0.0f},
+		{.position = {-1.5f, 1.8f}, .radius = 0.64f},
+		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.8f},
+		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.576f}
+	};
 }
 
-PlayMode::~PlayMode() {
-}
-
-bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
-
-	if (evt.type == SDL_EVENT_KEY_DOWN) {
-		if (evt.key.key == SDLK_ESCAPE) {
-			SDL_SetWindowRelativeMouseMode(Mode::window, false);
-			return true;
-		} else if (evt.key.key == SDLK_A) {
-			left.downs += 1;
-			left.pressed = true;
-			return true;
-		} else if (evt.key.key == SDLK_D) {
-			right.downs += 1;
-			right.pressed = true;
-			return true;
-		} else if (evt.key.key == SDLK_W) {
-			up.downs += 1;
-			up.pressed = true;
-			return true;
-		} else if (evt.key.key == SDLK_S) {
-			down.downs += 1;
-			down.pressed = true;
-			return true;
-		}
-	} else if (evt.type == SDL_EVENT_KEY_UP) {
-		if (evt.key.key == SDLK_A) {
-			left.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_D) {
-			right.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_W) {
-			up.pressed = false;
-			return true;
-		} else if (evt.key.key == SDLK_S) {
-			down.pressed = false;
-			return true;
-		}
-	} else if (evt.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
-		if (SDL_GetWindowRelativeMouseMode(Mode::window) == false) {
-			SDL_SetWindowRelativeMouseMode(Mode::window, true);
-			return true;
-		}
-	} else if (evt.type == SDL_EVENT_MOUSE_MOTION) {
-		if (SDL_GetWindowRelativeMouseMode(Mode::window) == true) {
-			glm::vec2 motion = glm::vec2(
-				evt.motion.xrel / float(window_size.y),
-				-evt.motion.yrel / float(window_size.y)
-			);
-			camera->transform->rotation = glm::normalize(
-				camera->transform->rotation
-				* glm::angleAxis(-motion.x * camera->fovy, glm::vec3(0.0f, 1.0f, 0.0f))
-				* glm::angleAxis(motion.y * camera->fovy, glm::vec3(1.0f, 0.0f, 0.0f))
-			);
-			return true;
-		}
+bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
+	if (evt.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
+		input = {};
+		if (state == FishState::Kirby) state = FishState::Normal;
+		return true;
 	}
-
-	return false;
+	if (evt.type != SDL_EVENT_KEY_DOWN && evt.type != SDL_EVENT_KEY_UP) return false;
+	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.repeat) return false;
+	bool pressed = evt.type == SDL_EVENT_KEY_DOWN;
+	switch (evt.key.key) {
+	case SDLK_W: input.up = pressed; break;
+	case SDLK_S: input.down = pressed; break;
+	case SDLK_A: input.left = pressed; break;
+	case SDLK_D: input.right = pressed; break;
+	case SDLK_SPACE:
+		if (pressed && !input.space) input.space_pressed = true;
+		input.space = pressed;
+		if (!pressed) input.suppress_suction = false;
+		break;
+	case SDLK_ESCAPE:
+		if (pressed) Mode::set_current(nullptr);
+		break;
+	default: return false;
+	}
+	return true;
 }
 
 void PlayMode::update(float elapsed) {
-
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
-
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-
-	//move camera:
-	{
-
-		//combine inputs into a move:
-		constexpr float PlayerSpeed = 30.0f;
-		glm::vec2 move = glm::vec2(0.0f);
-		if (left.pressed && !right.pressed) move.x =-1.0f;
-		if (!left.pressed && right.pressed) move.x = 1.0f;
-		if (down.pressed && !up.pressed) move.y =-1.0f;
-		if (!down.pressed && up.pressed) move.y = 1.0f;
-
-		//make it so that moving diagonally doesn't go faster:
-		if (move != glm::vec2(0.0f)) move = glm::normalize(move) * PlayerSpeed * elapsed;
-
-		glm::mat4x3 frame = camera->transform->make_parent_from_local();
-		glm::vec3 frame_right = frame[0];
-		//glm::vec3 up = frame[1];
-		glm::vec3 frame_forward = -frame[2];
-
-		camera->transform->position += move.x * frame_right + move.y * frame_forward;
+	if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
+	glm::vec2 move(float(input.right) - float(input.left), float(input.up) - float(input.down));
+	if (move != glm::vec2(0.0f)) {
+		move = glm::normalize(move);
+		// facing follows intent even while momentum carries the fish the other way
+		facing = move;
 	}
+	// retain fractional time so acceleration and suction use the same steps at every frame rate
+	accumulated_time += std::min(elapsed, 0.1f);
+	while (accumulated_time >= UnderwaterPhysics::fixed_step) {
+		auto &fish = physics.bodies[fish_body];
+		// capture at the mouth before solid contacts push the target away
+		update_interaction();
+		fish.add_force(move * swim_force);
+		physics.step();
+		float speed = glm::length(fish.velocity);
+		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
+		accumulated_time -= UnderwaterPhysics::fixed_step;
+	}
+}
 
-	//reset button press counters:
-	left.downs = 0;
-	right.downs = 0;
-	up.downs = 0;
-	down.downs = 0;
+void PlayMode::update_interaction() {
+	// consume the press once so later substeps cannot reuse it after a capture
+	bool pressed = input.space_pressed;
+	input.space_pressed = false;
+	auto const &fish = physics.bodies[fish_body];
+	if (!fish.active) return;
+	if (state == FishState::Fat) {
+		// holding space after capture keeps the cargo until a fresh press
+		if (pressed) spit();
+		return;
+	}
+	// a spit blocks suction until space is released, even though the fish is empty
+	state = input.space && !input.suppress_suction ? FishState::Kirby : FishState::Normal;
+	if (state != FishState::Kirby) return;
+
+	glm::vec2 mouth = fish.position + facing * mouth_offset;
+	float cone_cos = std::cos(glm::radians(suction_half_angle));
+	float nearest_distance = suction_range;
+	std::optional<size_t> target;
+	// shrinking the search distance selects one nearest movable body inside the cone
+	for (size_t i = 0; i < physics.bodies.size(); ++i) {
+		auto const &body = physics.bodies[i];
+		if (i == fish_body || !body.active || body.inverse_mass <= 0.0f) continue;
+		glm::vec2 offset = body.position - mouth;
+		float distance = glm::length(offset);
+		// facing is unit length, so dot(offset, facing) equals distance times cos(angle)
+		// comparing cosines rejects targets outside the cone without computing the angle
+		if (distance > nearest_distance || glm::dot(offset, facing) < distance * cone_cos) continue;
+		nearest_distance = distance;
+		target = i;
+	}
+	if (!target) return;
+	auto &body = physics.bodies[*target];
+	if (nearest_distance <= body.radius + capture_distance) {
+		// disable rather than erase so spitting restores the same body and its properties
+		body.active = false;
+		body.velocity = glm::vec2(0.0f);
+		body.force = glm::vec2(0.0f);
+		carried_body = target;
+		state = FishState::Fat;
+	} else {
+		// divide by distance to normalize direction and keep force strength independent of range
+		body.add_force((mouth - body.position) * (suction_force / nearest_distance));
+	}
+}
+
+void PlayMode::spit() {
+	if (!carried_body) return;
+	auto const &fish = physics.bodies[fish_body];
+	auto &body = physics.bodies[*carried_body];
+	// both radii provide launch separation before the spawn is constrained to world bounds
+	body.position = fish.position + facing * (fish.radius + body.radius + spit_clearance);
+	body.position = glm::clamp(body.position, physics.bounds_min + body.radius, physics.bounds_max - body.radius);
+	body.velocity = fish.velocity;
+	body.force = glm::vec2(0.0f);
+	body.active = true;
+	body.apply_impulse(facing * spit_impulse);
+	carried_body.reset();
+	state = FishState::Normal;
+	// the press that launches an object cannot also start pulling it back
+	input.suppress_suction = input.space;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
-	//update camera aspect ratio for drawable:
-	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
+	if (drawable_size.x == 0 || drawable_size.y == 0) return;
 
-	//set up light type and position for lit_color_texture_program:
-	// TODO: consider using the Light(s) in the scene to do this
-	glUseProgram(lit_color_texture_program->program);
-	glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
-	glUseProgram(0);
+	// fit the same 32 x 18 world into any window, with centered letterboxing
+	glViewport(0, 0, drawable_size.x, drawable_size.y);
+	glClearColor(0.015f, 0.025f, 0.03f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT);
+	float scale = std::min(float(drawable_size.x) / 32.0f, float(drawable_size.y) / 18.0f);
+	GLsizei width = std::max(1, int(32.0f * scale));
+	GLsizei height = std::max(1, int(18.0f * scale));
+	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
+	glm::mat4 world_to_clip = glm::ortho(-16.0f, 16.0f, -9.0f, 9.0f);
 
-	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
-	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	glDisable(GL_DEPTH_TEST);
+	glDisable(GL_CULL_FACE); // a horizontal flip reverses the quad winding
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
-
-	GL_ERRORS(); //print any errors produced by this setup code
-
-	scene.draw(*camera);
-
-	{ //use DrawLines to overlay some text:
-		glDisable(GL_DEPTH_TEST);
-		float aspect = float(drawable_size.x) / float(drawable_size.y);
-		DrawLines lines(glm::mat4(
-			1.0f / aspect, 0.0f, 0.0f, 0.0f,
-			0.0f, 1.0f, 0.0f, 0.0f,
-			0.0f, 0.0f, 1.0f, 0.0f,
-			0.0f, 0.0f, 0.0f, 1.0f
-		));
-
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+	// use aspect ratio
+	auto sprite_size = [](SpriteTexture const &texture, float height) {
+		return glm::vec2(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
+	};
+	float const stone_heights[] = {2.0f, 2.5f, 1.8f};
+	for (size_t i = 0; i < 3; ++i) {
+		auto const &body = physics.bodies[i + 1];
+		if (body.active) sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, stone_heights[i]));
 	}
+	auto const &fish = physics.bodies[fish_body];
+	// switch the mirror direction so swimming left keeps the belly down
+	bool flip_x = facing.x >= 0.0f;
+	glm::vec2 rotation_direction = flip_x ? facing : -facing;
+	float angle = std::atan2(rotation_direction.y, rotation_direction.x);
+	glm::vec2 fish_size = sprite_size(fish_texture, 4.0f);
+	if (state == FishState::Kirby) fish_size *= glm::vec2(1.05f, 1.15f);
+	if (state == FishState::Fat) fish_size *= glm::vec2(1.1f, 1.45f);
+	if (fish.active) sprites.draw(fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x);
+
+	glDisable(GL_BLEND);
+	glViewport(0, 0, drawable_size.x, drawable_size.y);
+	GL_ERRORS();
 }
