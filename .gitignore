@@ -39,6 +39,9 @@
 *.app
 
 # Build directories
+/dist/
+/objs/
+/maek-cache.json
 build/
 Build/
 build-*/
@@ -66,3 +69,10 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# Local screenshots and Finder metadata
+/screenshot.png
+.DS_Store
+
+# Local development docs
+docs/

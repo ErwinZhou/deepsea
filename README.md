@@ -1,21 +1,18 @@
-# (TODO: your game's title)
+# DeepSea
 
-Author: (TODO: your name)
+A 2D underwater horror exploration game about a small fish surviving the chase of a mysterious monstrous creature and a much larger world.
 
-Design: (TODO: In two sentences or fewer, describe what is new and interesting about your game.)
+Team: Haoran Xie, Yuchen Zhou, Sarah Garland.
 
-Screen Shot:
+## Build and run
 
-![Screen Shot](screenshot.png)
+Install Node.js and a C++20 compiler, and put the course's platform-specific `nest-libs` in `../nest-libs`. See [NEST.md](NEST.md) for setup details.
 
-How To Play:
+```sh
+node Maekfile.js
+./dist/game
+```
 
-(TODO: describe the controls and (if needed) goals/strategy.)
+On Windows, run `dist/game.exe`. Escape exits the sandbox. Generated output lives in `dist/` and `objs/`; neither is source-controlled. Blender is not required.
 
-## Extra Credit
-
-Are your Physics Deterministic? If so, how can we verify this?
-
-Are your Physics Rewindable? If so, how can we verify this?
-
-This game was built with [NEST](NEST.md).
+Built on the course's [NEST framework](NEST.md). See [LICENSE](LICENSE).
