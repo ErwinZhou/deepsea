@@ -9,7 +9,10 @@
 #include <cmath>
 
 PlayMode::PlayMode()
-	: fish_texture(data_path("small-fish.png")), stone_texture(data_path("stone.png")) {
+	: fish_texture(data_path("normal.png")),
+	  kirby_texture(data_path("kirby.png")),
+	  fat_texture(data_path("fat.png")),
+	  stone_texture(data_path("stone.png")) {
 	physics.bodies = {
 		{.position = {-8.0f, 0.0f}, .radius = 1.7f, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.64f},
@@ -194,14 +197,14 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		if (body.active) sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, stone_heights[i]));
 	}
 	auto const &fish = physics.bodies[fish_body];
-	// switch the mirror direction so swimming left keeps the belly down
-	bool flip_x = facing.x >= 0.0f;
-	glm::vec2 rotation_direction = flip_x ? facing : -facing;
+	// the artwork faces right, so mirror leftward movement before rotating
+	bool flip_x = facing.x < 0.0f;
+	glm::vec2 rotation_direction = flip_x ? -facing : facing;
 	float angle = std::atan2(rotation_direction.y, rotation_direction.x);
-	glm::vec2 fish_size = sprite_size(fish_texture, 4.0f);
-	if (state == FishState::Kirby) fish_size *= glm::vec2(1.05f, 1.15f);
-	if (state == FishState::Fat) fish_size *= glm::vec2(1.1f, 1.45f);
-	if (fish.active) sprites.draw(fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x);
+	SpriteTexture const &current_fish_texture = state == FishState::Fat ? fat_texture
+		: state == FishState::Kirby ? kirby_texture : fish_texture;
+	glm::vec2 fish_size = sprite_size(current_fish_texture, 4.0f);
+	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x);
 	// drawn over the small fish so it disappears behind the jaws
 	big_fish.draw(sprites, world_to_clip);
 

@@ -48,5 +48,7 @@ private:
 	double accumulated_time = 0.0;
 	DrawSprites sprites;
 	SpriteTexture fish_texture;
+	SpriteTexture kirby_texture;
+	SpriteTexture fat_texture;
 	SpriteTexture stone_texture;
 };
