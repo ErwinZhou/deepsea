@@ -20,8 +20,8 @@ PlayMode::PlayMode()
 		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
 	};
 	// the big fish waits with its teeth just off the left side of the world.
-	// its jaws meet a little below the middle so more of the upper jaw shows
-	constexpr float BigFishY = -2.0f;
+	// its jaws meet a little above the middle so both rows of teeth stay on screen
+	constexpr float BigFishY = 1.3f;
 	big_fish.reset(glm::vec2(physics.bounds_min.x - big_fish.mouth_front(), BigFishY));
 }
 
@@ -55,8 +55,6 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
 void PlayMode::update(float elapsed) {
 	if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
 	glm::vec2 move(float(input.right) - float(input.left), float(input.up) - float(input.down));
-	// no swimming away once the big fish has you
-	if (caught_by_big_fish) move = glm::vec2(0.0f);
 	if (move != glm::vec2(0.0f)) {
 		move = glm::normalize(move);
 		// facing follows intent even while momentum carries the fish the other way
@@ -76,16 +74,12 @@ void PlayMode::update(float elapsed) {
 	}
 
 	big_fish.update(elapsed);
-	{ // the big fish chomps the small fish when it swims between the jaws
+	{ // swimming between the jaws makes them start to close. still being there when they slam is death
 		auto &fish = physics.bodies[fish_body];
-		if (fish.active && !caught_by_big_fish && big_fish.in_mouth(fish.position)) {
-			caught_by_big_fish = true;
+		if (fish.active && big_fish.in_mouth(fish.position)) {
 			big_fish.bite();
-		}
-		if (fish.active && caught_by_big_fish) {
-			fish.velocity = glm::vec2(0.0f);
-			// dead once the jaws are shut. later this could send you into the big fish's stomach level
-			if (big_fish.closed() >= 1.0f) fish.active = false;
+			// dead for now. later this could send you into the big fish's stomach level
+			if (big_fish.slammed) fish.active = false;
 		}
 	}
 
@@ -180,6 +174,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei height = std::max(1, int(18.0f * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
 	glm::mat4 world_to_clip = glm::ortho(-16.0f, 16.0f, -9.0f, 9.0f);
+	// the screen shakes when the big fish slams its jaws
+	world_to_clip = world_to_clip * glm::translate(glm::mat4(1.0f), glm::vec3(big_fish.shake(), 0.0f));
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE); // a horizontal flip reverses the quad winding

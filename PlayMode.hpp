@@ -16,8 +16,8 @@ struct PlayMode : Mode {
 	void draw(glm::uvec2 const &drawable_size) override;
 
 	static constexpr size_t fish_body = 0;
-	static constexpr float swim_force = 14.0f;
-	static constexpr float max_swim_speed = 6.0f;
+	static constexpr float swim_force = 9.0f;
+	static constexpr float max_swim_speed = 3.5f;
 	// drawn height of the small fish png and the size of its body for bumping into things
 	static constexpr float fish_height = 1.6f;
 	static constexpr float fish_radius = 0.55f;
@@ -33,7 +33,6 @@ struct PlayMode : Mode {
 	FishState state = FishState::Normal; // initial state
 	std::optional<size_t> carried_body;
 	BigFish big_fish;
-	bool caught_by_big_fish = false;
 
 private:
 	void update_interaction();
