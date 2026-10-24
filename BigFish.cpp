@@ -18,6 +18,8 @@ static constexpr float MouthFront = 0.6f;
 //inner edge of each jaw above and below the line where they meet
 static constexpr float MouthTop = 0.125f;
 static constexpr float MouthBottom = 0.04f;
+//furthest right the jaw art reaches once the upper jaw is tilted
+static constexpr float ArtFront = 0.66f;
 
 //counterclockwise turn of each jaw with the mouth open and shut
 static constexpr float Degrees = float(M_PI) / 180.0f;
@@ -122,24 +124,35 @@ float BigFish::closed() const {
 	return std::max(breathe, bite);
 }
 
-float BigFish::mouth_front() const {
-	return MouthFront * size;
+float BigFish::art_front() const {
+	return ArtFront * size;
 }
 
-bool BigFish::in_mouth(glm::vec2 const &p) const {
-	if (state != Normal) return false;
+//inner edges of the jaws at distance x in front of position.
+//measured with the jaws partway shut, so whatever is in there when they slam gets caught
+static float mouth_top(float x, float size, float closed) {
+	float c = std::min(closed, CreepClosed);
+	return MouthTop * size + x * std::tan(glm::mix(UpperOpenAngle, UpperShutAngle, c));
+}
+static float mouth_bottom(float x, float size, float closed) {
+	float c = std::min(closed, CreepClosed);
+	return -MouthBottom * size + x * std::tan(glm::mix(LowerOpenAngle, LowerShutAngle, c));
+}
+
+bool BigFish::between_jaws(glm::vec2 const &p) const {
+	if (state == Waiting) return false;
 	glm::vec2 d = p - position;
 	if (d.x < MouthBack * size || d.x > MouthFront * size) return false;
-	//measured against the jaws partway shut, so whatever is in there when they slam gets caught
-	float c = std::min(closed(), CreepClosed);
-	float top = MouthTop * size + d.x * std::tan(glm::mix(UpperOpenAngle, UpperShutAngle, c));
-	float bottom = -MouthBottom * size + d.x * std::tan(glm::mix(LowerOpenAngle, LowerShutAngle, c));
-	return d.y < top && d.y > bottom;
+	return d.y < mouth_top(d.x, size, closed()) && d.y > mouth_bottom(d.x, size, closed());
 }
 
 bool BigFish::hits(glm::vec2 const &p, float radius) const {
 	if (state == Waiting) return false;
-	return p.x - radius < position.x + mouth_front();
+	glm::vec2 d = p - position;
+	if (d.x - radius > MouthFront * size) return false;
+	//behind the mouth it's all head
+	if (d.x + radius < MouthBack * size) return true;
+	return d.y + radius > mouth_top(d.x, size, closed()) || d.y - radius < mouth_bottom(d.x, size, closed());
 }
 
 glm::vec2 BigFish::shake() const {

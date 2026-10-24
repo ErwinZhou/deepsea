@@ -22,7 +22,7 @@ PlayMode::PlayMode()
 	// the big fish waits with its teeth just off the left side of the world.
 	// its jaws meet a little above the middle so both rows of teeth stay on screen
 	constexpr float BigFishY = 1.3f;
-	big_fish.reset(glm::vec2(physics.bounds_min.x - big_fish.mouth_front(), BigFishY));
+	big_fish.reset(glm::vec2(physics.bounds_min.x - big_fish.art_front(), BigFishY));
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
@@ -76,8 +76,9 @@ void PlayMode::update(float elapsed) {
 	big_fish.update(elapsed);
 	{ // swimming between the jaws makes them start to close. still being there when they slam is death
 		auto &fish = physics.bodies[fish_body];
-		if (fish.active && big_fish.in_mouth(fish.position)) {
-			big_fish.bite();
+		if (fish.active && big_fish.between_jaws(fish.position)) {
+			// only a swimming fish starts a bite, but a slam kills even if it got stunned partway
+			if (big_fish.state == BigFish::Normal) big_fish.bite();
 			// dead for now. later this could send you into the big fish's stomach level
 			if (big_fish.slammed) fish.active = false;
 		}

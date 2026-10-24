@@ -45,11 +45,11 @@ struct BigFish {
 
 	//0 when the mouth is open, 1 when it's shut
 	float closed() const;
-	//how far in front of position the teeth reach
-	float mouth_front() const;
-	//true if p is between the jaws and the fish isn't stopped
-	bool in_mouth(glm::vec2 const &p) const;
-	//true if a circle at p has reached the front of the head
+	//how far in front of position any part of the jaws reaches
+	float art_front() const;
+	//true if p is in the open space between the jaws
+	bool between_jaws(glm::vec2 const &p) const;
+	//true if a circle at p touches the jaws themselves, not the space between them
 	bool hits(glm::vec2 const &p, float radius) const;
 	//how far to shift the view to shake the screen after a slam
 	glm::vec2 shake() const;
