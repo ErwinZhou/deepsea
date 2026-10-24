@@ -18,8 +18,11 @@ struct PlayMode : Mode {
 	static constexpr size_t fish_body = 0;
 	static constexpr float swim_force = 14.0f;
 	static constexpr float max_swim_speed = 6.0f;
-	static constexpr float mouth_offset = 1.6f; // for enlarging the fish, subject to change
-	static constexpr float suction_range = 9.0f;
+	// drawn height of the small fish png and the size of its body for bumping into things
+	static constexpr float fish_height = 1.6f;
+	static constexpr float fish_radius = 0.55f;
+	static constexpr float mouth_offset = 0.64f; // for enlarging the fish, subject to change
+	static constexpr float suction_range = 3.6f;
 	static constexpr float suction_half_angle = 35.0f;
 	static constexpr float suction_force = 18.0f;
 	static constexpr float capture_distance = 0.25f;

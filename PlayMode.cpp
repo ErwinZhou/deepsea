@@ -14,13 +14,15 @@ PlayMode::PlayMode()
 	  fat_texture(data_path("fat.png")),
 	  stone_texture(data_path("stone.png")) {
 	physics.bodies = {
-		{.position = {-8.0f, 0.0f}, .radius = 1.7f, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
-		{.position = {-1.5f, 1.8f}, .radius = 0.64f},
-		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.8f},
-		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.576f}
+		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
+		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
+		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f},
+		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
 	};
-	// the big fish waits just off the left side of the world
-	big_fish.reset(glm::vec2(physics.bounds_min.x - 0.5f * big_fish.size, 0.0f));
+	// the big fish waits with its teeth just off the left side of the world.
+	// its jaws meet a little below the middle so more of the upper jaw shows
+	constexpr float BigFishY = -2.0f;
+	big_fish.reset(glm::vec2(physics.bounds_min.x - big_fish.mouth_front(), BigFishY));
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
@@ -74,19 +76,16 @@ void PlayMode::update(float elapsed) {
 	}
 
 	big_fish.update(elapsed);
-	{ // the big fish pulls the small fish into its mouth and eats it
+	{ // the big fish chomps the small fish when it swims between the jaws
 		auto &fish = physics.bodies[fish_body];
-		if (fish.active && big_fish.can_suck(fish.position)) caught_by_big_fish = true;
+		if (fish.active && !caught_by_big_fish && big_fish.in_mouth(fish.position)) {
+			caught_by_big_fish = true;
+			big_fish.bite();
+		}
 		if (fish.active && caught_by_big_fish) {
-			constexpr float SuckSpeed = 6.0f;
-			// this close to the middle of the mouth counts as swallowed
-			constexpr float EatDistance = 0.5f;
-			glm::vec2 to_mouth = big_fish.position - fish.position;
-			float dist = glm::length(to_mouth);
 			fish.velocity = glm::vec2(0.0f);
-			// dead for now. later this could send you into the big fish's stomach level
-			if (dist <= EatDistance) fish.active = false;
-			else fish.position += to_mouth / dist * std::min(dist, SuckSpeed * elapsed);
+			// dead once the jaws are shut. later this could send you into the big fish's stomach level
+			if (big_fish.closed() >= 1.0f) fish.active = false;
 		}
 	}
 
@@ -174,7 +173,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	// fit the same 32 x 18 world into any window, with centered letterboxing
 	glViewport(0, 0, drawable_size.x, drawable_size.y);
-	glClearColor(0.015f, 0.025f, 0.03f, 1.0f);
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
 	float scale = std::min(float(drawable_size.x) / 32.0f, float(drawable_size.y) / 18.0f);
 	GLsizei width = std::max(1, int(32.0f * scale));
@@ -191,7 +190,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
 		return glm::vec2(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
 	};
-	float const stone_heights[] = {2.0f, 2.5f, 1.8f};
+	float const stone_heights[] = {1.2f, 1.5f, 1.0f};
 	for (size_t i = 0; i < 3; ++i) {
 		auto const &body = physics.bodies[i + 1];
 		if (body.active) sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, stone_heights[i]));
@@ -203,7 +202,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	float angle = std::atan2(rotation_direction.y, rotation_direction.x);
 	SpriteTexture const &current_fish_texture = state == FishState::Fat ? fat_texture
 		: state == FishState::Kirby ? kirby_texture : fish_texture;
-	glm::vec2 fish_size = sprite_size(current_fish_texture, 4.0f);
+	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
 	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x);
 	// drawn over the small fish so it disappears behind the jaws
 	big_fish.draw(sprites, world_to_clip);
