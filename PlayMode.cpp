@@ -27,10 +27,7 @@ PlayMode::PlayMode()
 		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
 	};
 	for (auto &body : physics.bodies) body.position += camera.center;
-	// the big fish waits with its teeth just off the left side of the world.
-	// its jaws meet a little above the middle so both rows of teeth stay on screen
-	constexpr float BigFishY = 1.3f;
-	big_fish.reset(glm::vec2(physics.bounds_min.x - big_fish.art_front(), camera.center.y + BigFishY));
+	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
