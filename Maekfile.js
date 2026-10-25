@@ -99,6 +99,7 @@ let copies = [
 	maek.COPY(`${NEST_LIBS}/SDL3/dist/README-SDL.txt`, `dist/README-SDL.txt`),
 	maek.COPY(`${NEST_LIBS}/libpng/dist/README-libpng.txt`, `dist/README-libpng.txt`),
 	maek.COPY(`${NEST_LIBS}/glm/dist/README-glm.txt`, `dist/README-glm.txt`),
+	maek.COPY('assets/background.png', 'dist/background.png'),
 	maek.COPY('assets/normal.png', 'dist/normal.png'),
 	maek.COPY('assets/kirby.png', 'dist/kirby.png'),
 	maek.COPY('assets/fat.png', 'dist/fat.png'),
