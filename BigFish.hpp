@@ -36,6 +36,8 @@ struct BigFish {
 
 	//puts the fish at start. it starts swimming after a random wait between MinDelay and MaxDelay seconds
 	void reset(glm::vec2 const &start);
+	// fit the open jaws and their bobbing to the world height, then spawn off its left edge
+	void reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max);
 	void update(float elapsed);
 	//stops the fish for this many seconds
 	void stun(float seconds);

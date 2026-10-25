@@ -20,6 +20,9 @@ static constexpr float MouthTop = 0.125f;
 static constexpr float MouthBottom = 0.04f;
 //furthest right the jaw art reaches once the upper jaw is tilted
 static constexpr float ArtFront = 0.66f;
+// visible top and bottom with the jaws open, measured from the pivot in png widths
+static constexpr float ArtTop = 0.43955f;
+static constexpr float ArtBottom = -0.30770f;
 
 //counterclockwise turn of each jaw with the mouth open and shut
 static constexpr float Degrees = float(M_PI) / 180.0f;
@@ -58,6 +61,14 @@ void BigFish::reset(glm::vec2 const &start) {
 	slammed = false;
 	//based on https://en.cppreference.com/w/cpp/numeric/random/uniform_real_distribution
 	timer = std::uniform_real_distribution< float >(MinDelay, MaxDelay)(rng);
+}
+
+void BigFish::reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) {
+	float height = bounds_max.y - bounds_min.y;
+	size = (height - 2.0f * BobHeight) / (ArtTop - ArtBottom);
+	float middle = 0.5f * (bounds_min.y + bounds_max.y);
+	float pivot_y = middle - 0.5f * (ArtTop + ArtBottom) * size;
+	reset(glm::vec2(bounds_min.x - art_front(), pivot_y));
 }
 
 void BigFish::update(float elapsed) {

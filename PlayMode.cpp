@@ -9,20 +9,25 @@
 #include <cmath>
 
 PlayMode::PlayMode()
-	: fish_texture(data_path("normal.png")),
+	: background_texture(data_path("background.png")),
+	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
 	  stone_texture(data_path("stone.png")) {
+	// two view heights reveal roughly a quarter of the background at a time
+	background_size = glm::vec2(background_texture.pixel_size);
+	background_size *= 2.0f * std::max(camera.view_size.x / background_size.x, camera.view_size.y / background_size.y);
+	physics.bounds_min = -0.5f * background_size;
+	physics.bounds_max = 0.5f * background_size;
+	camera.center = camera.constrain(physics.bounds_min, physics.bounds_min, physics.bounds_max);
 	physics.bodies = {
 		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
 		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f},
 		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
 	};
-	// the big fish waits with its teeth just off the left side of the world.
-	// its jaws meet a little above the middle so both rows of teeth stay on screen
-	constexpr float BigFishY = 1.3f;
-	big_fish.reset(glm::vec2(physics.bounds_min.x - big_fish.art_front(), BigFishY));
+	for (auto &body : physics.bodies) body.position += camera.center;
+	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
@@ -98,6 +103,7 @@ void PlayMode::update(float elapsed) {
 			body.active = false;
 		}
 	}
+	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 }
 
 void PlayMode::update_interaction() {
@@ -166,22 +172,26 @@ void PlayMode::spit() {
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	if (drawable_size.x == 0 || drawable_size.y == 0) return;
 
-	// fit the same 32 x 18 world into any window, with centered letterboxing
+	// keep the camera's view size fixed when the window changes shape
 	glViewport(0, 0, drawable_size.x, drawable_size.y);
 	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT);
-	float scale = std::min(float(drawable_size.x) / 32.0f, float(drawable_size.y) / 18.0f);
-	GLsizei width = std::max(1, int(32.0f * scale));
-	GLsizei height = std::max(1, int(18.0f * scale));
+	float scale = std::min(float(drawable_size.x) / camera.view_size.x, float(drawable_size.y) / camera.view_size.y);
+	GLsizei width = std::max(1, int(camera.view_size.x * scale));
+	GLsizei height = std::max(1, int(camera.view_size.y * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
-	glm::mat4 world_to_clip = glm::ortho(-16.0f, 16.0f, -9.0f, 9.0f);
-	// the screen shakes when the big fish slams its jaws
-	world_to_clip = world_to_clip * glm::translate(glm::mat4(1.0f), glm::vec3(big_fish.shake(), 0.0f));
+	glm::vec2 half_view = 0.5f * camera.view_size;
+	// clamp screen shake too so it cannot reveal space outside the background
+	glm::vec2 view_center = camera.constrain(camera.center - big_fish.shake(), physics.bounds_min, physics.bounds_max);
+	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
+		view_center.y - half_view.y, view_center.y + half_view.y);
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE); // a horizontal flip reverses the quad winding
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	sprites.draw(background_texture, world_to_clip, glm::vec2(0.0f), background_size);
 
 	// use aspect ratio
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
