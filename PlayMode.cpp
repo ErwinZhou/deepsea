@@ -9,7 +9,8 @@
 #include <cmath>
 
 PlayMode::PlayMode()
-	: fish_texture(data_path("normal.png")),
+	: background_texture(data_path("background.png")),
+	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
 	  stone_texture(data_path("stone.png")) {
@@ -174,14 +175,19 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei width = std::max(1, int(32.0f * scale));
 	GLsizei height = std::max(1, int(18.0f * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
-	glm::mat4 world_to_clip = glm::ortho(-16.0f, 16.0f, -9.0f, 9.0f);
+	glm::mat4 const view_to_clip = glm::ortho(-16.0f, 16.0f, -9.0f, 9.0f);
 	// the screen shakes when the big fish slams its jaws
-	world_to_clip = world_to_clip * glm::translate(glm::mat4(1.0f), glm::vec3(big_fish.shake(), 0.0f));
+	glm::mat4 world_to_clip = view_to_clip * glm::translate(glm::mat4(1.0f), glm::vec3(big_fish.shake(), 0.0f));
 
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE); // a horizontal flip reverses the quad winding
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+	// fill the view without stretching the image, cropping excess at the edges
+	glm::vec2 background_size(background_texture.pixel_size);
+	background_size *= std::max(32.0f / background_size.x, 18.0f / background_size.y);
+	sprites.draw(background_texture, view_to_clip, glm::vec2(0.0f), background_size);
 
 	// use aspect ratio
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
