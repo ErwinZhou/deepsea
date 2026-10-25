@@ -4,6 +4,7 @@
 #include "DrawSprites.hpp"
 #include "UnderwaterPhysics.hpp"
 #include "BigFish.hpp"
+#include "Camera2D.hpp"
 
 #include <optional>
 
@@ -29,6 +30,7 @@ struct PlayMode : Mode {
 	static constexpr float spit_impulse = 14.0f;
 	static constexpr float spit_clearance = 0.1f;
 	UnderwaterPhysics physics;
+	Camera2D camera;
 	glm::vec2 facing{1.0f, 0.0f};
 	FishState state = FishState::Normal; // initial state
 	std::optional<size_t> carried_body;
@@ -49,6 +51,7 @@ private:
 	} input;
 	double accumulated_time = 0.0;
 	DrawSprites sprites;
+	glm::vec2 background_size{0.0f};
 	SpriteTexture background_texture;
 	SpriteTexture fish_texture;
 	SpriteTexture kirby_texture;
