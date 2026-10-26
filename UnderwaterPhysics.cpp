@@ -38,6 +38,7 @@ void UnderwaterPhysics::step() {
 		}
 		for (auto &body : bodies) {
 			for (auto const &box : obstacles) resolve_contact(body, box);
+			for (auto const &polygon : polygons) resolve_contact(body, polygon);
 			contain(body);
 		}
 	}
@@ -97,6 +98,46 @@ void UnderwaterPhysics::resolve_contact(Body2D &body, StaticBox2D const &box) co
 	}
 	body.position += normal * penetration;
 	// remove inward motion while preserving sliding along the shaft
+	float closing_speed = glm::dot(body.velocity, normal);
+	if (closing_speed < 0.0f) body.velocity -= (1.0f + restitution) * closing_speed * normal;
+}
+
+void UnderwaterPhysics::resolve_contact(Body2D &body, StaticPolygon2D const &polygon) const {
+	if (!body.active || body.inverse_mass <= 0.0f || polygon.vertices.size() < 3) return;
+	bool inside = false;
+	float nearest_squared = std::numeric_limits<float>::max();
+	float area = 0.0f;
+	glm::vec2 closest(0.0f), closest_edge(0.0f);
+	for (size_t i = 0; i < polygon.vertices.size(); ++i) {
+		glm::vec2 a = polygon.vertices[i];
+		glm::vec2 b = polygon.vertices[(i + 1) % polygon.vertices.size()];
+		glm::vec2 edge = b - a;
+		area += a.x * b.y - b.x * a.y;
+		// crossing parity handles the wall's inward bends as well as the tapered hanging rock
+		if ((a.y > body.position.y) != (b.y > body.position.y)
+			&& body.position.x < a.x + edge.x * (body.position.y - a.y) / edge.y) inside = !inside;
+		float length_squared = glm::dot(edge, edge);
+		if (length_squared <= 0.00000001f) continue;
+		float t = glm::clamp(glm::dot(body.position - a, edge) / length_squared, 0.0f, 1.0f);
+		glm::vec2 point = a + t * edge;
+		glm::vec2 delta = body.position - point;
+		float distance_squared = glm::dot(delta, delta);
+		if (distance_squared >= nearest_squared) continue;
+		nearest_squared = distance_squared;
+		closest = point;
+		closest_edge = edge;
+	}
+	if (!inside && nearest_squared >= body.radius * body.radius) return;
+	float distance = std::sqrt(nearest_squared);
+	glm::vec2 normal;
+	if (distance > 0.00001f) {
+		normal = (inside ? closest - body.position : body.position - closest) / distance;
+	} else {
+		// a center exactly on an edge needs an outward normal from the polygon's winding
+		if (glm::dot(closest_edge, closest_edge) == 0.0f) return;
+		normal = glm::normalize(glm::vec2(closest_edge.y, -closest_edge.x)) * (area >= 0.0f ? 1.0f : -1.0f);
+	}
+	body.position += normal * (inside ? body.radius + distance : body.radius - distance);
 	float closing_speed = glm::dot(body.velocity, normal);
 	if (closing_speed < 0.0f) body.velocity -= (1.0f + restitution) * closing_speed * normal;
 }
