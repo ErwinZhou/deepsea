@@ -47,8 +47,8 @@ struct Cave {
 		bool crashed = false;
 	} events;
 
-	//chips knocked off by hits, and grit shaken down from the ceiling
-	struct Bit {
+	//chips knocked off by hits, and dust shaken down from the ceiling
+	struct Particle {
 		glm::vec2 position = glm::vec2(0.0f);
 		glm::vec2 velocity = glm::vec2(0.0f);
 		float size = 0.0f;
@@ -56,14 +56,14 @@ struct Cave {
 		float spin = 0.0f;
 		float life = 0.0f;
 		float max_life = 0.0f;
-		//chips sink fast, grit drifts
-		float sink = 0.0f;
+		//how fast it falls. chips drop fast, dust drifts down slowly
+		float gravity = 0.0f;
 	};
-	std::vector< Bit > bits;
-	//sends chips flying off a surface at, away along away
-	void burst(glm::vec2 const &at, glm::vec2 const &away, int count);
-	//shakes grit down from the ceiling between left and right. amount 0 is none, 1 is a lot
-	void shed_grit(float left, float right, float amount, float elapsed);
+	std::vector< Particle > particles;
+	//throws count chips out from the point at, flying roughly in the direction away
+	void throw_chips(glm::vec2 const &at, glm::vec2 const &away, int count);
+	//shakes dust down from the ceiling between left and right. amount 0 is none, 1 is a lot
+	void drop_ceiling_dust(float left, float right, float amount, float elapsed);
 
 	//places everything in the corridor and adds the loose rocks to physics
 	void setup(UnderwaterPhysics &physics);

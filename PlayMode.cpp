@@ -1,6 +1,7 @@
 #include "PlayMode.hpp"
 
 #include "data_path.hpp"
+#include "DrawLines.hpp"
 #include "gl_errors.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -101,13 +102,15 @@ void PlayMode::update(float elapsed) {
 		if (cave.events.first_wall_broke) warning_time = 0.0f;
 		if (big_fish.state == BigFish::Waiting && warning_time >= 0.0f) {
 			warning_time += elapsed;
-			cave.shed_grit(view_left, view_left + camera.view_size.x, warning_amount(), elapsed);
+			cave.drop_ceiling_dust(view_left, view_left + camera.view_size.x, warning_amount(), elapsed);
 			if (warning_time >= warning_length) big_fish.enter(view_left);
 		}
 	}
-	// it never falls further behind than just off the left of the view, so it can't be outswum
-	if (big_fish.state == BigFish::Normal) {
-		big_fish.position.x = std::max(big_fish.position.x, view_left - big_fish.art_front());
+	{ // it can't fall further behind than just off the left of the view, unless the cave held it up
+		float leash_x = view_left - big_fish.art_front();
+		if (big_fish.state == BigFish::Stunned) leashed = false;
+		if (big_fish.state == BigFish::Normal && !leashed && big_fish.position.x >= leash_x) leashed = true;
+		if (big_fish.state == BigFish::Normal && leashed) big_fish.position.x = std::max(big_fish.position.x, leash_x);
 	}
 
 	{ // once the teeth reach the small fish it's in the mouth. still being there when the jaws slam is death
@@ -120,17 +123,15 @@ void PlayMode::update(float elapsed) {
 	}
 
 	if (physics.bodies[fish_body].active && physics.bodies[fish_body].position.x > cave.exit_x) escaped = true;
+	if (!physics.bodies[fish_body].active || escaped) end_time += elapsed;
 
-	if (!physics.bodies[fish_body].active || escaped) {
-		// start over a moment after being eaten or escaping
-		constexpr float RestartDelay = 2.5f;
-		end_time += elapsed;
-		if (end_time > RestartDelay) {
-			// keep this mode alive until update returns, since replacing it frees it.
-			// based on https://en.cppreference.com/w/cpp/memory/enable_shared_from_this
-			std::shared_ptr< Mode > keep = shared_from_this();
-			Mode::set_current(std::make_shared< PlayMode >());
-		}
+	// start over a moment after being eaten. escaping ends the game, so it never starts over
+	constexpr float RestartDelay = 2.5f;
+	if (!physics.bodies[fish_body].active && end_time > RestartDelay) {
+		// keep this mode alive until update returns, since replacing it frees it.
+		// based on https://en.cppreference.com/w/cpp/memory/enable_shared_from_this
+		std::shared_ptr< Mode > keep = shared_from_this();
+		Mode::set_current(std::make_shared< PlayMode >());
 	}
 }
 
@@ -165,7 +166,8 @@ void PlayMode::update_interaction() {
 		glm::vec2 offset = body.position - mouth;
 		float distance = glm::length(offset);
 		// dot(offset, facing) is distance times the cosine of the angle to the body
-		if (distance > nearest_distance || glm::dot(offset, facing) < distance * cone_cos) continue;
+		bool in_cone = glm::dot(offset, facing) >= distance * cone_cos;
+		if (distance > nearest_distance || (!in_cone && distance > suction_any_side)) continue;
 		nearest_distance = distance;
 		target = i;
 	}
@@ -264,10 +266,22 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	big_fish.draw(sprites, world_to_clip);
 	cave.draw_over_big_fish(sprites, world_to_clip);
 
-	if (escaped) { // fade out once the small fish gets away
+	if (escaped) { // fade to black once the small fish gets away, then say so in the middle of the screen
 		constexpr float FadeTime = 2.0f;
-		float alpha = std::min(1.0f, end_time / FadeTime);
-		sprites.draw(cave_texture, world_to_clip, view_center, camera.view_size, 0.0f, false, glm::u8vec4(0xff, 0xff, 0xff, uint8_t(255.0f * alpha)));
+		constexpr float TextFadeTime = 1.0f;
+		constexpr float TextHeight = 1.5f;
+		float fade = std::min(1.0f, end_time / FadeTime);
+		float text_fade = std::clamp((end_time - FadeTime) / TextFadeTime, 0.0f, 1.0f);
+		// the cave png tinted black covers the whole view
+		sprites.draw(cave_texture, world_to_clip, view_center, camera.view_size, 0.0f, false, glm::u8vec4(0x00, 0x00, 0x00, uint8_t(255.0f * fade)));
+
+		DrawLines lines(world_to_clip);
+		glm::vec3 text_end;
+		lines.draw_text("You Escaped", glm::vec3(0.0f), glm::vec3(TextHeight, 0.0f, 0.0f), glm::vec3(0.0f, TextHeight, 0.0f),
+			glm::u8vec4(0xff, 0xff, 0xff, uint8_t(255.0f * text_fade)), &text_end);
+		// it was drawn from 0, so move it back by half its size to center it on the view
+		glm::vec3 shift = glm::vec3(view_center - 0.5f * glm::vec2(text_end.x, TextHeight), 0.0f);
+		for (DrawLines::Vertex &vertex : lines.attribs) vertex.Position += shift;
 	}
 
 	glDisable(GL_BLEND);

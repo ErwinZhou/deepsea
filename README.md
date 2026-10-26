@@ -2,6 +2,8 @@
 
 A 2D underwater horror exploration game about a small fish surviving the chase of a mysterious monstrous creature and a much larger world.
 
+![Screen Shot](docs/screenshot.png)
+
 Team: Haoran Xie, Yuchen Zhou, Sarah Garland.
 
 ## Build and run

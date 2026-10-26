@@ -26,7 +26,9 @@ struct PlayMode : Mode {
 	// how far in front of the small fish its mouth is
 	static constexpr float mouth_offset = 0.64f;
 	static constexpr float suction_range = 3.6f;
-	static constexpr float suction_half_angle = 35.0f;
+	static constexpr float suction_half_angle = 60.0f;
+	// a rock this close to the mouth gets pulled in from any side
+	static constexpr float suction_any_side = 1.8f;
 	static constexpr float suction_force = 18.0f;
 	static constexpr float capture_distance = 0.25f;
 	static constexpr float spit_impulse = 14.0f;
@@ -64,9 +66,11 @@ private:
 	float clock = 0.0f;
 	// a moment of frozen time when a spat rock hits something, so the hit lands
 	float hit_stop = 0.0f;
+	// false after the big fish gets pinned, until it swims back up to the edge of the view
+	bool leashed = true;
 	// seconds since the first wall broke, below 0 before then. the big fish arrives after a warning
 	float warning_time = -1.0f;
-	// a quiet moment after the wall breaks, then the cave trembles and sheds grit until the big fish arrives
+	// a quiet moment after the wall breaks, then the cave trembles and dust falls until the big fish arrives
 	static constexpr float warning_quiet = 1.5f;
 	static constexpr float warning_length = 4.5f;
 	// 0 before and during the quiet moment, rising to 1 as the big fish arrives

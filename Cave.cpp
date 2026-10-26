@@ -46,23 +46,23 @@ static constexpr float FallSpin = 0.6f;
 static constexpr float RubbleHalfWidth = 0.35f;
 static constexpr float RubbleHeight = 0.45f;
 //how long the big fish is held up when the rock lands on it, or when it has to get past the pile
-static constexpr float PinTime = 8.0f;
+static constexpr float PinTime = 9.0f;
 static constexpr float ChewTime = 3.0f;
 //how far in front of its teeth the rock can land and still catch the big fish
 static constexpr float PinReach = 2.0f;
 
-//a rock moving slower than this was pushed, not spat. pushing tops out a little under 4, spitting starts near 9
+//a rock moving slower than this was pushed, not spat. pushing tops out a little under 4, spitting starts above 10
 static constexpr float RockHitSpeed = 5.0f;
 //a hit thing shudders and throws chips
 static constexpr float ShudderTime = 0.25f;
 static constexpr float ShudderSize = 0.15f;
 static constexpr int HitChips = 8;
-//a hit off the crack only knocks off a little grit
+//a hit off the crack only knocks off a couple of chips
 static constexpr int MissChips = 2;
 static constexpr int BreakChips = 24;
 static constexpr float HitCooldown = 0.3f;
 static constexpr float LooseRockRadius = 0.4f;
-//chips and grit slow down in the water at this rate per second
+//particles slow down in the water at this rate per second
 static constexpr float WaterDrag = 2.0f;
 //height of the fallen rock's middle above the floor, as a fraction of HangingSize
 static constexpr float RestHeight = 0.32f;
@@ -90,9 +90,11 @@ void Cave::setup(UnderwaterPhysics &physics) {
 	hanging_rock.hits_left = HangingHits;
 	hanging_rock.center = glm::vec2(bounds_min.x + 68.0f, bounds_max.y - 0.5f * HangingSize);
 
-	//ammo between the first wall and the hanging rock, and a little before the last wall
-	for (glm::vec2 offset : {glm::vec2(42.0f, -3.0f), glm::vec2(48.0f, 2.5f), glm::vec2(54.0f, -1.0f),
-		glm::vec2(78.0f, -4.0f), glm::vec2(86.0f, 3.0f)}) {
+	//a rock breaks apart when it hits a crack, so every hit needs a new one.
+	//the last three sit far back from the last wall, so there is only time to break it after pinning the big fish
+	for (glm::vec2 offset : {glm::vec2(42.0f, -3.0f), glm::vec2(48.0f, 2.5f),
+		glm::vec2(72.0f, -3.5f), glm::vec2(75.0f, 2.0f), glm::vec2(78.0f, -1.0f),
+		glm::vec2(90.0f, -3.5f), glm::vec2(90.5f, 2.5f), glm::vec2(91.0f, -0.5f)}) {
 		physics.bodies.push_back({.position = glm::vec2(bounds_min.x + offset.x, offset.y), .radius = LooseRockRadius});
 	}
 }
@@ -134,16 +136,16 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 		wall->shudder = std::max(0.0f, wall->shudder - elapsed);
 	}
 	hanging_rock.shudder = std::max(0.0f, hanging_rock.shudder - elapsed);
-	for (Bit &bit : bits) {
-		bit.velocity.y -= bit.sink * elapsed;
+	for (Particle &particle : particles) {
+		particle.velocity.y -= particle.gravity * elapsed;
 		//exponential drag, the same way UnderwaterPhysics::step slows bodies
-		bit.velocity *= std::exp(-WaterDrag * elapsed);
-		bit.position += bit.velocity * elapsed;
-		bit.angle += bit.spin * elapsed;
-		bit.life -= elapsed;
+		particle.velocity *= std::exp(-WaterDrag * elapsed);
+		particle.position += particle.velocity * elapsed;
+		particle.angle += particle.spin * elapsed;
+		particle.life -= elapsed;
 	}
 	//based on https://en.cppreference.com/w/cpp/algorithm/remove
-	bits.erase(std::remove_if(bits.begin(), bits.end(), [](Bit const &bit) { return bit.life <= 0.0f; }), bits.end());
+	particles.erase(std::remove_if(particles.begin(), particles.end(), [](Particle const &particle) { return particle.life <= 0.0f; }), particles.end());
 
 	hit_cooldown.resize(physics.bodies.size(), 0.0f);
 	for (float &cooldown : hit_cooldown) cooldown = std::max(0.0f, cooldown - elapsed);
@@ -157,16 +159,17 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 		bool missed = false;
 		//chips fly back the way the rock came from
 		glm::vec2 away = -glm::normalize(body.velocity);
-		//true if the rock lands on the crack. landing anywhere else only knocks off grit
+		//true if the rock lands on the crack. landing anywhere else only knocks off a couple of chips
 		auto strikes = [&](StaticBox2D const &box, StaticBox2D const &crack) {
 			if (!hits_box(body, box, elapsed)) return false;
 			glm::vec2 contact = glm::clamp(body.position, box.min, box.max);
 			if (!inside(contact, crack, body.radius)) {
-				burst(contact, away, MissChips);
+				throw_chips(contact, away, MissChips);
 				missed = true;
 				return false;
 			}
-			burst(contact, away, HitChips);
+			throw_chips(contact, away, HitChips);
+			physics.bodies[i].active = false;
 			return true;
 		};
 		for (Wall *wall : {&first_wall, &last_wall}) {
@@ -177,7 +180,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			if (wall->hits_left == 0) {
 				events.broke = true;
 				for (int c = 0; c < BreakChips; ++c) {
-					burst(glm::vec2(wall->x, random_between(wall->box.min.y, wall->box.max.y)), away, 1);
+					throw_chips(glm::vec2(wall->x, random_between(wall->box.min.y, wall->box.max.y)), away, 1);
 				}
 			}
 			if (wall->hits_left == 0 && wall == &first_wall) {
@@ -215,7 +218,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			hanging_rock.state = HangingRock::Fallen;
 			events.crashed = true;
 			for (int c = 0; c < BreakChips; ++c) {
-				burst(hanging_rock.center + glm::vec2(random_between(-3.0f, 3.0f), -2.0f), glm::vec2(0.0f, 1.0f), 1);
+				throw_chips(hanging_rock.center + glm::vec2(random_between(-3.0f, 3.0f), -2.0f), glm::vec2(0.0f, 1.0f), 1);
 			}
 			//landing on the big fish's head pins it for a long time
 			float rock_left = hanging_rock.center.x - RubbleHalfWidth * HangingSize;
@@ -242,37 +245,37 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 	if (hanging_rock.state == HangingRock::Fallen) physics.obstacles.push_back(rubble_box(hanging_rock, bounds_min.y));
 }
 
-void Cave::burst(glm::vec2 const &at, glm::vec2 const &away, int count) {
+void Cave::throw_chips(glm::vec2 const &at, glm::vec2 const &away, int count) {
 	for (int c = 0; c < count; ++c) {
 		float turn = random_between(-0.9f, 0.9f);
 		//based on https://en.wikipedia.org/wiki/Rotation_matrix
 		glm::vec2 direction = glm::vec2(std::cos(turn) * away.x - std::sin(turn) * away.y, std::sin(turn) * away.x + std::cos(turn) * away.y);
-		Bit bit;
-		bit.position = at;
-		bit.velocity = direction * random_between(3.0f, 8.0f);
-		bit.size = random_between(0.08f, 0.25f);
-		bit.spin = random_between(-8.0f, 8.0f);
-		bit.max_life = bit.life = random_between(0.6f, 1.1f);
-		bit.sink = 6.0f;
-		bits.push_back(bit);
+		Particle particle;
+		particle.position = at;
+		particle.velocity = direction * random_between(3.0f, 8.0f);
+		particle.size = random_between(0.08f, 0.25f);
+		particle.spin = random_between(-8.0f, 8.0f);
+		particle.max_life = particle.life = random_between(0.6f, 1.1f);
+		particle.gravity = 6.0f;
+		particles.push_back(particle);
 	}
 }
 
-void Cave::shed_grit(float left, float right, float amount, float elapsed) {
+void Cave::drop_ceiling_dust(float left, float right, float amount, float elapsed) {
 	//grains per second at full amount
-	constexpr float GritRate = 40.0f;
-	float expected = amount * GritRate * elapsed;
+	constexpr float DustPerSecond = 40.0f;
+	float expected = amount * DustPerSecond * elapsed;
 	int count = int(expected);
 	if (random_between(0.0f, 1.0f) < expected - float(count)) count += 1;
 	for (int c = 0; c < count; ++c) {
-		Bit bit;
-		bit.position = glm::vec2(random_between(left, right), bounds_max.y);
-		bit.velocity = glm::vec2(random_between(-0.3f, 0.3f), -random_between(0.5f, 1.5f));
-		bit.size = random_between(0.05f, 0.15f);
-		bit.spin = random_between(-2.0f, 2.0f);
-		bit.max_life = bit.life = 4.0f;
-		bit.sink = 0.3f;
-		bits.push_back(bit);
+		Particle particle;
+		particle.position = glm::vec2(random_between(left, right), bounds_max.y);
+		particle.velocity = glm::vec2(random_between(-0.3f, 0.3f), -random_between(0.5f, 1.5f));
+		particle.size = random_between(0.05f, 0.15f);
+		particle.spin = random_between(-2.0f, 2.0f);
+		particle.max_life = particle.life = 4.0f;
+		particle.gravity = 0.3f;
+		particles.push_back(particle);
 	}
 }
 
@@ -304,10 +307,10 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 		sprites.draw(hanging_texture, world_to_clip, center, glm::vec2(HangingSize));
 	}
 
-	for (Bit const &bit : bits) {
+	for (Particle const &particle : particles) {
 		//fade out over the last part of their life
-		float alpha = std::min(1.0f, 2.0f * bit.life / bit.max_life);
-		sprites.draw(chip_texture, world_to_clip, bit.position, glm::vec2(bit.size), bit.angle, false,
+		float alpha = std::min(1.0f, 2.0f * particle.life / particle.max_life);
+		sprites.draw(chip_texture, world_to_clip, particle.position, glm::vec2(particle.size), particle.angle, false,
 			glm::u8vec4(0xc0, 0xc0, 0xc0, uint8_t(255.0f * alpha)));
 	}
 }
