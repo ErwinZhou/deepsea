@@ -21,9 +21,15 @@ struct Body2D {
 	void apply_impulse(glm::vec2 const &value);
 };
 
+struct StaticBox2D {
+	glm::vec2 min{0.0f};
+	glm::vec2 max{0.0f};
+};
+
 struct UnderwaterPhysics {
 	static constexpr double fixed_step = 1.0 / 120.0;
 	std::vector<Body2D> bodies;
+	std::vector<StaticBox2D> obstacles;
 	glm::vec2 bounds_min{-16.0f, -9.0f};
 	glm::vec2 bounds_max{16.0f, 9.0f};
 	glm::vec2 current_strength{0.22f, 0.16f};
@@ -35,5 +41,6 @@ struct UnderwaterPhysics {
 private:
 	double time = 0.0;
 	void resolve_contact(Body2D &a, Body2D &b) const;
+	void resolve_contact(Body2D &body, StaticBox2D const &box) const;
 	void contain(Body2D &body) const;
 };

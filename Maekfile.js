@@ -104,6 +104,7 @@ let copies = [
 	maek.COPY('assets/kirby.png', 'dist/kirby.png'),
 	maek.COPY('assets/fat.png', 'dist/fat.png'),
 	maek.COPY('assets/stone.png', 'dist/stone.png'),
+	maek.COPY('assets/pillar.png', 'dist/pillar.png'),
 	maek.COPY('assets/upper_jaw.png', 'dist/upper_jaw.png'),
 	maek.COPY('assets/lower_jaw.png', 'dist/lower_jaw.png')
 ];
@@ -125,7 +126,8 @@ const game_names = [
 	maek.CPP('UnderwaterPhysics.cpp'),
 	maek.CPP('main.cpp'),
 	maek.CPP('ColorTextureProgram.cpp'), //unlit textured quads for the fish and props
-	maek.CPP('BigFish.cpp')
+	maek.CPP('BigFish.cpp'),
+	maek.CPP('level1.cpp')
 ];
 
 const common_names = [

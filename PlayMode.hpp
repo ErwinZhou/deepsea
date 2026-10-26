@@ -5,6 +5,7 @@
 #include "UnderwaterPhysics.hpp"
 #include "BigFish.hpp"
 #include "Camera2D.hpp"
+#include "level1.hpp"
 
 #include <optional>
 
@@ -35,6 +36,7 @@ struct PlayMode : Mode {
 	FishState state = FishState::Normal; // initial state
 	std::optional<size_t> carried_body;
 	BigFish big_fish;
+	Level1 level1;
 
 private:
 	void update_interaction();

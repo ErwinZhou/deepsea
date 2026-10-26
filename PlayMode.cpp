@@ -27,6 +27,10 @@ PlayMode::PlayMode()
 		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
 	};
 	for (auto &body : physics.bodies) body.position += camera.center;
+	level1.setup(physics);
+	// keep a recoverable stone on the aiming side, beyond the solid shaft
+	glm::vec2 crack = level1.pillar.crack_region()[0];
+	physics.bodies.push_back({.position = {level1.pillar.collider().max.x + 3.0f, crack.y - 2.0f}, .radius = 0.35f});
 	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 }
 
@@ -192,15 +196,16 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	sprites.draw(background_texture, world_to_clip, glm::vec2(0.0f), background_size);
+	level1.draw(sprites, world_to_clip);
 
 	// use aspect ratio
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
 		return glm::vec2(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
 	};
-	float const stone_heights[] = {1.2f, 1.5f, 1.0f};
-	for (size_t i = 0; i < 3; ++i) {
-		auto const &body = physics.bodies[i + 1];
-		if (body.active) sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, stone_heights[i]));
+	for (auto const &body : physics.bodies) {
+		if (body.active && body.kind == Body2D::Rock) {
+			sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, 3.45f * body.radius));
+		}
 	}
 	auto const &fish = physics.bodies[fish_body];
 	// the artwork faces right, so mirror leftward movement before rotating
