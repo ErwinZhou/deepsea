@@ -1,18 +1,20 @@
 # DeepSea
 
-A 2D underwater horror exploration game about a small fish surviving the chase of a mysterious monstrous creature and a much larger world.
+A 2D underwater horror game. You are a small fish in a cave, and something much bigger is coming.
 
 Team: Haoran Xie, Yuchen Zhou, Sarah Garland.
 
 ## Build and run
 
-Install Node.js and a C++20 compiler, and put the course's platform-specific `nest-libs` in `../nest-libs`. See [NEST.md](NEST.md) for setup details.
+You need Node.js, a C++20 compiler, and the course's `nest-libs` in a folder next to this one. [NEST.md](NEST.md) has the full setup.
 
 ```sh
 node Maekfile.js
 ./dist/game
 ```
 
-On Windows, run `dist/game.exe`. Escape exits the sandbox. Generated output lives in `dist/` and `objs/`; neither is source-controlled. Blender is not required.
+On Windows, run `dist\game.exe`. Escape quits.
 
-Built on the course's [NEST framework](NEST.md). See [LICENSE](LICENSE).
+Built on the course's base code. See [LICENSE](LICENSE).
+
+Credits: the fish, jaw, rock and wall art in `assets/` was drawn by Sarah Garland for this game. `cave_rock.png` and `exit.png` are flat placeholders we generated ourselves and will be replaced. Code taken from or modeled on a specific page cites it with a `based on` comment where it is used. That includes cppreference, Wikipedia's rotation matrix and smoothstep pages, and a hit stop write-up from uhiyama-lab.com. Everything else builds on the course's NEST base code.

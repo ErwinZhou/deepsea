@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 void Body2D::add_force(glm::vec2 const &value) {
 	if (active && inverse_mass > 0.0f) force += value;
@@ -35,7 +36,10 @@ void UnderwaterPhysics::step() {
 				resolve_contact(bodies[i], bodies[j]);
 			}
 		}
-		for (auto &body : bodies) contain(body);
+		for (auto &body : bodies) {
+			for (auto const &box : obstacles) resolve_contact(body, box);
+			contain(body);
+		}
 	}
 	time += fixed_step;
 }
@@ -62,6 +66,39 @@ void UnderwaterPhysics::resolve_contact(Body2D &a, Body2D &b) const {
 	glm::vec2 impulse = normal * (-(1.0f + restitution) * closing_speed / inverse_sum);
 	a.velocity -= impulse * a.inverse_mass;
 	b.velocity += impulse * b.inverse_mass;
+}
+
+void UnderwaterPhysics::resolve_contact(Body2D &body, StaticBox2D const &box) const {
+	if (!body.active || body.inverse_mass <= 0.0f) return;
+	glm::vec2 closest = glm::clamp(body.position, box.min, box.max);
+	glm::vec2 delta = body.position - closest;
+	float distance_squared = glm::dot(delta, delta);
+	if (distance_squared >= body.radius * body.radius) return;
+
+	glm::vec2 normal(0.0f);
+	float penetration;
+	if (distance_squared > 0.00000001f) {
+		float distance = std::sqrt(distance_squared);
+		normal = delta / distance;
+		penetration = body.radius - distance;
+	} else {
+		// a center inside the box has no nearest-point direction, so use the closest exit face
+		float nearest = std::numeric_limits<float>::max();
+		for (int axis = 0; axis < 2; ++axis) {
+			for (float sign : {-1.0f, 1.0f}) {
+				float distance = sign < 0.0f ? body.position[axis] - box.min[axis] : box.max[axis] - body.position[axis];
+				if (distance >= nearest) continue;
+				nearest = distance;
+				normal = glm::vec2(0.0f);
+				normal[axis] = sign;
+			}
+		}
+		penetration = body.radius + nearest;
+	}
+	body.position += normal * penetration;
+	// remove inward motion while preserving sliding along the shaft
+	float closing_speed = glm::dot(body.velocity, normal);
+	if (closing_speed < 0.0f) body.velocity -= (1.0f + restitution) * closing_speed * normal;
 }
 
 void UnderwaterPhysics::contain(Body2D &body) const {
