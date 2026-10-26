@@ -8,7 +8,7 @@ struct Body2D {
 	glm::vec2 position{0.0f};
 	glm::vec2 velocity{0.0f};
 	glm::vec2 force{0.0f};
-	// zero inverse mass makes an active body immovable
+	// 0 means nothing can move it
 	float inverse_mass = 1.0f;
 	float radius = 0.5f;
 	float drag = 0.8f;
@@ -35,7 +35,7 @@ struct UnderwaterPhysics {
 	glm::vec2 current_strength{0.22f, 0.16f};
 	float restitution = 0.15f;
 
-	// forces expire after each fixed step, reapply thrust
+	// forces are cleared after every step, so add them again each step
 	void step();
 
 private:

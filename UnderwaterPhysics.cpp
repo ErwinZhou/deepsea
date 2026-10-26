@@ -22,14 +22,14 @@ void UnderwaterPhysics::step() {
 			);
 			body.add_force(current * body.current_scale);
 			body.velocity += body.force * body.inverse_mass * dt;
-			// exponential decay gives drag a rate per second rather than per frame
+			// drag as exponential decay, so it doesn't depend on the step size
 			body.velocity *= std::exp(-body.drag * dt);
 			body.position += body.velocity * dt;
 		}
 		body.force = glm::vec2(0.0f);
 	}
 
-	// repeat contacts because separating a pair can push another body into a wall
+	// a few passes, since pushing two bodies apart can push one into a third
 	for (int pass = 0; pass < 4; ++pass) {
 		for (size_t i = 0; i < bodies.size(); ++i) {
 			for (size_t j = i + 1; j < bodies.size(); ++j) {
@@ -54,14 +54,14 @@ void UnderwaterPhysics::resolve_contact(Body2D &a, Body2D &b) const {
 	if (distance_squared > radius * radius) return;
 
 	float distance = std::sqrt(distance_squared);
-	// coincident centers need a fixed normal to avoid division by zero
+	// centers on top of each other, so pick a direction
 	glm::vec2 normal = distance > 0.00001f ? delta / distance : glm::vec2(1.0f, 0.0f);
 	glm::vec2 correction = normal * ((radius - distance) / inverse_sum);
 	a.position -= correction * a.inverse_mass;
 	b.position += correction * b.inverse_mass;
 
 	float closing_speed = glm::dot(b.velocity - a.velocity, normal);
-	// overlapping bodies already moving apart must not receive another bounce
+	// already moving apart, so no bounce
 	if (closing_speed >= 0.0f) return;
 	glm::vec2 impulse = normal * (-(1.0f + restitution) * closing_speed / inverse_sum);
 	a.velocity -= impulse * a.inverse_mass;
@@ -82,7 +82,7 @@ void UnderwaterPhysics::resolve_contact(Body2D &body, StaticBox2D const &box) co
 		normal = delta / distance;
 		penetration = body.radius - distance;
 	} else {
-		// a center inside the box has no nearest-point direction, so use the closest exit face
+		// the center is inside the box, so push it out the nearest side
 		float nearest = std::numeric_limits<float>::max();
 		for (int axis = 0; axis < 2; ++axis) {
 			for (float sign : {-1.0f, 1.0f}) {
@@ -96,7 +96,7 @@ void UnderwaterPhysics::resolve_contact(Body2D &body, StaticBox2D const &box) co
 		penetration = body.radius + nearest;
 	}
 	body.position += normal * penetration;
-	// remove inward motion while preserving sliding along the shaft
+	// stop motion into the box but keep sliding along it
 	float closing_speed = glm::dot(body.velocity, normal);
 	if (closing_speed < 0.0f) body.velocity -= (1.0f + restitution) * closing_speed * normal;
 }

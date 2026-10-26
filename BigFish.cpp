@@ -4,25 +4,18 @@
 
 #include <algorithm>
 #include <cmath>
-#include <random>
-
-static std::mt19937 rng{std::random_device{}()};
 
 //these are measured off the jaw pngs, as fractions of the png width.
 //if the art changes, these need to be measured again.
 //how far the lower jaw png is raised so the two pngs meet at the back of the head
 static constexpr float LowerLift = 0.045f;
-//back and front of the mouth, measured from position
-static constexpr float MouthBack = 0.3f;
+//front of the teeth, measured from position
 static constexpr float MouthFront = 0.6f;
 //inner edge of each jaw above and below the line where they meet
 static constexpr float MouthTop = 0.125f;
 static constexpr float MouthBottom = 0.04f;
 //furthest right the jaw art reaches once the upper jaw is tilted
 static constexpr float ArtFront = 0.66f;
-// visible top and bottom with the jaws open, measured from the pivot in png widths
-static constexpr float ArtTop = 0.43955f;
-static constexpr float ArtBottom = -0.30770f;
 
 //counterclockwise turn of each jaw with the mouth open and shut
 static constexpr float Degrees = float(M_PI) / 180.0f;
@@ -31,7 +24,7 @@ static constexpr float UpperShutAngle = -11.0f * Degrees;
 static constexpr float LowerOpenAngle = -9.0f * Degrees;
 static constexpr float LowerShutAngle = 10.0f * Degrees;
 
-//a bite creeps the jaws partway closed, slams them, holds, then slowly opens again
+//timing of a bite. the jaws creep partway shut first, then slam the rest of the way
 static constexpr float CreepTime = 1.0f;
 static constexpr float CreepClosed = 0.3f;
 static constexpr float SlamTime = 0.12f;
@@ -59,26 +52,22 @@ void BigFish::reset(glm::vec2 const &start) {
 	bite_time = -1.0f;
 	time = 0.0f;
 	slammed = false;
-	//based on https://en.cppreference.com/w/cpp/numeric/random/uniform_real_distribution
-	timer = std::uniform_real_distribution< float >(MinDelay, MaxDelay)(rng);
 }
 
 void BigFish::reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) {
-	float height = bounds_max.y - bounds_min.y;
-	size = (height - 2.0f * BobHeight) / (ArtTop - ArtBottom);
+	//center the open mouth, measured at the teeth, on the world's height
+	float front = MouthFront * size;
+	float top = MouthTop * size + front * std::tan(UpperOpenAngle);
+	float bottom = -MouthBottom * size + front * std::tan(LowerOpenAngle);
 	float middle = 0.5f * (bounds_min.y + bounds_max.y);
-	float pivot_y = middle - 0.5f * (ArtTop + ArtBottom) * size;
+	float pivot_y = middle - 0.5f * (top + bottom);
 	reset(glm::vec2(bounds_min.x - art_front(), pivot_y));
 }
 
 void BigFish::update(float elapsed) {
 	slammed = false;
 	time += elapsed;
-	if (state == Waiting) {
-		timer -= elapsed;
-		if (timer <= 0.0f) state = Normal;
-		return;
-	}
+	if (state == Waiting) return;
 
 	position.y = base_y + BobHeight * std::sin(time * 2.0f * float(M_PI) / BobPeriod);
 
@@ -96,6 +85,11 @@ void BigFish::update(float elapsed) {
 		timer -= elapsed;
 		if (timer <= 0.0f) state = Normal;
 	}
+}
+
+void BigFish::enter(float from_x) {
+	state = Normal;
+	position.x = from_x - art_front();
 }
 
 void BigFish::stun(float seconds) {
@@ -130,6 +124,7 @@ float BigFish::closed() const {
 		bite = 1.0f;
 	} else {
 		float u = (t - SlamDone - HoldTime) / OpenTime;
+		//based on https://en.wikipedia.org/wiki/Smoothstep
 		bite = 1.0f - u * u * (3.0f - 2.0f * u);
 	}
 	return std::max(breathe, bite);
@@ -139,31 +134,8 @@ float BigFish::art_front() const {
 	return ArtFront * size;
 }
 
-//inner edges of the jaws at distance x in front of position.
-//measured with the jaws partway shut, so whatever is in there when they slam gets caught
-static float mouth_top(float x, float size, float closed) {
-	float c = std::min(closed, CreepClosed);
-	return MouthTop * size + x * std::tan(glm::mix(UpperOpenAngle, UpperShutAngle, c));
-}
-static float mouth_bottom(float x, float size, float closed) {
-	float c = std::min(closed, CreepClosed);
-	return -MouthBottom * size + x * std::tan(glm::mix(LowerOpenAngle, LowerShutAngle, c));
-}
-
-bool BigFish::between_jaws(glm::vec2 const &p) const {
-	if (state == Waiting) return false;
-	glm::vec2 d = p - position;
-	if (d.x < MouthBack * size || d.x > MouthFront * size) return false;
-	return d.y < mouth_top(d.x, size, closed()) && d.y > mouth_bottom(d.x, size, closed());
-}
-
-bool BigFish::hits(glm::vec2 const &p, float radius) const {
-	if (state == Waiting) return false;
-	glm::vec2 d = p - position;
-	if (d.x - radius > MouthFront * size) return false;
-	//behind the mouth it's all head
-	if (d.x + radius < MouthBack * size) return true;
-	return d.y + radius > mouth_top(d.x, size, closed()) || d.y - radius < mouth_bottom(d.x, size, closed());
+float BigFish::teeth_x() const {
+	return position.x + MouthFront * size;
 }
 
 glm::vec2 BigFish::shake() const {
@@ -182,7 +154,8 @@ void BigFish::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) c
 	float h = size * float(upper_jaw.pixel_size.y) / float(upper_jaw.pixel_size.x);
 	float c = closed();
 
-	//each jaw turns around position, so its center swings around that point with it
+	//each jaw turns around position, so its center swings around that point with it.
+	//based on https://en.wikipedia.org/wiki/Rotation_matrix
 	auto draw_jaw = [&](SpriteTexture const &jaw, glm::vec2 const &offset, float angle) {
 		float co = std::cos(angle);
 		float si = std::sin(angle);

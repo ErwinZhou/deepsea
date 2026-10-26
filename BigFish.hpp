@@ -4,23 +4,24 @@
 
 #include <glm/glm.hpp>
 
-//the big fish that chases the player. its jaws come in from the left, gaping, and slowly close on you
+//the big fish that chases the player. only its open jaws show, coming in from the left
 struct BigFish {
 	BigFish();
 
 	enum State {
-		Waiting, //hidden off screen until its timer runs out
+		Waiting, //hidden off screen until enter() is called
 		Normal, //swims right
-		Stunned, //hit by a rock or blinded, stops moving
+		Stunned, //pinned by falling rock, stops moving
 	} state = Waiting;
 
 	//left edge of the jaw pngs, at the line where the two jaws meet. the jaws turn around this point
 	glm::vec2 position = glm::vec2(0.0f);
 	//how wide each jaw png is drawn. the height follows the png's shape
-	float size = 60.0f;
-	float speed = 1.5f;
+	float size = 75.0f;
+	//a bit slower than the small fish, so staying ahead takes keeping moving
+	float speed = 2.5f;
 
-	//counts down while waiting or stunned
+	//counts down while stunned
 	float timer = 0.0f;
 	//counts up from 0 while biting, below 0 when not biting
 	float bite_time = -1.0f;
@@ -31,13 +32,12 @@ struct BigFish {
 	//true for the one update where the jaws slam shut
 	bool slammed = false;
 
-	static constexpr float MinDelay = 1.0f;
-	static constexpr float MaxDelay = 5.0f;
-
-	//puts the fish at start. it starts swimming after a random wait between MinDelay and MaxDelay seconds
+	//puts the fish at start, hidden until enter() is called
 	void reset(glm::vec2 const &start);
-	// fit the open jaws and their bobbing to the world height, then spawn off its left edge
+	//centers the open mouth on the world's height and hides the fish off its left edge
 	void reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max);
+	//starts the fish swimming with the front of its art at from_x
+	void enter(float from_x);
 	void update(float elapsed);
 	//stops the fish for this many seconds
 	void stun(float seconds);
@@ -49,10 +49,8 @@ struct BigFish {
 	float closed() const;
 	//how far in front of position any part of the jaws reaches
 	float art_front() const;
-	//true if p is in the open space between the jaws
-	bool between_jaws(glm::vec2 const &p) const;
-	//true if a circle at p touches the jaws themselves, not the space between them
-	bool hits(glm::vec2 const &p, float radius) const;
+	//x of the front of the teeth. anything left of this is inside the mouth
+	float teeth_x() const;
 	//how far to shift the view to shake the screen after a slam
 	glm::vec2 shake() const;
 

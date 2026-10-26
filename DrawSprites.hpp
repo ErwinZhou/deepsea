@@ -15,7 +15,7 @@ struct SpriteTexture {
 	glm::uvec2 pixel_size = glm::uvec2(0);
 };
 
-// four sandbox sprites only need a shared quad
+// every sprite is the same square, stretched and turned
 struct DrawSprites {
 	DrawSprites();
 	~DrawSprites();

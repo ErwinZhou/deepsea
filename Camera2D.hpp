@@ -39,14 +39,14 @@ struct Camera2D {
 		return glm::clamp(position, min, max);
 	}
 
-	// smoothly follow the target outside the inner box, with elapsed measured in seconds
+	// follow the target once it leaves the inner box
 	void update(glm::vec2 const &target, float elapsed, glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) {
 		if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
 		glm::vec2 offset = target - center;
 		// shift only by the distance beyond the inner box
 		glm::vec2 desired = center + offset - glm::clamp(offset, -dead_zone, dead_zone);
 		desired = constrain(desired, bounds_min, bounds_max);
-		// ease toward the allowed position using the time since the last update
+		// ease toward it at the same speed at any frame rate
 		center = glm::mix(center, desired, 1.0f - std::exp(-follow_speed * elapsed));
 		center = constrain(center, bounds_min, bounds_max);
 	}
