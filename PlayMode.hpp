@@ -53,10 +53,7 @@ private:
 	} input;
 	double accumulated_time = 0.0;
 	DrawSprites sprites;
-	glm::vec2 background_size{0.0f};
-	SpriteTexture background_texture;
 	SpriteTexture fish_texture;
 	SpriteTexture kirby_texture;
 	SpriteTexture fat_texture;
-	SpriteTexture stone_texture;
 };

@@ -9,28 +9,15 @@
 #include <cmath>
 
 PlayMode::PlayMode()
-	: background_texture(data_path("background.png")),
-	  fish_texture(data_path("normal.png")),
+	: fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
-	  fat_texture(data_path("fat.png")),
-	  stone_texture(data_path("stone.png")) {
-	// two view heights reveal roughly a quarter of the background at a time
-	background_size = glm::vec2(background_texture.pixel_size);
-	background_size *= 2.0f * std::max(camera.view_size.x / background_size.x, camera.view_size.y / background_size.y);
-	physics.bounds_min = -0.5f * background_size;
-	physics.bounds_max = 0.5f * background_size;
-	camera.center = camera.constrain(physics.bounds_min, physics.bounds_min, physics.bounds_max);
+	  fat_texture(data_path("fat.png")) {
 	physics.bodies = {
-		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
-		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
-		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f},
-		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
+		{.radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish}
 	};
-	for (auto &body : physics.bodies) body.position += camera.center;
-	level1.setup(physics);
-	// keep a recoverable stone on the aiming side, beyond the solid shaft
-	glm::vec2 crack = level1.pillar.crack_region()[0];
-	physics.bodies.push_back({.position = {level1.pillar.collider().max.x + 3.0f, crack.y - 2.0f}, .radius = 0.35f});
+	level1.setup(physics, camera.view_size);
+	physics.bodies[fish_body].position = level1.player_start;
+	camera.center = camera.constrain(physics.bounds_min, physics.bounds_min, physics.bounds_max);
 	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 }
 
@@ -195,18 +182,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	sprites.draw(background_texture, world_to_clip, glm::vec2(0.0f), background_size);
-	level1.draw(sprites, world_to_clip);
+	level1.draw(sprites, physics, world_to_clip);
 
 	// use aspect ratio
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
 		return glm::vec2(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
 	};
-	for (auto const &body : physics.bodies) {
-		if (body.active && body.kind == Body2D::Rock) {
-			sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, 3.45f * body.radius));
-		}
-	}
 	auto const &fish = physics.bodies[fish_body];
 	// the artwork faces right, so mirror leftward movement before rotating
 	bool flip_x = facing.x < 0.0f;
