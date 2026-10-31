@@ -99,16 +99,19 @@ let copies = [
 	maek.COPY(`${NEST_LIBS}/SDL3/dist/README-SDL.txt`, `dist/README-SDL.txt`),
 	maek.COPY(`${NEST_LIBS}/libpng/dist/README-libpng.txt`, `dist/README-libpng.txt`),
 	maek.COPY(`${NEST_LIBS}/glm/dist/README-glm.txt`, `dist/README-glm.txt`),
-	maek.COPY('assets/cave_rock.png', 'dist/cave_rock.png'),
+	maek.COPY('assets/cavern_background.png', 'dist/cavern_background.png'),
 	maek.COPY('assets/normal.png', 'dist/normal.png'),
 	maek.COPY('assets/kirby.png', 'dist/kirby.png'),
 	maek.COPY('assets/fat.png', 'dist/fat.png'),
 	maek.COPY('assets/small_rock.png', 'dist/small_rock.png'),
 	maek.COPY('assets/upper_jaw.png', 'dist/upper_jaw.png'),
 	maek.COPY('assets/lower_jaw.png', 'dist/lower_jaw.png'),
-	maek.COPY('assets/wall.png', 'dist/wall.png'),
-	maek.COPY('assets/big_rock.png', 'dist/big_rock.png'),
-	maek.COPY('assets/big_rock_split.png', 'dist/big_rock_split.png'),
+	maek.COPY('assets/wall1.png', 'dist/wall1.png'),
+	maek.COPY('assets/wall2.png', 'dist/wall2.png'),
+	maek.COPY('assets/wall3.png', 'dist/wall3.png'),
+	maek.COPY('assets/big_rock1.png', 'dist/big_rock1.png'),
+	maek.COPY('assets/big_rock2.png', 'dist/big_rock2.png'),
+	maek.COPY('assets/big_rock3.png', 'dist/big_rock3.png'),
 	maek.COPY('assets/exit.png', 'dist/exit.png')
 ];
 if (maek.OS === 'windows') {

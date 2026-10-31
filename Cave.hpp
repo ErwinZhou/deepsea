@@ -73,15 +73,15 @@ struct Cave {
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	//the dropped rock, drawn over the big fish so it looks pinned under it
 	void draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
+	int wall_stage(Wall const &wall) const;
 
 	glm::vec2 bounds_min = glm::vec2(0.0f);
 	glm::vec2 bounds_max = glm::vec2(0.0f);
 	//seconds before each body can count as hitting something again, so one bounce counts once
 	std::vector< float > hit_cooldown;
 
-	SpriteTexture wall_texture;
-	SpriteTexture hanging_texture;
-	SpriteTexture split_texture;
+	SpriteTexture wall_textures[3];
+	SpriteTexture hanging_textures[3];
 	SpriteTexture exit_texture;
 	SpriteTexture chip_texture;
 };

@@ -10,7 +10,7 @@
 #include <cmath>
 
 PlayMode::PlayMode()
-	: cave_texture(data_path("cave_rock.png")),
+	: cave_texture(data_path("cavern_background.png")),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
@@ -239,11 +239,24 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	{ // cave ceiling and floor, wide and tall enough to cover the view past both ends of the level
-		glm::vec2 size = glm::vec2(level_length, 0.0f) + camera.view_size;
-		float middle_x = 0.5f * (physics.bounds_min.x + physics.bounds_max.x);
-		sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, physics.bounds_max.y + 0.5f * size.y), size);
-		sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, physics.bounds_min.y - 0.5f * size.y), size);
+	{
+		// one extra world unit above and below the view covers the combined monster and collapse shakes
+		constexpr float BackgroundPadding = 1.0f;
+		const float height = camera.view_size.y + 2.0f * BackgroundPadding;
+		const glm::vec2 size(height * float(cave_texture.pixel_size.x) / float(cave_texture.pixel_size.y), height);
+		const float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
+		const int first_tile = int(std::floor((view_center.x - half_view.x) / size.x));
+		const int last_tile = int(std::floor((view_center.x + half_view.x) / size.x));
+		// alternate horizontal flips make neighboring edges meet while preserving the png's proportions
+		for (int tile = first_tile; tile <= last_tile; ++tile) {
+			sprites.draw(cave_texture, world_to_clip, glm::vec2((float(tile) + 0.5f) * size.x, middle_y), size, 0.0f, tile % 2 != 0);
+		}
+		// keep the ceiling and floor at their collision heights so walls and hanging rocks stay attached
+		const glm::vec2 cover_size = glm::vec2(level_length, 0.0f) + camera.view_size;
+		const float middle_x = 0.5f * (physics.bounds_min.x + physics.bounds_max.x);
+		for (float y : {physics.bounds_max.y + 0.5f * cover_size.y, physics.bounds_min.y - 0.5f * cover_size.y}) {
+			sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, y), cover_size, 0.0f, false, glm::u8vec4(0, 0, 0, 255));
+		}
 	}
 
 	// size from a height, keeping the png's shape
