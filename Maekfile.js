@@ -106,9 +106,15 @@ let copies = [
 	maek.COPY('assets/small_rock.png', 'dist/small_rock.png'),
 	maek.COPY('assets/upper_jaw.png', 'dist/upper_jaw.png'),
 	maek.COPY('assets/lower_jaw.png', 'dist/lower_jaw.png'),
-	maek.COPY('assets/wall.png', 'dist/wall.png'),
-	maek.COPY('assets/big_rock.png', 'dist/big_rock.png'),
-	maek.COPY('assets/big_rock_split.png', 'dist/big_rock_split.png'),
+	maek.COPY('assets/cavern_rock.png', 'dist/cavern_rock.png'),
+	maek.COPY('assets/cavern_background.png', 'dist/cavern_background.png'),
+	maek.COPY('assets/jellyfish.png', 'dist/jellyfish.png'),
+	maek.COPY('assets/wall1.png', 'dist/wall1.png'),
+	maek.COPY('assets/wall2.png', 'dist/wall2.png'),
+	maek.COPY('assets/wall3.png', 'dist/wall3.png'),
+	maek.COPY('assets/big_rock1.png', 'dist/big_rock1.png'),
+	maek.COPY('assets/big_rock2.png', 'dist/big_rock2.png'),
+	maek.COPY('assets/big_rock3.png', 'dist/big_rock3.png'),
 	maek.COPY('assets/exit.png', 'dist/exit.png')
 ];
 if (maek.OS === 'windows') {
@@ -128,9 +134,9 @@ const game_names = [
 	maek.CPP('DrawSprites.cpp'),
 	maek.CPP('UnderwaterPhysics.cpp'),
 	maek.CPP('main.cpp'),
-	maek.CPP('ColorTextureProgram.cpp'), //unlit textured quads for the fish and props
 	maek.CPP('BigFish.cpp'),
-	maek.CPP('Cave.cpp')
+	maek.CPP('Cave.cpp'),
+	maek.CPP('Water.cpp')
 ];
 
 const common_names = [

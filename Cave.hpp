@@ -39,6 +39,9 @@ struct Cave {
 	//swimming past this x is escaping
 	float exit_x = 0.0f;
 
+	//fixed lights in the cave
+	std::vector< glm::vec3 > light_spots;
+
 	//what happened during the last update, for PlayMode to react to
 	struct Events {
 		bool hit = false;
@@ -80,7 +83,10 @@ struct Cave {
 	std::vector< float > hit_cooldown;
 
 	SpriteTexture wall_texture;
+	SpriteTexture wall_damaged_texture;
+	SpriteTexture wall_cracked_texture;
 	SpriteTexture hanging_texture;
+	SpriteTexture hanging_damaged_texture;
 	SpriteTexture split_texture;
 	SpriteTexture exit_texture;
 	SpriteTexture chip_texture;

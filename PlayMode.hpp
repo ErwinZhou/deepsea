@@ -6,6 +6,7 @@
 #include "BigFish.hpp"
 #include "Camera2D.hpp"
 #include "Cave.hpp"
+#include "Water.hpp"
 
 #include <optional>
 
@@ -33,9 +34,9 @@ struct PlayMode : Mode {
 	static constexpr float capture_distance = 0.25f;
 	static constexpr float spit_impulse = 14.0f;
 	static constexpr float spit_clearance = 0.1f;
-	// the level is a cave corridor no taller than the big fish's open mouth, so there is no getting around it
 	static constexpr float level_length = 120.0f;
-	static constexpr float corridor_height = 13.0f;
+	// the camera shows the full height of the level
+	static constexpr float corridor_height = 20.5f;
 	UnderwaterPhysics physics;
 	Camera2D camera;
 	glm::vec2 facing{1.0f, 0.0f};
@@ -64,6 +65,7 @@ private:
 	// seconds left of the rumble when the hanging rock comes down, and a clock to wobble it by
 	float rumble = 0.0f;
 	float clock = 0.0f;
+	float scene_brightness = 1.0f;
 	// a moment of frozen time when a spat rock hits something, so the hit lands
 	float hit_stop = 0.0f;
 	// false after the big fish gets pinned, until it swims back up to the edge of the view
@@ -76,9 +78,14 @@ private:
 	// 0 before and during the quiet moment, rising to 1 as the big fish arrives
 	float warning_amount() const;
 	DrawSprites sprites;
+	Water water;
+	Water::Look water_look;
 	SpriteTexture cave_texture;
 	SpriteTexture fish_texture;
 	SpriteTexture kirby_texture;
 	SpriteTexture fat_texture;
 	SpriteTexture stone_texture;
+	SpriteTexture cavern_texture;
+	SpriteTexture background_texture;
+	SpriteTexture jellyfish_texture;
 };

@@ -138,6 +138,16 @@ float BigFish::teeth_x() const {
 	return position.x + MouthFront * size;
 }
 
+glm::vec2 BigFish::lure_position() const {
+	float angle = glm::mix(UpperOpenAngle, UpperShutAngle, closed());
+	float height = size * float(upper_jaw.pixel_size.y) / float(upper_jaw.pixel_size.x);
+	// lure center measured from the upper jaw png
+	glm::vec2 offset(0.4732f * size, 0.8351f * height);
+	float co = std::cos(angle);
+	float si = std::sin(angle);
+	return position + glm::vec2(co * offset.x - si * offset.y, si * offset.x + co * offset.y);
+}
+
 glm::vec2 BigFish::shake() const {
 	if (!biting() || bite_time < SlamDone) return glm::vec2(0.0f);
 	float left = 1.0f - (bite_time - SlamDone) / ShakeTime;
@@ -149,8 +159,6 @@ glm::vec2 BigFish::shake() const {
 void BigFish::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
 	if (state == Waiting) return;
 
-	//draw it darker while it's stopped
-	glm::u8vec4 tint = (state == Normal ? glm::u8vec4(0xff) : glm::u8vec4(0x77, 0x77, 0x77, 0xff));
 	float h = size * float(upper_jaw.pixel_size.y) / float(upper_jaw.pixel_size.x);
 	float c = closed();
 
@@ -160,7 +168,7 @@ void BigFish::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) c
 		float co = std::cos(angle);
 		float si = std::sin(angle);
 		glm::vec2 center = position + glm::vec2(co * offset.x - si * offset.y, si * offset.x + co * offset.y);
-		sprites.draw(jaw, world_to_clip, center, glm::vec2(size, h), angle, false, tint);
+		sprites.draw(jaw, world_to_clip, center, glm::vec2(size, h), angle, false, glm::u8vec4(255), 0.0f, DrawSprites::Predator);
 	};
 	//the upper jaw is drawn last so it covers the lower jaw where they overlap
 	draw_jaw(lower_jaw, glm::vec2(0.5f * size, -0.5f * h + LowerLift * size), glm::mix(LowerOpenAngle, LowerShutAngle, c));

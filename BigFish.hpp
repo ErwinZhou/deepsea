@@ -51,6 +51,7 @@ struct BigFish {
 	float art_front() const;
 	//x of the front of the teeth. anything left of this is inside the mouth
 	float teeth_x() const;
+	glm::vec2 lure_position() const;
 	//how far to shift the view to shake the screen after a slam
 	glm::vec2 shake() const;
 

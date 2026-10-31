@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 PlayMode::PlayMode()
@@ -14,7 +15,12 @@ PlayMode::PlayMode()
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
-	  stone_texture(data_path("small_rock.png")) {
+	  stone_texture(data_path("small_rock.png")),
+	  cavern_texture(data_path("cavern_rock.png")),
+	  background_texture(data_path("cavern_background.png")),
+	  jellyfish_texture(data_path("jellyfish.png")) {
+	camera.view_size = glm::vec2(corridor_height * (16.0f / 9.0f), corridor_height);
+	camera.dead_zone = glm::vec2(5.0f, 2.5f);
 	physics.bounds_min = glm::vec2(-0.5f * level_length, -0.5f * corridor_height);
 	physics.bounds_max = glm::vec2(0.5f * level_length, 0.5f * corridor_height);
 	camera.center = camera.constrain(physics.bounds_min, physics.bounds_min, physics.bounds_max);
@@ -112,6 +118,10 @@ void PlayMode::update(float elapsed) {
 		if (big_fish.state == BigFish::Normal && !leashed && big_fish.position.x >= leash_x) leashed = true;
 		if (big_fish.state == BigFish::Normal && leashed) big_fish.position.x = std::max(big_fish.position.x, leash_x);
 	}
+	float target_brightness = 1.0f;
+	if (big_fish.state != BigFish::Waiting) target_brightness = 0.65f;
+	else if (warning_time >= 0.0f) target_brightness = 1.0f - 0.45f * warning_amount();
+	scene_brightness += (target_brightness - scene_brightness) * (1.0f - std::exp(-elapsed / 1.2f));
 
 	{ // once the teeth reach the small fish it's in the mouth. still being there when the jaws slam is death
 		auto &fish = physics.bodies[fish_body];
@@ -214,8 +224,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei width = std::max(1, int(camera.view_size.x * scale));
 	GLsizei height = std::max(1, int(camera.view_size.y * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
-	glm::vec2 half_view = 0.5f * camera.view_size;
+	glm::vec2 const &render_view = camera.view_size;
 	glm::vec2 view_center = camera.center - big_fish.shake();
+	glm::vec2 half_view = 0.5f * render_view;
 	{ // a rumble when the hanging rock comes down, and a tremble that grows while the big fish is on its way
 		constexpr float RumbleSize = 0.25f;
 		// the rumble eases off over its last moments
@@ -228,16 +239,71 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
+	std::array<glm::vec2, 3> jelly_positions = {
+		glm::vec2(cave.first_wall.x - 11.5f, 4.1f),
+		glm::vec2(cave.hanging_rock.center.x - 7.0f, 3.0f),
+		glm::vec2(cave.last_wall.x - 7.0f, 3.8f)
+	};
+	for (size_t i = 0; i < jelly_positions.size(); ++i) {
+		jelly_positions[i] += glm::vec2(0.18f * std::sin(clock * 0.3f + float(i)),
+			0.25f * std::sin(clock * 0.65f + float(i) * 2.0f));
+	}
+	{ // lights stay at their positions in the cave
+		constexpr glm::vec2 GlowRadius = glm::vec2(5.5f, 4.0f);
+
+		Water::Look &look = water_look;
+		look.glows.clear();
+		look.blockers.clear();
+		look.view_min = view_center - half_view;
+		look.view_max = view_center + half_view;
+		for (glm::vec3 const &spot : cave.light_spots) {
+			if (std::abs(spot.x - view_center.x) < half_view.x + 3.0f * GlowRadius.x) look.glows.push_back(spot);
+		}
+		for (size_t i = 0; i < jelly_positions.size(); ++i) {
+			if (std::abs(jelly_positions[i].x - view_center.x) < half_view.x + 3.0f * GlowRadius.x) {
+				look.glows.emplace_back(jelly_positions[i], 1.2f + 0.12f * std::sin(clock * 1.3f + float(i)));
+			}
+		}
+		if (big_fish.state != BigFish::Waiting) look.glows.emplace_back(big_fish.lure_position(), 2.5f);
+		for (StaticBox2D const &box : physics.obstacles) look.blockers.emplace_back(box.min, box.max);
+		look.glow_radius = GlowRadius;
+		look.brightness = scene_brightness;
+		look.time = clock;
+		look.bubble_columns = {
+			glm::vec3(cave.first_wall.x - 17.0f, physics.bounds_min.y - 1.5f, physics.bounds_max.y + 2.0f),
+			glm::vec3(cave.hanging_rock.center.x + 6.0f, physics.bounds_min.y - 1.5f, physics.bounds_max.y + 2.0f),
+			glm::vec3(cave.last_wall.x - 4.0f, physics.bounds_min.y - 1.5f, physics.bounds_max.y + 2.0f)
+		};
+		sprites.set_look(look);
+		water.begin(look);
+	}
 	glDisable(GL_DEPTH_TEST);
 	glDisable(GL_CULL_FACE); // a horizontal flip reverses the quad winding
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	{ // cave ceiling and floor, wide and tall enough to cover the view past both ends of the level
-		glm::vec2 size = glm::vec2(level_length, 0.0f) + camera.view_size;
-		float middle_x = 0.5f * (physics.bounds_min.x + physics.bounds_max.x);
-		sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, physics.bounds_max.y + 0.5f * size.y), size);
-		sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, physics.bounds_min.y - 0.5f * size.y), size);
+	{ // two rock layers scroll at different speeds behind the fish
+		float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
+		auto draw_layer = [&](SpriteTexture const &texture, float parallax, float height, float fade, uint8_t alpha) {
+			height = std::max(height, 2.0f * (std::abs(view_center.y) + half_view.y) + 4.0f);
+			float width = height * float(texture.pixel_size.x) / float(texture.pixel_size.y);
+			glm::vec2 origin(view_center.x * (1.0f - parallax), middle_y);
+			int first = int(std::floor((view_center.x - half_view.x - origin.x) / width));
+			int last = int(std::floor((view_center.x + half_view.x - origin.x) / width));
+			for (int i = first; i <= last; ++i) {
+				sprites.draw(texture, world_to_clip, origin + glm::vec2((float(i) + 0.5f) * width, 0.0f),
+					glm::vec2(width + 0.03f, height), 0.0f, i % 2 != 0,
+					glm::u8vec4(255, 255, 255, alpha), fade, DrawSprites::Background);
+			}
+		};
+		draw_layer(background_texture, 0.12f, 28.0f, 0.72f, 255);
+		draw_layer(cavern_texture, 0.28f, 34.0f, 0.45f, 55);
+	}
+	water.haze();
+	for (size_t i = 0; i < jelly_positions.size(); ++i) {
+		float pulse = 1.0f + 0.035f * std::sin(clock * 1.3f + float(i));
+		sprites.draw(jellyfish_texture, world_to_clip, jelly_positions[i], glm::vec2(1.8f * pulse, 2.15f / pulse),
+			0.04f * std::sin(clock * 0.4f + float(i)), false, glm::u8vec4(175, 185, 190, 165), 0.0f, DrawSprites::Emissive);
 	}
 
 	// size from a height, keeping the png's shape
@@ -250,7 +316,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	constexpr float RockArtFill = 0.83f;
 	for (auto const &body : physics.bodies) {
 		if (body.active && body.kind == Body2D::Rock) {
-			sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, 2.0f * body.radius / RockArtFill));
+			sprites.draw(stone_texture, world_to_clip, body.position, sprite_size(stone_texture, 2.0f * body.radius / RockArtFill),
+				0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
 		}
 	}
 	auto const &fish = physics.bodies[fish_body];
@@ -261,10 +328,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	SpriteTexture const &current_fish_texture = state == FishState::Fat ? fat_texture
 		: state == FishState::Kirby ? kirby_texture : fish_texture;
 	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
-	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x);
-	// drawn over the small fish so it disappears behind the jaws
+	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
+		glm::u8vec4(255), 0.0f, DrawSprites::Player);
 	big_fish.draw(sprites, world_to_clip);
 	cave.draw_over_big_fish(sprites, world_to_clip);
+	water.finish();
+	glEnable(GL_BLEND);
+	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	if (escaped) { // fade to black once the small fish gets away, then say so in the middle of the screen
 		constexpr float FadeTime = 2.0f;
@@ -273,7 +343,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		float fade = std::min(1.0f, end_time / FadeTime);
 		float text_fade = std::clamp((end_time - FadeTime) / TextFadeTime, 0.0f, 1.0f);
 		// the cave png tinted black covers the whole view
-		sprites.draw(cave_texture, world_to_clip, view_center, camera.view_size, 0.0f, false, glm::u8vec4(0x00, 0x00, 0x00, uint8_t(255.0f * fade)));
+		sprites.draw(cave_texture, world_to_clip, view_center, render_view, 0.0f, false, glm::u8vec4(0x00, 0x00, 0x00, uint8_t(255.0f * fade)));
 
 		DrawLines lines(world_to_clip);
 		glm::vec3 text_end;

@@ -67,8 +67,10 @@ static constexpr float WaterDrag = 2.0f;
 //height of the fallen rock's middle above the floor, as a fraction of HangingSize
 static constexpr float RestHeight = 0.32f;
 
-Cave::Cave() : wall_texture(data_path("wall.png")), hanging_texture(data_path("big_rock.png")),
-	split_texture(data_path("big_rock_split.png")), exit_texture(data_path("exit.png")),
+Cave::Cave() : wall_texture(data_path("wall1.png")),
+	wall_damaged_texture(data_path("wall2.png")), wall_cracked_texture(data_path("wall3.png")),
+	hanging_texture(data_path("big_rock1.png")), hanging_damaged_texture(data_path("big_rock2.png")),
+	split_texture(data_path("big_rock3.png")), exit_texture(data_path("exit.png")),
 	chip_texture(data_path("small_rock.png")) {
 }
 
@@ -89,6 +91,11 @@ void Cave::setup(UnderwaterPhysics &physics) {
 	hanging_rock = HangingRock();
 	hanging_rock.hits_left = HangingHits;
 	hanging_rock.center = glm::vec2(bounds_min.x + 68.0f, bounds_max.y - 0.5f * HangingSize);
+
+	float middle_y = 0.5f * (bounds_min.y + bounds_max.y);
+	light_spots = {
+		glm::vec3(exit_x, middle_y, 2.4f),
+	};
 
 	//a rock breaks apart when it hits a crack, so every hit needs a new one.
 	//the last three sit far back from the last wall, so there is only time to break it after pinning the big fish
@@ -299,12 +306,26 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 	for (Wall const *wall : {&first_wall, &last_wall}) {
 		if (wall->hits_left <= 0) continue;
 		glm::vec2 center = glm::vec2(wall->x - (art_middle - 0.5f) * png_width + shudder_offset(wall->shudder), middle_y);
-		sprites.draw(wall_texture, world_to_clip, center, glm::vec2(png_width, height));
+		int initial_hits = wall == &first_wall ? FirstWallHits : LastWallHits;
+		int damage = initial_hits - wall->hits_left;
+		SpriteTexture const &texture = damage == 0 ? wall_texture
+			: damage == 1 ? wall_damaged_texture : wall_cracked_texture;
+		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_max.y + 16.0f),
+			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
+			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
+		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_min.y - 16.0f),
+			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
+			glm::vec4(0.0f, 0.001f, 1.0f, 0.001f));
+		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, height));
 	}
 
 	if (hanging_rock.state == HangingRock::Hanging) {
 		glm::vec2 center = hanging_rock.center + glm::vec2(shudder_offset(hanging_rock.shudder), 0.0f);
-		sprites.draw(hanging_texture, world_to_clip, center, glm::vec2(HangingSize));
+		SpriteTexture const &texture = hanging_rock.hits_left == HangingHits ? hanging_texture : hanging_damaged_texture;
+		sprites.draw(texture, world_to_clip, glm::vec2(center.x, center.y + 0.5f * HangingSize + 16.0f),
+			glm::vec2(HangingSize, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
+			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
+		sprites.draw(texture, world_to_clip, center, glm::vec2(HangingSize));
 	}
 
 	for (Particle const &particle : particles) {
