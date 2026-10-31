@@ -87,7 +87,13 @@ void PlayMode::update(float elapsed) {
 		auto &fish = physics.bodies[fish_body];
 		// suck first, so a rock at the mouth isn't bumped away by the collision
 		update_interaction();
-		fish.add_force(move * swim_force);
+		glm::vec2 swim_thrust = move * swim_force;
+		if (carried_body && move != glm::vec2(0.0f)) {
+			const float acceleration_scale = 1.0f / (1.0f + carried_inertia_per_radius * physics.bodies[*carried_body].radius);
+			// reduce net acceleration while keeping enough thrust to overcome drag at full speed
+			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
+		}
+		fish.add_force(swim_thrust);
 		physics.step();
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
