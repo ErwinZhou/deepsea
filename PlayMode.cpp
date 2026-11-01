@@ -21,8 +21,7 @@ PlayMode::PlayMode()
 	physics.bodies = {
 		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
-		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f},
-		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
+		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f}
 	};
 	for (auto &body : physics.bodies) body.position += camera.center;
 	cave.setup(physics);
@@ -184,8 +183,6 @@ void PlayMode::update_interaction() {
 		body.active = false;
 		body.velocity = glm::vec2(0.0f);
 		body.force = glm::vec2(0.0f);
-		// caught stones become ordinary ammunition instead of continuing to fall when spat
-		body.gravity = 0.0f;
 		body.player_spat = false;
 		carried_body = target;
 		state = FishState::Fat;

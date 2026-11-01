@@ -22,7 +22,6 @@ void UnderwaterPhysics::step() {
 			);
 			body.add_force(current * body.current_scale);
 			body.velocity += body.force * body.inverse_mass * dt;
-			body.velocity.y -= body.gravity * dt;
 			// drag as exponential decay, so it doesn't depend on the step size
 			body.velocity *= std::exp(-body.drag * dt);
 			body.position += body.velocity * dt;

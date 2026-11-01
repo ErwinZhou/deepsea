@@ -39,6 +39,8 @@ static constexpr PngBox HangingShape[] = {
 //its crack runs out to the right side of the lower part
 static constexpr PngBox HangingCrack = {0.6f, 1.0f, 0.35f, 0.72f};
 static constexpr int HangingHits = 3;
+// distance between pillar and final wall, 12 world units keeps both visible together with room to collect stones
+static constexpr float PillarWallGap = 12.0f;
 //how it falls once it breaks loose. it drifts left because the crack is on its right
 static constexpr float FallGravity = 25.0f;
 static constexpr float FallDrift = 2.5f;
@@ -63,12 +65,14 @@ static constexpr int MissChips = 2;
 static constexpr int BreakChips = 24;
 static constexpr float HitCooldown = 0.3f;
 static constexpr float LooseRockRadius = 0.4f;
-// two stones per pillar hit, 6 and 8 world units to its right keep drops clear of its outline and within reach
-static constexpr float RockfallOffsets[] = {6.0f, 8.0f};
-// downward acceleration, 6.0 brings stones from the ceiling to swimming height in roughly 1 to 2 seconds
-static constexpr float RockfallGravity = 6.0f;
-// initial downward speed, 2.0 makes stones visibly emerge from the ceiling immediately
-static constexpr float RockfallSpeed = 2.0f;
+// two starting stones, six and eight units right of the pillar, cannot open the three-hit final wall without a pillar batch
+static glm::vec2 const FinalRockOffsets[] = {{6.0f, -2.0f}, {8.0f, 2.0f}};
+// drop offsets clear the pillar, different downward speeds drift about 3.7 and 5 units before water drag stops them
+// zero current influence keeps the stones suspended once their initial momentum fades
+static Body2D const RockfallStones[] = {
+	{.position = {6.0f, 0.0f}, .velocity = {-0.4f, -3.0f}, .radius = LooseRockRadius, .current_scale = 0.0f},
+	{.position = {8.0f, 0.0f}, .velocity = {0.6f, -4.0f}, .radius = LooseRockRadius, .current_scale = 0.0f}
+};
 // four cosmetic chips per stone mark the ceiling source without adding collectible clutter
 static constexpr int RockfallChips = 4;
 // maximum shake per axis in world units, 0.06 stays below the monster arrival tremble of 0.08
@@ -100,14 +104,10 @@ void Cave::setup(UnderwaterPhysics &physics) {
 
 	hanging_rock = HangingRock();
 	hanging_rock.hits_left = HangingHits;
-	hanging_rock.center = glm::vec2(bounds_min.x + 68.0f, bounds_max.y - 0.5f * HangingSize);
+	hanging_rock.center = glm::vec2(last_wall.x - PillarWallGap, bounds_max.y - 0.5f * HangingSize);
 
-	//a rock breaks apart when it hits a crack, so every hit needs a new one.
-	//the last three sit far back from the last wall, so there is only time to break it after pinning the big fish
-	for (glm::vec2 offset : {glm::vec2(42.0f, -3.0f), glm::vec2(48.0f, 2.5f),
-		glm::vec2(72.0f, -3.5f), glm::vec2(75.0f, 2.0f), glm::vec2(78.0f, -1.0f),
-		glm::vec2(90.0f, -3.5f), glm::vec2(90.5f, 2.5f), glm::vec2(91.0f, -0.5f)}) {
-		physics.bodies.push_back({.position = glm::vec2(bounds_min.x + offset.x, offset.y), .radius = LooseRockRadius});
+	for (glm::vec2 const &offset : FinalRockOffsets) {
+		physics.bodies.push_back({.position = glm::vec2(hanging_rock.center.x + offset.x, offset.y), .radius = LooseRockRadius});
 	}
 }
 
@@ -171,9 +171,9 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 	hit_cooldown.resize(physics.bodies.size(), 0.0f);
 	for (float &cooldown : hit_cooldown) cooldown = std::max(0.0f, cooldown - elapsed);
 
-	// new rubble waits until the next update so its cooldown exists before hit checks
+	// new drops wait until the next update so their cooldowns exist before hit checks
 	for (size_t i = 0; i < hit_cooldown.size(); ++i) {
-		//a copy, since breaking a wall adds bodies and can move the list
+		// copy the body because a pillar hit appends stones and can reallocate the list
 		Body2D body = physics.bodies[i];
 		if (!body.active || body.kind != Body2D::Rock || !body.player_spat || hit_cooldown[i] > 0.0f) continue;
 
@@ -209,10 +209,6 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			}
 			if (wall->hits_left == 0 && wall == &first_wall) {
 				events.first_wall_broke = true;
-				//the broken wall leaves a couple of rocks to throw at the next thing
-				for (float y : {-2.0f, 2.0f}) {
-					physics.bodies.push_back({.position = glm::vec2(wall->x, y), .radius = LooseRockRadius});
-				}
 			}
 		}
 		StaticBox2D crack = world_box(HangingCrack, hanging_rock.center, HangingSize);
@@ -222,11 +218,10 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			hit = true;
 			hanging_rock.hits_left -= 1;
 			hanging_rock.shudder = ShudderTime;
-			for (float const offset : RockfallOffsets) {
-				const glm::vec2 position(hanging_rock.center.x + offset, bounds_max.y - LooseRockRadius);
-				physics.bodies.push_back({.position = position, .velocity = {0.0f, -RockfallSpeed},
-					.radius = LooseRockRadius, .gravity = RockfallGravity});
-				throw_chips(position, glm::vec2(0.0f, -1.0f), RockfallChips);
+			for (Body2D stone : RockfallStones) {
+				stone.position += glm::vec2(hanging_rock.center.x, bounds_max.y - stone.radius);
+				physics.bodies.push_back(stone);
+				throw_chips(stone.position, glm::vec2(0.0f, -1.0f), RockfallChips);
 			}
 			if (hanging_rock.hits_left == 0) {
 				hanging_rock.state = HangingRock::Falling;
