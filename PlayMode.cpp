@@ -10,7 +10,7 @@
 #include <cmath>
 
 PlayMode::PlayMode()
-	: cave_texture(data_path("cave_rock.png")),
+	: cave_texture(data_path("cavern_background.png")),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
@@ -21,8 +21,7 @@ PlayMode::PlayMode()
 	physics.bodies = {
 		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
-		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f},
-		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
+		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f}
 	};
 	for (auto &body : physics.bodies) body.position += camera.center;
 	cave.setup(physics);
@@ -87,7 +86,13 @@ void PlayMode::update(float elapsed) {
 		auto &fish = physics.bodies[fish_body];
 		// suck first, so a rock at the mouth isn't bumped away by the collision
 		update_interaction();
-		fish.add_force(move * swim_force);
+		glm::vec2 swim_thrust = move * swim_force;
+		if (carried_body && move != glm::vec2(0.0f)) {
+			const float acceleration_scale = 1.0f / (1.0f + carried_inertia_per_radius * physics.bodies[*carried_body].radius);
+			// reduce net acceleration while keeping enough thrust to overcome drag at full speed
+			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
+		}
+		fish.add_force(swim_thrust);
 		physics.step();
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
@@ -178,6 +183,7 @@ void PlayMode::update_interaction() {
 		body.active = false;
 		body.velocity = glm::vec2(0.0f);
 		body.force = glm::vec2(0.0f);
+		body.player_spat = false;
 		carried_body = target;
 		state = FishState::Fat;
 	} else {
@@ -196,6 +202,7 @@ void PlayMode::spit() {
 	body.velocity = fish.velocity;
 	body.force = glm::vec2(0.0f);
 	body.active = true;
+	body.player_spat = true;
 	body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
@@ -215,7 +222,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei height = std::max(1, int(camera.view_size.y * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
 	glm::vec2 half_view = 0.5f * camera.view_size;
-	glm::vec2 view_center = camera.center - big_fish.shake();
+	glm::vec2 view_center = camera.center - big_fish.shake() + cave.shake();
 	{ // a rumble when the hanging rock comes down, and a tremble that grows while the big fish is on its way
 		constexpr float RumbleSize = 0.25f;
 		// the rumble eases off over its last moments
@@ -233,11 +240,24 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	{ // cave ceiling and floor, wide and tall enough to cover the view past both ends of the level
-		glm::vec2 size = glm::vec2(level_length, 0.0f) + camera.view_size;
-		float middle_x = 0.5f * (physics.bounds_min.x + physics.bounds_max.x);
-		sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, physics.bounds_max.y + 0.5f * size.y), size);
-		sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, physics.bounds_min.y - 0.5f * size.y), size);
+	{
+		// one extra world unit above and below the view covers the combined monster and collapse shakes
+		constexpr float BackgroundPadding = 1.0f;
+		const float height = camera.view_size.y + 2.0f * BackgroundPadding;
+		const glm::vec2 size(height * float(cave_texture.pixel_size.x) / float(cave_texture.pixel_size.y), height);
+		const float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
+		const int first_tile = int(std::floor((view_center.x - half_view.x) / size.x));
+		const int last_tile = int(std::floor((view_center.x + half_view.x) / size.x));
+		// alternate horizontal flips make neighboring edges meet while preserving the png's proportions
+		for (int tile = first_tile; tile <= last_tile; ++tile) {
+			sprites.draw(cave_texture, world_to_clip, glm::vec2((float(tile) + 0.5f) * size.x, middle_y), size, 0.0f, tile % 2 != 0);
+		}
+		// keep the ceiling and floor at their collision heights so walls and hanging rocks stay attached
+		const glm::vec2 cover_size = glm::vec2(level_length, 0.0f) + camera.view_size;
+		const float middle_x = 0.5f * (physics.bounds_min.x + physics.bounds_max.x);
+		for (float y : {physics.bounds_max.y + 0.5f * cover_size.y, physics.bounds_min.y - 0.5f * cover_size.y}) {
+			sprites.draw(cave_texture, world_to_clip, glm::vec2(middle_x, y), cover_size, 0.0f, false, glm::u8vec4(0, 0, 0, 255));
+		}
 	}
 
 	// size from a height, keeping the png's shape

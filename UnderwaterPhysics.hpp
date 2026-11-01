@@ -16,6 +16,8 @@ struct Body2D {
 	bool active = true;
 	// what this body is, so game code can tell rocks from the fish
 	enum Kind { Fish, Rock } kind = Rock;
+	// only a fresh player spit can damage cave targets, falling rocks start harmless
+	bool player_spat = false;
 
 	void add_force(glm::vec2 const &value);
 	void apply_impulse(glm::vec2 const &value);

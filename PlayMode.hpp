@@ -19,6 +19,8 @@ struct PlayMode : Mode {
 
 	static constexpr size_t fish_body = 0;
 	static constexpr float swim_force = 9.0f;
+	// tunes added inertia per unit of rock radius, 6.0 makes current rocks take about 3 to 4 times longer to reach the same top speed
+	static constexpr float carried_inertia_per_radius = 6.0f;
 	static constexpr float max_swim_speed = 3.5f;
 	// drawn height of the small fish png and the size of its body for bumping into things
 	static constexpr float fish_height = 1.6f;
