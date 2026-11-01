@@ -63,6 +63,16 @@ static constexpr int MissChips = 2;
 static constexpr int BreakChips = 24;
 static constexpr float HitCooldown = 0.3f;
 static constexpr float LooseRockRadius = 0.4f;
+// two stones per pillar hit, 6 and 8 world units to its right keep drops clear of its outline and within reach
+static constexpr float RockfallOffsets[] = {6.0f, 8.0f};
+// downward acceleration, 6.0 brings stones from the ceiling to swimming height in roughly 1 to 2 seconds
+static constexpr float RockfallGravity = 6.0f;
+// initial downward speed, 2.0 makes stones visibly emerge from the ceiling immediately
+static constexpr float RockfallSpeed = 2.0f;
+// four cosmetic chips per stone mark the ceiling source without adding collectible clutter
+static constexpr int RockfallChips = 4;
+// maximum shake per axis in world units, 0.06 stays below the monster arrival tremble of 0.08
+static constexpr float RockfallShakeSize = 0.06f;
 //particles slow down in the water at this rate per second
 static constexpr float WaterDrag = 2.0f;
 //height of the fallen rock's middle above the floor, as a fraction of HangingSize
@@ -165,7 +175,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 	for (size_t i = 0; i < hit_cooldown.size(); ++i) {
 		//a copy, since breaking a wall adds bodies and can move the list
 		Body2D body = physics.bodies[i];
-		if (!body.active || body.kind != Body2D::Rock || hit_cooldown[i] > 0.0f) continue;
+		if (!body.active || body.kind != Body2D::Rock || !body.player_spat || hit_cooldown[i] > 0.0f) continue;
 
 		bool hit = false;
 		bool missed = false;
@@ -174,6 +184,8 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 		//true if the rock lands on the crack. landing anywhere else only knocks off a couple of chips
 		auto strikes = [&](StaticBox2D const &box, StaticBox2D const &crack) {
 			if (!hits_box(body, box, elapsed)) return false;
+			// a missed shot stays collectible, but its rebound cannot count as another deliberate hit
+			physics.bodies[i].player_spat = false;
 			glm::vec2 contact = glm::clamp(body.position, box.min, box.max);
 			if (!inside(contact, crack, body.radius)) {
 				throw_chips(contact, away, MissChips);
@@ -210,6 +222,12 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			hit = true;
 			hanging_rock.hits_left -= 1;
 			hanging_rock.shudder = ShudderTime;
+			for (float const offset : RockfallOffsets) {
+				const glm::vec2 position(hanging_rock.center.x + offset, bounds_max.y - LooseRockRadius);
+				physics.bodies.push_back({.position = position, .velocity = {0.0f, -RockfallSpeed},
+					.radius = LooseRockRadius, .gravity = RockfallGravity});
+				throw_chips(position, glm::vec2(0.0f, -1.0f), RockfallChips);
+			}
 			if (hanging_rock.hits_left == 0) {
 				hanging_rock.state = HangingRock::Falling;
 				events.broke = true;
@@ -294,6 +312,11 @@ void Cave::drop_ceiling_dust(float left, float right, float amount, float elapse
 //sideways wobble for something hit shudder seconds ago, dying away as the shudder runs out
 static float shudder_offset(float shudder) {
 	return ShudderSize * (shudder / ShudderTime) * std::sin(shudder * 90.0f);
+}
+
+glm::vec2 Cave::shake() const {
+	const float amount = RockfallShakeSize * hanging_rock.shudder / ShudderTime;
+	return amount * glm::vec2(std::sin(hanging_rock.shudder * 67.0f), std::cos(hanging_rock.shudder * 53.0f));
 }
 
 void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {

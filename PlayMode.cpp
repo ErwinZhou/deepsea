@@ -184,6 +184,9 @@ void PlayMode::update_interaction() {
 		body.active = false;
 		body.velocity = glm::vec2(0.0f);
 		body.force = glm::vec2(0.0f);
+		// caught stones become ordinary ammunition instead of continuing to fall when spat
+		body.gravity = 0.0f;
+		body.player_spat = false;
 		carried_body = target;
 		state = FishState::Fat;
 	} else {
@@ -202,6 +205,7 @@ void PlayMode::spit() {
 	body.velocity = fish.velocity;
 	body.force = glm::vec2(0.0f);
 	body.active = true;
+	body.player_spat = true;
 	body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
@@ -221,7 +225,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei height = std::max(1, int(camera.view_size.y * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
 	glm::vec2 half_view = 0.5f * camera.view_size;
-	glm::vec2 view_center = camera.center - big_fish.shake();
+	glm::vec2 view_center = camera.center - big_fish.shake() + cave.shake();
 	{ // a rumble when the hanging rock comes down, and a tremble that grows while the big fish is on its way
 		constexpr float RumbleSize = 0.25f;
 		// the rumble eases off over its last moments

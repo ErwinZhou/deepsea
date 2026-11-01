@@ -73,6 +73,7 @@ struct Cave {
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	//the dropped rock, drawn over the big fish so it looks pinned under it
 	void draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
+	glm::vec2 shake() const;
 	int wall_stage(Wall const &wall) const;
 
 	glm::vec2 bounds_min = glm::vec2(0.0f);

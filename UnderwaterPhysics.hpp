@@ -12,10 +12,14 @@ struct Body2D {
 	float inverse_mass = 1.0f;
 	float radius = 0.5f;
 	float drag = 0.8f;
+	// downward acceleration, zero preserves the existing buoyancy of fish and loose rocks
+	float gravity = 0.0f;
 	float current_scale = 1.0f;
 	bool active = true;
 	// what this body is, so game code can tell rocks from the fish
 	enum Kind { Fish, Rock } kind = Rock;
+	// only a fresh player spit can damage cave targets, falling rocks start harmless
+	bool player_spat = false;
 
 	void add_force(glm::vec2 const &value);
 	void apply_impulse(glm::vec2 const &value);
