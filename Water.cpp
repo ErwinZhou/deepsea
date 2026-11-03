@@ -24,7 +24,8 @@ std::string const Water::glsl =
 	"uniform vec3 BUBBLE_COLUMNS[" + std::to_string(max_columns) + "];\n"
 	// unlit water color from Sarah's cavern art
 	"const vec3 WATER = vec3(0.025, 0.028, 0.029);\n"
-	"const float DIM = 0.15;\n"
+	// how bright things are when they're far from every light
+	"const float DIM = 0.04;\n"
 	//based on https://nullprogram.com/blog/2018/07/31/
 	// lowbias32, public domain under the Unlicense.
 	//based on https://github.com/skeeto/hash-prospector#discovered-hash-functions

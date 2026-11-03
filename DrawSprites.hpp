@@ -32,6 +32,8 @@ struct DrawSprites {
 		glm::vec4 const &uv_rect = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)) const;
 	// call once a frame before drawing, so sprites match the water around them
 	void set_look(Water::Look const &look) const;
+	// where the light on the big fish's jaws comes from, and how strong it is. 0 is off
+	void set_predator_light(glm::vec2 const &position, float strength) const;
 
 private:
 	GLuint vertex_buffer = 0;
@@ -42,5 +44,7 @@ private:
 	GLint FADE_float = -1;
 	GLint MATERIAL_int = -1;
 	GLint TEX_RECT_vec4 = -1;
+	GLint PREDATOR_LIGHT_vec2 = -1;
+	GLint PREDATOR_LIGHT_STRENGTH_float = -1;
 	Water::Uniforms look_uniforms;
 };

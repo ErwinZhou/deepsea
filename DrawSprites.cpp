@@ -61,6 +61,8 @@ DrawSprites::DrawSprites() {
 		"uniform int MATERIAL;\n"
 		"uniform vec4 TEX_RECT;\n"
 		"uniform mat4 OBJECT_TO_CLIP;\n"
+		"uniform vec2 PREDATOR_LIGHT;\n"
+		"uniform float PREDATOR_LIGHT_STRENGTH;\n"
 		"in vec2 texCoord;\n"
 		"in vec2 clip;\n"
 		"out vec4 fragColor;\n"
@@ -85,7 +87,27 @@ DrawSprites::DrawSprites() {
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
 		// per material lighting for each asset
 		"	if (MATERIAL == PLAYER) shade = 0.03 + 0.55 * lit + 0.35 * eye_light;\n"
-		"	if (MATERIAL == PREDATOR) shade = 0.3 * lit;\n"
+		"	float wet_shine = 0.0;\n"
+		"	if (MATERIAL == PREDATOR) {\n"
+		// the art is flat colors, so treat its blurred brightness as height. that makes each tooth a rounded shape the light can catch
+		// based on https://en.wikipedia.org/wiki/Normal_mapping
+		"		const float BLUR = 5.0;\n"
+		"		vec2 reach = pow(2.0, BLUR) / vec2(textureSize(TEX, 0));\n"
+		"		vec2 slope = vec2(\n"
+		"			dot(textureLod(TEX, sample_uv + vec2(reach.x, 0.0), BLUR).rgb, vec3(1.0)) - dot(textureLod(TEX, sample_uv - vec2(reach.x, 0.0), BLUR).rgb, vec3(1.0)),\n"
+		"			dot(textureLod(TEX, sample_uv + vec2(0.0, reach.y), BLUR).rgb, vec3(1.0)) - dot(textureLod(TEX, sample_uv - vec2(0.0, reach.y), BLUR).rgb, vec3(1.0)));\n"
+		"		vec2 extent = VIEW_MAX - VIEW_MIN;\n"
+		"		vec2 world_slope = normalize(OBJECT_TO_CLIP[0].xy * extent) * slope.x + normalize(OBJECT_TO_CLIP[1].xy * extent) * slope.y;\n"
+		"		vec3 normal = normalize(vec3(-3.0 * world_slope, 1.0));\n"
+		// the small fish's eye is the light, a little in front of the jaws. it only reaches a short way, so the rest of the mouth stays black
+		"		vec2 to_eye = PREDATOR_LIGHT - world;\n"
+		"		vec3 light_direction = normalize(vec3(to_eye, 3.0));\n"
+		"		float reach_eye = PREDATOR_LIGHT_STRENGTH * exp(-dot(to_eye, to_eye) / (9.0 * 9.0));\n"
+		"		shade = 0.015 + 0.3 * lit + 1.6 * reach_eye * max(0.0, dot(normal, light_direction));\n"
+		// based on https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
+		"		vec3 halfway = normalize(light_direction + vec3(0.0, 0.0, 1.0));\n"
+		"		wet_shine = 0.5 * reach_eye * pow(max(0.0, dot(normal, halfway)), 30.0) * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
+		"	}\n"
 		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
 		"	color.rgb *= shade;\n"
 		// Light modulation informed by https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics
@@ -96,7 +118,7 @@ DrawSprites::DrawSprites() {
 		"		float ripple = pow(max(0.0, 1.0 - abs(a + b) * 0.7), 10.0);\n"
 		"		color.rgb += vec3(0.008, 0.009, 0.009) * ripple * max(0.0, lit - BRIGHTNESS * DIM);\n"
 		"	}\n"
-		"	if (MATERIAL == PREDATOR) color.rgb /= vec3(1.0) + 2.4 * color.rgb;\n"
+		"	color.rgb += vec3(wet_shine);\n"
 		// Rim light placement follows https://blog.playdead.com/articles/the_lighting_of_inside/lighting_of_inside.html
 		"	if (surface) {\n"
 		"		vec2 texel = max(1.0 / vec2(textureSize(TEX, 0)), 1.5 * fwidth(sample_uv));\n"
@@ -135,6 +157,8 @@ DrawSprites::DrawSprites() {
 	FADE_float = glGetUniformLocation(program, "FADE");
 	MATERIAL_int = glGetUniformLocation(program, "MATERIAL");
 	look_uniforms = Water::Uniforms(program);
+	PREDATOR_LIGHT_vec2 = glGetUniformLocation(program, "PREDATOR_LIGHT");
+	PREDATOR_LIGHT_STRENGTH_float = glGetUniformLocation(program, "PREDATOR_LIGHT_STRENGTH");
 	TEX_RECT_vec4 = glGetUniformLocation(program, "TEX_RECT");
 	glUseProgram(program);
 	glUniform1i(glGetUniformLocation(program, "TEX"), 0);
@@ -177,6 +201,13 @@ DrawSprites::~DrawSprites() {
 
 void DrawSprites::set_look(Water::Look const &look) const {
 	look_uniforms.upload(look);
+}
+
+void DrawSprites::set_predator_light(glm::vec2 const &position, float strength) const {
+	glUseProgram(program);
+	glUniform2fv(PREDATOR_LIGHT_vec2, 1, glm::value_ptr(position));
+	glUniform1f(PREDATOR_LIGHT_STRENGTH_float, strength);
+	glUseProgram(0);
 }
 
 void DrawSprites::draw(SpriteTexture const &texture, glm::mat4 const &world_to_clip,
