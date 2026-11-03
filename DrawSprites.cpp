@@ -69,18 +69,24 @@ DrawSprites::DrawSprites() {
 		"	vec4 color = texture(TEX, sample_uv) * TINT;\n"
 		"	float eye_halo = 0.0;\n"
 		"	float eye_core = 0.0;\n"
+		"	float eye_light = 0.0;\n"
 		"	if (MATERIAL == PLAYER) {\n"
-		// eye center measured from the fish pngs
+		// manually tweaked eye glow based on fish pngs
 		"		vec2 eye_offset = sample_uv - vec2(0.7267, 0.5952);\n"
 		"		eye_halo = exp(-dot(eye_offset, eye_offset) / 0.0025);\n"
 		"		eye_core = exp(-dot(eye_offset, eye_offset) / 0.00015);\n"
+		// eye glow
+		"		eye_light = exp(-dot(eye_offset, eye_offset) / 0.03);\n"
 		"	}\n"
 		"	if (color.a < 0.0039 && eye_halo < 0.01) discard;\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, 0.5 * clip + 0.5);\n"
 		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER;\n"
 		"	float lit = MATERIAL != EMISSIVE ? light(world, surface) : 1.0;\n"
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
-		"	if (MATERIAL == PREDATOR) shade = 0.18 + 0.70 * lit;\n"
+		// per material lighting for each asset
+		"	if (MATERIAL == PLAYER) shade = 0.03 + 0.55 * lit + 0.35 * eye_light;\n"
+		"	if (MATERIAL == PREDATOR) shade = 0.3 * lit;\n"
+		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
 		"	color.rgb *= shade;\n"
 		// Light modulation informed by https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics
 		"	if (MATERIAL == BACKGROUND) {\n"
@@ -90,7 +96,6 @@ DrawSprites::DrawSprites() {
 		"		float ripple = pow(max(0.0, 1.0 - abs(a + b) * 0.7), 10.0);\n"
 		"		color.rgb += vec3(0.008, 0.009, 0.009) * ripple * max(0.0, lit - BRIGHTNESS * DIM);\n"
 		"	}\n"
-		"	if (MATERIAL == STONE) color.rgb = color.rgb * 1.8 + vec3(0.025) * color.a;\n"
 		"	if (MATERIAL == PREDATOR) color.rgb /= vec3(1.0) + 2.4 * color.rgb;\n"
 		// Rim light placement follows https://blog.playdead.com/articles/the_lighting_of_inside/lighting_of_inside.html
 		"	if (surface) {\n"
@@ -110,8 +115,7 @@ DrawSprites::DrawSprites() {
 		"				float facing = max(0.0, dot(normal, offset / max(length(offset), 0.001)));\n"
 		"				rim += GLOWS[i].z * exp(-dot(falloff, falloff)) * facing * facing;\n"
 		"			}\n"
-		"			float edge_gain = MATERIAL == STONE ? 1.8 : 1.0;\n"
-		"			color.rgb += vec3(0.10, 0.12, 0.125) * min(1.0, edge_size) * rim * BRIGHTNESS * edge_gain;\n"
+		"			color.rgb += vec3(0.10, 0.12, 0.125) * min(1.0, edge_size) * rim * BRIGHTNESS;\n"
 		"		}\n"
 		"	}\n"
 		// far away things fade into the water around them
