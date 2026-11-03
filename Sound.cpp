@@ -9,6 +9,7 @@
 #include <exception>
 #include <iostream>
 #include <algorithm>
+#include <cmath>
 
 //local (to this file) data used by the audio system:
 namespace {
@@ -21,6 +22,23 @@ namespace {
 
 	//list of all currently playing samples:
 	std::list< std::shared_ptr< Sound::PlayingSample > > playing_samples;
+
+	//sounds further than this from the listener start to sound muffled
+	constexpr float ClearDistance = 18.0f;
+	//how fast the muffling grows with distance. the lowpass cutoff halves this far past ClearDistance
+	constexpr float MuffleDistance = 4.0f;
+	//lowpass cutoff in Hz inside ClearDistance. high enough that you can't hear it working
+	constexpr float OpenCutoff = 8000.0f;
+
+	//how far a sound can lean toward one ear. 1 would be that ear only
+	constexpr float PanWidth = 0.6f;
+
+	//all the sounds added together never go above this volume, so they can't distort
+	constexpr float Ceiling = 0.89f;
+	//seconds to ease back up after turning everything down
+	constexpr float LimiterRelease = 0.3f;
+	//how far everything is turned down right now. only the audio thread touches this
+	float limiter_gain = 1.0f;
 
 }
 
@@ -225,8 +243,8 @@ void compute_pan_from_listener_and_position(
 	if (distance == 0.0f) {
 		*left = *right = std::sqrt(2.0f);
 	} else {
-		//amt ranges from -1 (most left) to 1 (most right):
-		float amt = glm::dot(listener_right, to) / distance;
+		//amt ranges from -PanWidth (most left) to PanWidth (most right):
+		float amt = PanWidth * glm::dot(listener_right, to) / distance;
 		//turn into an angle from 0.0f (most left) to pi/2 (most right):
 		float ang = 0.5f * 3.1415926f * (0.5f * (amt + 1.0f));
 		*left = std::cos(ang);
@@ -384,6 +402,15 @@ void SDLCALL mix_audio(void *, SDL_AudioStream *stream_, int additional_amount, 
 		end_pan.l *= end_volume * playing_sample.volume.value;
 		end_pan.r *= end_volume * playing_sample.volume.value;
 
+		//how much of the sound the muffling lets through. 1 is all of it, for "2D" sounds
+		//based on https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter
+		float pass = 1.0f;
+		if (!(playing_sample.pan.value == playing_sample.pan.value)) {
+			float distance = glm::length(playing_sample.position.value - end_position);
+			float cutoff = OpenCutoff / (1.0f + std::max(0.0f, distance - ClearDistance) / MuffleDistance);
+			pass = 1.0f - std::exp(-2.0f * 3.1415926f * cutoff / float(AUDIO_RATE));
+		}
+
 		//figure out a step to add at each sample so that pan will move smoothly from start to end:
 		LR pan = start_pan;
 		LR pan_step;
@@ -393,9 +420,15 @@ void SDLCALL mix_audio(void *, SDL_AudioStream *stream_, int additional_amount, 
 		assert(playing_sample.i < playing_sample.data.size());
 
 		for (uint32_t i = 0; i < samples; ++i) {
+			//muffle it, twice to cut the highs harder
+			float value = playing_sample.data[playing_sample.i];
+			playing_sample.muffle[0] += pass * (value - playing_sample.muffle[0]);
+			playing_sample.muffle[1] += pass * (playing_sample.muffle[0] - playing_sample.muffle[1]);
+			value = playing_sample.muffle[1];
+
 			//mix one sample based on current pan values:
-			buffer[i].l += pan.l * playing_sample.data[playing_sample.i];
-			buffer[i].r += pan.r * playing_sample.data[playing_sample.i];
+			buffer[i].l += pan.l * value;
+			buffer[i].r += pan.r * value;
 
 			//update position in sample:
 			playing_sample.i += 1;
@@ -421,6 +454,28 @@ void SDLCALL mix_audio(void *, SDL_AudioStream *stream_, int additional_amount, 
 			playing_samples.erase(old);
 		} else {
 			++si;
+		}
+	}
+
+	{ //if everything playing at once is too loud, turn it all down, then ease back up
+		float peak = 0.0f;
+		for (uint32_t s = 0; s < samples; ++s) {
+			peak = std::max(peak, std::max(std::abs(buffer[s].l), std::abs(buffer[s].r)));
+		}
+		float needed = peak > Ceiling ? Ceiling / peak : 1.0f;
+		float start_gain = limiter_gain;
+		if (needed < limiter_gain) {
+			//turn down right away so the loudest moment can't get through
+			limiter_gain = needed;
+			start_gain = needed;
+		} else {
+			limiter_gain += (1.0f - limiter_gain) * (1.0f - std::exp(-elapsed / LimiterRelease));
+			limiter_gain = std::min(limiter_gain, needed);
+		}
+		for (uint32_t s = 0; s < samples; ++s) {
+			float gain = start_gain + (limiter_gain - start_gain) * (float(s) / float(samples));
+			buffer[s].l = std::clamp(buffer[s].l * gain, -1.0f, 1.0f);
+			buffer[s].r = std::clamp(buffer[s].r * gain, -1.0f, 1.0f);
 		}
 	}
 

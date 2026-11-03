@@ -81,6 +81,9 @@ struct PlayingSample {
 	Ramp< glm::vec3 > position = Ramp< glm::vec3 >(std::numeric_limits< float >::quiet_NaN());
 	Ramp< float > half_volume_radius = std::numeric_limits< float >::quiet_NaN();
 
+	//the last values from muffling a 3D sound
+	float muffle[2] = {0.0f, 0.0f};
+
 	PlayingSample(Sample const &sample_, float volume_, float pan_, bool loop_)
 		: data(sample_.data), loop(loop_), volume(volume_), pan(pan_) { }
 	PlayingSample(Sample const &sample_, float volume_, glm::vec3 const &position_, float half_volume_radius_, bool loop_)
