@@ -4,59 +4,83 @@
 
 #include <glm/glm.hpp>
 
-//the big fish that chases the player. only its open jaws show, coming in from the left
+//the big fish that chases the player. all you see is the light on its lure until you get too close
 struct BigFish {
 	BigFish();
 
 	enum State {
 		Waiting, //hidden off screen until enter() is called
 		Normal, //swims right
+		Charging, //jaws showing, speeding up and opening wider
+		Slamming, //jaws shutting
 		Stunned, //pinned by falling rock, stops moving
 	} state = Waiting;
 
 	//left edge of the jaw pngs, at the line where the two jaws meet. the jaws turn around this point
 	glm::vec2 position = glm::vec2(0.0f);
 	//how wide each jaw png is drawn. the height follows the png's shape
-	float size = 75.0f;
+	float size = 100.0f;
 	// world units per second, 1.5 gives the player more time to collect stones and aim while carrying one
 	float speed = 1.5f;
 
-	//counts down while stunned
+	//timer counts down while stunned or slamming. base_y is the height it drifts up and down around
 	float timer = 0.0f;
-	//counts up from 0 while biting, below 0 when not biting
-	float bite_time = -1.0f;
-	//seconds since reset, drives the slow bob and the breathing of the mouth
 	float time = 0.0f;
-	//height the fish bobs around
 	float base_y = 0.0f;
+	//where the small fish is, set each frame
+	glm::vec2 prey = glm::vec2(0.0f);
 	//true for the one update where the jaws slam shut
 	bool slammed = false;
 
-	//puts the fish at start, hidden until enter() is called
+	//reset puts it at start, hidden until enter() is called. reset_for_world hides it off the world's left edge
 	void reset(glm::vec2 const &start);
-	//centers the open mouth on the world's height and hides the fish off its left edge
 	void reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max);
-	//starts the fish swimming with the front of its art at from_x
-	void enter(float from_x);
+	void enter(float x);
 	void update(float elapsed);
-	//stops the fish for this many seconds
 	void stun(float seconds);
-	//starts closing the jaws. does nothing if they are already closing
-	void bite();
-	bool biting() const;
+	void charge();
+	//true while the rock can pin it
+	bool swimming() const;
 
-	//0 when the mouth is open, 1 when it's shut
+	//in_reach sets off a charge, in_mouth gets caught when the jaws slam
+	bool in_reach(glm::vec2 const &point) const;
+	bool in_mouth(glm::vec2 const &point) const;
+
+	//0 when the mouth is at its widest, 1 when it's shut
 	float closed() const;
-	//how far in front of position any part of the jaws reaches
+	//what its speed gets multiplied by while stalking. between 0 and 2, averages 1
+	float stroke() const;
+	//art_front is the furthest right any part of the jaws reaches from position. anything left of teeth_x is inside the mouth
 	float art_front() const;
-	//x of the front of the teeth. anything left of this is inside the mouth
 	float teeth_x() const;
+	//the position.x that puts the lure's light just out of sight, off the left of the view
+	float out_of_sight_x(float view_left) const;
 	glm::vec2 lure_position() const;
-	//how far to shift the view to shake the screen after a slam
+	float lure_brightness() const;
+	//0 when the jaws are hidden, 1 when they show
+	float visibility() const;
 	glm::vec2 shake() const;
 
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 
 	SpriteTexture upper_jaw;
 	SpriteTexture lower_jaw;
+	SpriteTexture lure_texture;
+
+private:
+	float charge_speed() const;
+	//middle of the mouth's height relative to position, for a given closed()
+	float mouth_offset(float shut) const;
+	float lowest_mouth = 0.0f;
+	float highest_mouth = 0.0f;
+	float lure_top = 0.0f;
+	//height of the lure's light before the drift is added
+	float lure_y = 0.0f;
+	float charge_time = 0.0f;
+	//what closed() returns, and its value when the slam started
+	float jaw = 0.0f;
+	float slam_from = 0.0f;
+	//0 to 1, how far the jaws have faded in
+	float shown = 0.0f;
+	float shake_left = 0.0f;
 };

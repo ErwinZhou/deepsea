@@ -186,7 +186,7 @@ int main(int argc, char **argv) {
 
 		//based on https://wiki.libsdl.org/SDL3/SDL_GetWindowFlags
 		SDL_WindowFlags flags = SDL_GetWindowFlags(Mode::window);
-		if (SDL_getenv("TEMP_NOPE") && ((flags & SDL_WINDOW_MINIMIZED) || !(flags & SDL_WINDOW_INPUT_FOCUS))) { // TEMP
+		if ((flags & SDL_WINDOW_MINIMIZED) || !(flags & SDL_WINDOW_INPUT_FOCUS)) {
 			SDL_Delay(100);
 			previous_time = std::chrono::steady_clock::now();
 			next_frame = previous_time;
@@ -211,7 +211,6 @@ int main(int argc, char **argv) {
 			Mode::current->draw(drawable_size);
 		}
 
-		{ static int temp_n = 0; temp_n += 1; if (temp_n % 3 == 0) { int w,h; SDL_GetWindowSizeInPixels(Mode::window, &w, &h); std::vector< glm::u8vec4 > data(w*h); glReadPixels(0,0,w,h,GL_RGBA,GL_UNSIGNED_BYTE,data.data()); for (auto &px : data) px.a = 0xff; char n[64]; SDL_snprintf(n, 64, "shot%05d.png", temp_n); save_png(n, glm::uvec2(w,h), data.data(), LowerLeftOrigin); } } // TEMP
 		//Wait until the recently-drawn frame is shown before doing it all again:
 		SDL_GL_SwapWindow(Mode::window);
 		next_frame += FramePeriod;
