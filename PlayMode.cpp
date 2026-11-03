@@ -3,6 +3,7 @@
 #include "data_path.hpp"
 #include "DrawLines.hpp"
 #include "gl_errors.hpp"
+#include "Load.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -10,8 +11,20 @@
 #include <array>
 #include <cmath>
 
+Load<Sound::Sample> fish_roar(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("big_fish_roar.opus"));
+});
+
+Load<Sound::Sample> chomp_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("chomp.opus"));
+});
+
+Load<Sound::Sample> rumble_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("rumble.opus"));
+});
+
 PlayMode::PlayMode()
-	: cave_texture(data_path("cave_rock.png")),
+	: cave_texture(data_path("cavern_background.png")),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
@@ -27,8 +40,7 @@ PlayMode::PlayMode()
 	physics.bodies = {
 		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
-		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f},
-		{.position = {10.0f, 3.4f}, .inverse_mass = 1.25f, .radius = 0.29f}
+		{.position = {5.0f, -1.5f}, .inverse_mass = 0.625f, .radius = 0.43f}
 	};
 	for (auto &body : physics.bodies) body.position += camera.center;
 	cave.setup(physics);
@@ -93,7 +105,13 @@ void PlayMode::update(float elapsed) {
 		auto &fish = physics.bodies[fish_body];
 		// suck first, so a rock at the mouth isn't bumped away by the collision
 		update_interaction();
-		fish.add_force(move * swim_force);
+		glm::vec2 swim_thrust = move * swim_force;
+		if (carried_body && move != glm::vec2(0.0f)) {
+			const float acceleration_scale = 1.0f / (1.0f + carried_inertia_per_radius * physics.bodies[*carried_body].radius);
+			// reduce net acceleration while keeping enough thrust to overcome drag at full speed
+			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
+		}
+		fish.add_force(swim_thrust);
 		physics.step();
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
@@ -105,7 +123,12 @@ void PlayMode::update(float elapsed) {
 
 	big_fish.update(elapsed);
 	{ // breaking the first wall wakes the big fish
-		if (cave.events.first_wall_broke) warning_time = 0.0f;
+		if (cave.events.first_wall_broke){ 
+			warning_time = 0.0f;
+			// Play fish noises
+			Sound::play(*fish_roar);
+			Sound::play(*rumble_sound);
+		}
 		if (big_fish.state == BigFish::Waiting && warning_time >= 0.0f) {
 			warning_time += elapsed;
 			cave.drop_ceiling_dust(view_left, view_left + camera.view_size.x, warning_amount(), elapsed);
@@ -188,6 +211,7 @@ void PlayMode::update_interaction() {
 		body.active = false;
 		body.velocity = glm::vec2(0.0f);
 		body.force = glm::vec2(0.0f);
+		body.player_spat = false;
 		carried_body = target;
 		state = FishState::Fat;
 	} else {
@@ -206,6 +230,7 @@ void PlayMode::spit() {
 	body.velocity = fish.velocity;
 	body.force = glm::vec2(0.0f);
 	body.active = true;
+	body.player_spat = true;
 	body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
@@ -225,7 +250,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei height = std::max(1, int(camera.view_size.y * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
 	glm::vec2 const &render_view = camera.view_size;
-	glm::vec2 view_center = camera.center - big_fish.shake();
+	glm::vec2 view_center = camera.center - big_fish.shake() + cave.shake();
 	glm::vec2 half_view = 0.5f * render_view;
 	{ // a rumble when the hanging rock comes down, and a tremble that grows while the big fish is on its way
 		constexpr float RumbleSize = 0.25f;
