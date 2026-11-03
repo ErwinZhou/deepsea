@@ -9,12 +9,14 @@
 #include "Water.hpp"
 #include "Sound.hpp"
 
+#include <array>
 #include <optional>
 
 struct PlayMode : Mode {
 	enum class FishState { Normal, Kirby, Fat };
 
 	PlayMode();
+	~PlayMode() override;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
 	void update(float elapsed) override;
 	void draw(glm::uvec2 const &drawable_size) override;
@@ -69,17 +71,46 @@ private:
 	float rumble = 0.0f;
 	float clock = 0.0f;
 	float scene_brightness = 1.0f;
-	// a moment of frozen time when a spat rock hits something, so the hit lands
+	// seconds to fade in from black at the start, and out to black after being eaten
+	static constexpr float fade_in_time = 1.5f;
+	static constexpr float death_fade_time = 1.5f;
+	// frozen time when a spat rock hits something
 	float hit_stop = 0.0f;
+	// 1 is fully lit, 0 is dark. a jellyfish goes dark over jelly_fade_time seconds when the big fish reaches it
+	std::array< float, 3 > jelly_light = {1.0f, 1.0f, 1.0f};
+	static constexpr float jelly_fade_time = 0.5f;
+	glm::vec2 jelly_position(size_t i) const;
 	// false after the big fish gets pinned, until it swims back up to the edge of the view
 	bool leashed = true;
-	// seconds since the first wall broke, below 0 before then. the big fish arrives after a warning
+	// the big fish wakes once the view's left edge is dark_past_wall past the first wall, when the first jellyfish's light has faded.
+	// then a quiet moment, the roar, and it arrives. warning_time is below 0 before it wakes
 	float warning_time = -1.0f;
-	// a quiet moment after the wall breaks, then the cave trembles and dust falls until the big fish arrives
-	static constexpr float warning_quiet = 1.5f;
-	static constexpr float warning_length = 4.5f;
+	static constexpr float dark_past_wall = -1.0f;
+	static constexpr float warning_quiet = 0.5f;
+	static constexpr float warning_length = 3.0f;
 	// 0 before and during the quiet moment, rising to 1 as the big fish arrives
 	float warning_amount() const;
+
+	// the deep water sound, the big fish's breathing, and the roar during a charge
+	std::shared_ptr< Sound::PlayingSample > ambient;
+	std::shared_ptr< Sound::PlayingSample > presence;
+	std::shared_ptr< Sound::PlayingSample > charge_roar;
+	// the deep water sound drops while the big fish wakes, so the roar stands out
+	static constexpr float ambient_quiet_volume = 0.25f;
+	static constexpr float ambient_fade_down = 0.3f;
+	static constexpr float ambient_fade_up = 8.0f;
+	// the first roar leans left, where -1 is the left ear only. the charge roar starts quiet and gets louder
+	static constexpr float far_roar_pan = -0.5f;
+	static constexpr float charge_roar_start_volume = 0.3f;
+	static constexpr float charge_roar_fade_in = 3.0f;
+	static constexpr float charge_roar_fade_out = 0.5f;
+	// distance at which each sound is half as loud. the listener sits listener_depth in front of the screen
+	static constexpr float listener_depth = 16.0f;
+	static constexpr float roar_reach = 60.0f;
+	static constexpr float rumble_reach = 15.0f;
+	static constexpr float presence_reach = 10.0f;
+	static constexpr float rock_reach = 10.0f;
+	static constexpr float rock_miss_volume = 0.5f;
 	DrawSprites sprites;
 	Water water;
 	Water::Look water_look;

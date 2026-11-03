@@ -23,21 +23,18 @@ namespace {
 	//list of all currently playing samples:
 	std::list< std::shared_ptr< Sound::PlayingSample > > playing_samples;
 
-	//sounds further than this from the listener start to sound muffled
+	//sounds further than ClearDistance from the listener get muffled. the lowpass cutoff starts at OpenCutoff and halves MuffleDistance past that
 	constexpr float ClearDistance = 18.0f;
-	//how fast the muffling grows with distance. the lowpass cutoff halves this far past ClearDistance
 	constexpr float MuffleDistance = 4.0f;
-	//lowpass cutoff in Hz inside ClearDistance. high enough that you can't hear it working
 	constexpr float OpenCutoff = 8000.0f;
 
 	//how far a sound can lean toward one ear. 1 would be that ear only
 	constexpr float PanWidth = 0.6f;
 
-	//all the sounds added together never go above this volume, so they can't distort
+	//if all the sounds together go over Ceiling, everything gets turned down, then eases back up over LimiterRelease seconds.
+	//only the audio thread touches limiter_gain
 	constexpr float Ceiling = 0.89f;
-	//seconds to ease back up after turning everything down
 	constexpr float LimiterRelease = 0.3f;
-	//how far everything is turned down right now. only the audio thread touches this
 	float limiter_gain = 1.0f;
 
 }

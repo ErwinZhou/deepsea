@@ -12,15 +12,35 @@
 #include <cmath>
 
 Load<Sound::Sample> fish_roar(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("big_fish_roar.opus"));
+	return new Sound::Sample(data_path("modified_big_fish_roar.opus"));
+});
+
+Load<Sound::Sample> fish_roar_near(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("modified_big_fish_roar1.opus"));
+});
+
+Load<Sound::Sample> charge_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("modified_big_fish_roar_charge.opus"));
 });
 
 Load<Sound::Sample> chomp_sound(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("chomp.opus"));
+	return new Sound::Sample(data_path("modified_chomp.opus"));
 });
 
 Load<Sound::Sample> rumble_sound(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("rumble.opus"));
+	return new Sound::Sample(data_path("modified_rumble.opus"));
+});
+
+Load<Sound::Sample> rock_hit_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("modified_rock_hit.opus"));
+});
+
+Load<Sound::Sample> ambient_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("ambient_deep.opus"));
+});
+
+Load<Sound::Sample> presence_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("big_fish_presence.opus"));
 });
 
 PlayMode::PlayMode()
@@ -45,6 +65,16 @@ PlayMode::PlayMode()
 	for (auto &body : physics.bodies) body.position += camera.center;
 	cave.setup(physics);
 	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
+	// starts silent and fades in with the picture
+	ambient = Sound::loop(*ambient_sound, 0.0f);
+	ambient->set_volume(1.0f, fade_in_time);
+}
+
+PlayMode::~PlayMode() {
+	// starting over makes a new PlayMode, which starts its own ambient
+	if (ambient) ambient->stop();
+	if (presence) presence->stop();
+	if (charge_roar) charge_roar->stop();
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
@@ -98,6 +128,13 @@ void PlayMode::update(float elapsed) {
 		if (cave.events.broke) hit_stop = BreakStop;
 		if (cave.events.crashed) rumble = CrashRumble;
 	}
+	{ // every impact is heard from where it happened
+		glm::vec3 at = glm::vec3(cave.events.at, 0.0f);
+		if (cave.events.missed) Sound::play_3D(*rock_hit_sound, rock_miss_volume, at, rock_reach);
+		if (cave.events.hit) Sound::play_3D(*rock_hit_sound, 1.0f, at, rock_reach);
+		if (cave.events.broke || cave.events.crashed) Sound::play_3D(*rumble_sound, 1.0f, at, rumble_reach);
+		if (cave.events.crashed) Sound::play_3D(*rock_hit_sound, 1.0f, at, rumble_reach);
+	}
 
 	// step physics at a fixed rate so it plays the same at any frame rate
 	accumulated_time += std::min(elapsed, 0.1f);
@@ -120,38 +157,76 @@ void PlayMode::update(float elapsed) {
 
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	float view_left = camera.center.x - 0.5f * camera.view_size.x;
+	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
+	big_fish.prey = physics.bodies[fish_body].position;
 	big_fish.update(elapsed);
-	{ // breaking the first wall wakes the big fish
-		if (cave.events.first_wall_broke){ 
+	{ // the big fish wakes once the first jellyfish's light is behind you
+		if (warning_time < 0.0f && view_left > cave.first_wall.x + dark_past_wall) {
 			warning_time = 0.0f;
-			// Play fish noises
-			Sound::play(*fish_roar);
-			Sound::play(*rumble_sound);
+			if (ambient) ambient->set_volume(ambient_quiet_volume, ambient_fade_down);
 		}
 		if (big_fish.state == BigFish::Waiting && warning_time >= 0.0f) {
+			float before = warning_time;
 			warning_time += elapsed;
+			if (before < warning_quiet && warning_time >= warning_quiet) {
+				Sound::play(*fish_roar, 1.0f, far_roar_pan);
+				Sound::play(*rumble_sound, 1.0f, far_roar_pan);
+			}
 			cave.drop_ceiling_dust(view_left, view_left + camera.view_size.x, warning_amount(), elapsed);
-			if (warning_time >= warning_length) big_fish.enter(view_left);
+			if (warning_time >= warning_length) {
+				big_fish.enter(big_fish.out_of_sight_x(view_left));
+				glm::vec3 at = glm::vec3(big_fish.teeth_x(), camera.center.y, 0.0f);
+				Sound::play_3D(*fish_roar_near, 1.0f, at, roar_reach);
+				presence = Sound::loop_3D(*presence_sound, 1.0f, at, presence_reach);
+				if (ambient) ambient->set_volume(1.0f, ambient_fade_up);
+			}
 		}
+		glm::vec3 at = glm::vec3(big_fish.teeth_x(), camera.center.y, 0.0f);
+		if (presence) presence->set_position(at, elapsed);
+		if (charge_roar) charge_roar->set_position(at, elapsed);
 	}
-	{ // it can't fall further behind than just off the left of the view, unless the cave held it up
-		float leash_x = view_left - big_fish.art_front();
+	{ // it can't fall further behind than just out of sight, unless the cave held it up
+		float leash_x = big_fish.out_of_sight_x(view_left);
 		if (big_fish.state == BigFish::Stunned) leashed = false;
-		if (big_fish.state == BigFish::Normal && !leashed && big_fish.position.x >= leash_x) leashed = true;
-		if (big_fish.state == BigFish::Normal && leashed) big_fish.position.x = std::max(big_fish.position.x, leash_x);
+		if (big_fish.swimming() && !leashed && big_fish.position.x >= leash_x) leashed = true;
+		if (big_fish.swimming() && leashed) big_fish.position.x = std::max(big_fish.position.x, leash_x);
+	}
+	// a jellyfish goes dark once the big fish reaches it
+	for (size_t i = 0; i < jelly_light.size(); ++i) {
+		if (big_fish.state != BigFish::Waiting && big_fish.teeth_x() > jelly_position(i).x) {
+			jelly_light[i] = std::max(0.0f, jelly_light[i] - elapsed / jelly_fade_time);
+		}
 	}
 	float target_brightness = 1.0f;
 	if (big_fish.state != BigFish::Waiting) target_brightness = 0.65f;
 	else if (warning_time >= 0.0f) target_brightness = 1.0f - 0.45f * warning_amount();
 	scene_brightness += (target_brightness - scene_brightness) * (1.0f - std::exp(-elapsed / 1.2f));
 
-	{ // once the teeth reach the small fish it's in the mouth. still being there when the jaws slam is death
+	{ // charge when the small fish gets too close, kill it when the jaws slam
 		auto &fish = physics.bodies[fish_body];
-		if (fish.active && !escaped && big_fish.state != BigFish::Waiting && fish.position.x < big_fish.teeth_x()) {
-			if (big_fish.state == BigFish::Normal) big_fish.bite();
-			// dead for now. later this could send you into the big fish's stomach level
-			if (big_fish.slammed) fish.active = false;
+		glm::vec3 at = glm::vec3(big_fish.teeth_x(), camera.center.y, 0.0f);
+		if (fish.active && !escaped && big_fish.in_reach(fish.position)) {
+			big_fish.charge();
+			// starts quiet and gets louder
+			charge_roar = Sound::play_3D(*charge_sound, charge_roar_start_volume, at, roar_reach);
+			charge_roar->set_volume(1.0f, charge_roar_fade_in);
+		}
+		// pinned mid charge
+		if (charge_roar && big_fish.state == BigFish::Stunned) {
+			charge_roar->stop(charge_roar_fade_out);
+			charge_roar = nullptr;
+		}
+		if (big_fish.slammed) {
+			Sound::play_3D(*chomp_sound, 1.0f, at, roar_reach);
+			if (charge_roar) charge_roar->stop();
+			charge_roar = nullptr;
+			if (fish.active && !escaped && big_fish.in_mouth(fish.position)) {
+				// dead for now. later this could send you into the big fish's stomach level
+				fish.active = false;
+				if (ambient) ambient->set_volume(0.0f, death_fade_time);
+				if (presence) presence->stop(death_fade_time);
+			}
 		}
 	}
 
@@ -159,13 +234,22 @@ void PlayMode::update(float elapsed) {
 	if (!physics.bodies[fish_body].active || escaped) end_time += elapsed;
 
 	// start over a moment after being eaten. escaping ends the game, so it never starts over
-	constexpr float RestartDelay = 2.5f;
+	constexpr float RestartDelay = 3.0f;
 	if (!physics.bodies[fish_body].active && end_time > RestartDelay) {
 		// keep this mode alive until update returns, since replacing it frees it.
 		// based on https://en.cppreference.com/w/cpp/memory/enable_shared_from_this
 		std::shared_ptr< Mode > keep = shared_from_this();
 		Mode::set_current(std::make_shared< PlayMode >());
 	}
+}
+
+glm::vec2 PlayMode::jelly_position(size_t i) const {
+	std::array<glm::vec2, 3> const homes = {
+		glm::vec2(cave.first_wall.x - 11.5f, 4.1f),
+		glm::vec2(cave.hanging_rock.center.x - 7.0f, 3.0f),
+		glm::vec2(cave.last_wall.x - 7.0f, 3.8f)
+	};
+	return homes[i] + glm::vec2(0.18f * std::sin(clock * 0.3f + float(i)), 0.25f * std::sin(clock * 0.65f + float(i) * 2.0f));
 }
 
 float PlayMode::warning_amount() const {
@@ -252,7 +336,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::vec2 const &render_view = camera.view_size;
 	glm::vec2 view_center = camera.center - big_fish.shake() + cave.shake();
 	glm::vec2 half_view = 0.5f * render_view;
-	{ // a rumble when the hanging rock comes down, and a tremble that grows while the big fish is on its way
+	{ // rumble when the hanging rock comes down, tremble while the big fish is on its way
 		constexpr float RumbleSize = 0.25f;
 		// the rumble eases off over its last moments
 		constexpr float RumbleFade = 0.3f;
@@ -264,15 +348,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
-	std::array<glm::vec2, 3> jelly_positions = {
-		glm::vec2(cave.first_wall.x - 11.5f, 4.1f),
-		glm::vec2(cave.hanging_rock.center.x - 7.0f, 3.0f),
-		glm::vec2(cave.last_wall.x - 7.0f, 3.8f)
-	};
-	for (size_t i = 0; i < jelly_positions.size(); ++i) {
-		jelly_positions[i] += glm::vec2(0.18f * std::sin(clock * 0.3f + float(i)),
-			0.25f * std::sin(clock * 0.65f + float(i) * 2.0f));
-	}
+	std::array<glm::vec2, 3> jelly_positions = {jelly_position(0), jelly_position(1), jelly_position(2)};
 	{ // lights stay at their positions in the cave
 		constexpr glm::vec2 GlowRadius = glm::vec2(5.5f, 4.0f);
 
@@ -286,10 +362,14 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		}
 		for (size_t i = 0; i < jelly_positions.size(); ++i) {
 			if (std::abs(jelly_positions[i].x - view_center.x) < half_view.x + 3.0f * GlowRadius.x) {
-				look.glows.emplace_back(jelly_positions[i], 1.2f + 0.12f * std::sin(clock * 1.3f + float(i)));
+				look.glows.emplace_back(jelly_positions[i], jelly_light[i] * (1.2f + 0.12f * std::sin(clock * 1.3f + float(i))));
 			}
 		}
-		if (big_fish.state != BigFish::Waiting) look.glows.emplace_back(big_fish.lure_position(), 2.5f);
+		if (big_fish.state != BigFish::Waiting) {
+			// about as bright as a jellyfish
+			constexpr float LureGlow = 1.3f;
+			look.glows.emplace_back(big_fish.lure_position(), LureGlow * big_fish.lure_brightness());
+		}
 		for (StaticBox2D const &box : physics.obstacles) look.blockers.emplace_back(box.min, box.max);
 		look.glow_radius = GlowRadius;
 		look.brightness = scene_brightness;
@@ -300,6 +380,10 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(cave.last_wall.x - 4.0f, physics.bounds_min.y - 1.5f, physics.bounds_max.y + 2.0f)
 		};
 		sprites.set_look(look);
+		// the small fish's eye goes out with it
+		constexpr float EyeOutTime = 0.15f;
+		float eye = physics.bodies[fish_body].active ? 1.0f : std::max(0.0f, 1.0f - end_time / EyeOutTime);
+		sprites.set_predator_light(physics.bodies[fish_body].position, eye);
 		water.begin(look);
 	}
 	glDisable(GL_DEPTH_TEST);
@@ -326,9 +410,10 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	}
 	water.haze();
 	for (size_t i = 0; i < jelly_positions.size(); ++i) {
+		if (jelly_light[i] <= 0.0f) continue;
 		float pulse = 1.0f + 0.035f * std::sin(clock * 1.3f + float(i));
 		sprites.draw(jellyfish_texture, world_to_clip, jelly_positions[i], glm::vec2(1.8f * pulse, 2.15f / pulse),
-			0.04f * std::sin(clock * 0.4f + float(i)), false, glm::u8vec4(175, 185, 190, 165), 0.0f, DrawSprites::Emissive);
+			0.04f * std::sin(clock * 0.4f + float(i)), false, glm::u8vec4(175, 185, 190, uint8_t(165.0f * jelly_light[i])), 0.0f, DrawSprites::Emissive);
 	}
 
 	// size from a height, keeping the png's shape
@@ -361,7 +446,15 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	if (escaped) { // fade to black once the small fish gets away, then say so in the middle of the screen
+	{ // fades in from black at the start, and out to black after being eaten
+		float black = 1.0f - std::min(1.0f, clock / fade_in_time);
+		if (!fish.active) black = std::max(black, std::min(1.0f, end_time / death_fade_time));
+		if (black > 0.0f) {
+			sprites.draw(cave_texture, world_to_clip, view_center, render_view, 0.0f, false, glm::u8vec4(0x00, 0x00, 0x00, uint8_t(255.0f * black)));
+		}
+	}
+
+	if (escaped) { // fade to black, then the text
 		constexpr float FadeTime = 2.0f;
 		constexpr float TextFadeTime = 1.0f;
 		constexpr float TextHeight = 1.5f;
