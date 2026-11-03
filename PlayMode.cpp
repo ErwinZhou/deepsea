@@ -22,6 +22,10 @@ Load<Sound::Sample> rumble_sound(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("rumble.opus"));
 });
 
+Load<Sound::Sample> rock_hit_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("rock_hit.opus"));
+});
+
 PlayMode::PlayMode()
 	: cave_texture(data_path("cavern_background.png")),
 	  fish_texture(data_path("normal.png")),
@@ -88,9 +92,18 @@ void PlayMode::update(float elapsed) {
 		constexpr float HitStop = 0.06f;
 		constexpr float BreakStop = 0.12f;
 		constexpr float CrashRumble = 0.6f;
-		if (cave.events.hit) hit_stop = HitStop;
-		if (cave.events.broke) hit_stop = BreakStop;
-		if (cave.events.crashed) rumble = CrashRumble;
+		if (cave.events.hit){
+			hit_stop = HitStop;
+			Sound::play(*rock_hit_sound);
+		} 
+		if (cave.events.broke){
+			hit_stop = BreakStop;
+			Sound::play(*rumble_sound);
+		} 
+		if (cave.events.crashed){
+			rumble = CrashRumble;
+			Sound::play(*rumble_sound);
+		} 
 	}
 
 	// step physics at a fixed rate so it plays the same at any frame rate
@@ -120,8 +133,8 @@ void PlayMode::update(float elapsed) {
 		if (cave.events.first_wall_broke){ 
 			warning_time = 0.0f;
 			// Play fish noises
+			Sound::play(*rumble_sound, 0.3f);
 			Sound::play(*fish_roar);
-			Sound::play(*rumble_sound);
 		}
 		if (big_fish.state == BigFish::Waiting && warning_time >= 0.0f) {
 			warning_time += elapsed;
@@ -141,7 +154,10 @@ void PlayMode::update(float elapsed) {
 		if (fish.active && !escaped && big_fish.state != BigFish::Waiting && fish.position.x < big_fish.teeth_x()) {
 			if (big_fish.state == BigFish::Normal) big_fish.bite();
 			// dead for now. later this could send you into the big fish's stomach level
-			if (big_fish.slammed) fish.active = false;
+			if (big_fish.slammed){
+				fish.active = false;
+				Sound::play(*chomp_sound, 0.3f);
+			} 
 		}
 	}
 

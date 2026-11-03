@@ -137,6 +137,7 @@ let copies = [
 	maek.COPY('assets/sound/big_fish_roar.opus', 'dist/big_fish_roar.opus'),
 	maek.COPY('assets/sound/chomp.opus', 'dist/chomp.opus'),
 	maek.COPY('assets/sound/rumble.opus', 'dist/rumble.opus'),
+	maek.COPY('assets/sound/rock_hit.opus', 'dist/rock_hit.opus'),
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL3/dist/SDL3.dll`, `dist/SDL3.dll`) );
