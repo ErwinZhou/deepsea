@@ -45,9 +45,13 @@ struct Cave {
 	//what happened during the last update, for PlayMode to react to
 	struct Events {
 		bool hit = false;
+		//a spat rock knocked against something but not on its crack
+		bool missed = false;
 		bool broke = false;
 		bool first_wall_broke = false;
 		bool crashed = false;
+		//where the last hit, miss, break or crash happened, so its sound comes from there
+		glm::vec2 at = glm::vec2(0.0f);
 	} events;
 
 	//chips knocked off by hits, and dust shaken down from the ceiling

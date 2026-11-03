@@ -129,6 +129,7 @@ let copies = [
 	maek.COPY('assets/lower_jaw.png', 'dist/lower_jaw.png'),
 	maek.COPY('assets/cavern_rock.png', 'dist/cavern_rock.png'),
 	maek.COPY('assets/jellyfish.png', 'dist/jellyfish.png'),
+	maek.COPY('assets/lure_glow.png', 'dist/lure_glow.png'),
 	maek.COPY('assets/wall1.png', 'dist/wall1.png'),
 	maek.COPY('assets/wall2.png', 'dist/wall2.png'),
 	maek.COPY('assets/wall3.png', 'dist/wall3.png'),
@@ -136,9 +137,14 @@ let copies = [
 	maek.COPY('assets/big_rock2.png', 'dist/big_rock2.png'),
 	maek.COPY('assets/big_rock3.png', 'dist/big_rock3.png'),
 	maek.COPY('assets/exit.png', 'dist/exit.png'),
-	maek.COPY('assets/sound/big_fish_roar.opus', 'dist/big_fish_roar.opus'),
-	maek.COPY('assets/sound/chomp.opus', 'dist/chomp.opus'),
-	maek.COPY('assets/sound/rumble.opus', 'dist/rumble.opus'),
+	maek.COPY('assets/sound/modified_big_fish_roar.opus', 'dist/modified_big_fish_roar.opus'),
+	maek.COPY('assets/sound/modified_big_fish_roar1.opus', 'dist/modified_big_fish_roar1.opus'),
+	maek.COPY('assets/sound/modified_big_fish_roar_charge.opus', 'dist/modified_big_fish_roar_charge.opus'),
+	maek.COPY('assets/sound/modified_chomp.opus', 'dist/modified_chomp.opus'),
+	maek.COPY('assets/sound/modified_rumble.opus', 'dist/modified_rumble.opus'),
+	maek.COPY('assets/sound/modified_rock_hit.opus', 'dist/modified_rock_hit.opus'),
+	maek.COPY('assets/sound/big_fish_presence.opus', 'dist/big_fish_presence.opus'),
+	maek.COPY('assets/sound/ambient_deep.opus', 'dist/ambient_deep.opus'),
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL3/dist/SDL3.dll`, `dist/SDL3.dll`) );

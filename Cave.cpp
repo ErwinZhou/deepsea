@@ -192,6 +192,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			// a missed shot stays collectible, but its rebound cannot count as another deliberate hit
 			physics.bodies[i].player_spat = false;
 			glm::vec2 contact = glm::clamp(body.position, box.min, box.max);
+			events.at = contact;
 			if (!inside(contact, crack, body.radius)) {
 				throw_chips(contact, away, MissChips);
 				missed = true;
@@ -234,6 +235,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			}
 		}
 		if (hit) events.hit = true;
+		if (missed) events.missed = true;
 		if (hit || missed) hit_cooldown[i] = HitCooldown;
 	}
 
@@ -247,19 +249,20 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			hanging_rock.center.y = fallen_y;
 			hanging_rock.state = HangingRock::Fallen;
 			events.crashed = true;
+			events.at = hanging_rock.center;
 			for (int c = 0; c < BreakChips; ++c) {
 				throw_chips(hanging_rock.center + glm::vec2(random_between(-3.0f, 3.0f), -2.0f), glm::vec2(0.0f, 1.0f), 1);
 			}
 			//landing on the big fish's head pins it for a long time
 			float rock_left = hanging_rock.center.x - RubbleHalfWidth * HangingSize;
-			if (big_fish.state == BigFish::Normal && rock_left < big_fish.teeth_x() + PinReach && hanging_rock.center.x > big_fish.position.x) {
+			if (big_fish.swimming() && rock_left < big_fish.teeth_x() + PinReach && hanging_rock.center.x > big_fish.position.x) {
 				big_fish.stun(PinTime);
 				hanging_rock.used = true;
 			}
 		}
 	}
 	//a pile the big fish hasn't been caught by yet still holds it up while it gets past
-	if (hanging_rock.state == HangingRock::Fallen && !hanging_rock.used && big_fish.state == BigFish::Normal
+	if (hanging_rock.state == HangingRock::Fallen && !hanging_rock.used && big_fish.swimming()
 		&& big_fish.teeth_x() >= rubble_box(hanging_rock, bounds_min.y).min.x) {
 		big_fish.stun(ChewTime);
 		hanging_rock.used = true;
