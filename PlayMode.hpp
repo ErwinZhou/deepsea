@@ -6,6 +6,7 @@
 #include "BigFish.hpp"
 #include "Camera2D.hpp"
 #include "Cave.hpp"
+#include "Sound.hpp"
 
 #include <optional>
 

@@ -31,6 +31,9 @@ if (maek.OS === "windows") {
 		`/I${NEST_LIBS}/SDL3/include`,
 		`/I${NEST_LIBS}/glm/include`,
 		`/I${NEST_LIBS}/libpng/include`,
+		`/I${NEST_LIBS}/opusfile/include`,
+		`/I${NEST_LIBS}/libopus/include`,
+		`/I${NEST_LIBS}/libogg/include`,
 		//#disable a few warnings:
 		`/wd4146`, //-1U is still unsigned
 		`/wd4297`, //unforunately SDLmain is nothrow
@@ -42,6 +45,9 @@ if (maek.OS === "windows") {
 		`/LIBPATH:${NEST_LIBS}/SDL3/lib`, `SDL3.lib`, `OpenGL32.lib`, `Shell32.lib`,
 		`/LIBPATH:${NEST_LIBS}/libpng/lib`, `libpng.lib`,
 		`/LIBPATH:${NEST_LIBS}/zlib/lib`, `zlib.lib`,
+		`/LIBPATH:${NEST_LIBS}/opusfile/lib`, `opusfile.lib`,
+		`/LIBPATH:${NEST_LIBS}/libopus/lib`, `opus.lib`,
+		`/LIBPATH:${NEST_LIBS}/libogg/lib`, `libogg.lib`,
 		`/MANIFEST:EMBED`, `/MANIFESTINPUT:set-utf8-code-page.manifest`
 	);
 } else if (maek.OS === "linux") {
@@ -50,12 +56,18 @@ if (maek.OS === "windows") {
 		//include paths for nest libraries:
 		`-I${NEST_LIBS}/SDL3/include`, `-D_THREAD_SAFE`,
 		`-I${NEST_LIBS}/glm/include`,
+		`-I${NEST_LIBS}/opusfile/include`,
+		`-I${NEST_LIBS}/libopus/include`,
+		`-I${NEST_LIBS}/libogg/include`,
 		`-I${NEST_LIBS}/libpng/include`
 	);
 	maek.options.LINKLibs.push(
 		//linker flags for nest libraries:
 		`-L${NEST_LIBS}/SDL3/lib`, `-lSDL3`, `-lm`, `-lpthread`, `-lGL`,
 		`-L${NEST_LIBS}/libpng/lib`, `-lpng`,
+		`-L${NEST_LIBS}/opusfile/lib`, `-lopusfile`,
+		`-L${NEST_LIBS}/libopus/lib`, `-lopus`,
+		`-L${NEST_LIBS}/libogg/lib`, `-logg`,
 		`-L${NEST_LIBS}/zlib/lib`, `-lz`
 	);
 } else if (maek.OS === "macos") {
@@ -64,7 +76,10 @@ if (maek.OS === "windows") {
 		//include paths for nest libraries:
 		`-I${NEST_LIBS}/SDL3/include`, `-D_THREAD_SAFE`,
 		`-I${NEST_LIBS}/glm/include`,
-		`-I${NEST_LIBS}/libpng/include`
+		`-I${NEST_LIBS}/opusfile/include`,
+		`-I${NEST_LIBS}/libopus/include`,
+		`-I${NEST_LIBS}/libpng/include`,
+		`-I${NEST_LIBS}/libogg/include`
 	);
 	maek.options.LINKLibs.push(
 		//linker flags for nest libraries:
@@ -87,8 +102,11 @@ if (maek.OS === "windows") {
 		`-Wl,-weak_framework,CoreHaptics`,
 		`-lpthread`,
 		`-lm`,
+		`-L${NEST_LIBS}/opusfile/lib`, `-lopusfile`,
+		`-L${NEST_LIBS}/libopus/lib`, `-lopus`,
 		`-L${NEST_LIBS}/libpng/lib`, `-lpng`,
-		`-L${NEST_LIBS}/zlib/lib`, `-lz`
+		`-L${NEST_LIBS}/zlib/lib`, `-lz`,
+		`-L${NEST_LIBS}/libogg/lib`, `-logg`,
 	);
 }
 //use COPY to copy a file
@@ -99,6 +117,9 @@ let copies = [
 	maek.COPY(`${NEST_LIBS}/SDL3/dist/README-SDL.txt`, `dist/README-SDL.txt`),
 	maek.COPY(`${NEST_LIBS}/libpng/dist/README-libpng.txt`, `dist/README-libpng.txt`),
 	maek.COPY(`${NEST_LIBS}/glm/dist/README-glm.txt`, `dist/README-glm.txt`),
+	maek.COPY(`${NEST_LIBS}/libopus/dist/README-libopus.txt`, `dist/README-libopus.txt`),
+	maek.COPY(`${NEST_LIBS}/opusfile/dist/README-opusfile.txt`, `dist/README-opusfile.txt`),
+	maek.COPY(`${NEST_LIBS}/libogg/dist/README-libogg.txt`, `dist/README-libogg.txt`),
 	maek.COPY('assets/cavern_background.png', 'dist/cavern_background.png'),
 	maek.COPY('assets/normal.png', 'dist/normal.png'),
 	maek.COPY('assets/kirby.png', 'dist/kirby.png'),
@@ -112,7 +133,10 @@ let copies = [
 	maek.COPY('assets/big_rock1.png', 'dist/big_rock1.png'),
 	maek.COPY('assets/big_rock2.png', 'dist/big_rock2.png'),
 	maek.COPY('assets/big_rock3.png', 'dist/big_rock3.png'),
-	maek.COPY('assets/exit.png', 'dist/exit.png')
+	maek.COPY('assets/exit.png', 'dist/exit.png'),
+	maek.COPY('assets/sound/big_fish_roar.opus', 'dist/big_fish_roar.opus'),
+	maek.COPY('assets/sound/chomp.opus', 'dist/chomp.opus'),
+	maek.COPY('assets/sound/rumble.opus', 'dist/rumble.opus'),
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL3/dist/SDL3.dll`, `dist/SDL3.dll`) );
@@ -133,7 +157,10 @@ const game_names = [
 	maek.CPP('main.cpp'),
 	maek.CPP('ColorTextureProgram.cpp'), //unlit textured quads for the fish and props
 	maek.CPP('BigFish.cpp'),
-	maek.CPP('Cave.cpp')
+	maek.CPP('Cave.cpp'),
+	maek.CPP('Sound.cpp'),
+	maek.CPP('load_opus.cpp'),
+	maek.CPP('load_wav.cpp'),
 ];
 
 const common_names = [

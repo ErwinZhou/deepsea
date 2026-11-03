@@ -3,11 +3,24 @@
 #include "data_path.hpp"
 #include "DrawLines.hpp"
 #include "gl_errors.hpp"
+#include "Load.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
 #include <cmath>
+
+Load<Sound::Sample> fish_roar(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("big_fish_roar.opus"));
+});
+
+Load<Sound::Sample> chomp_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("chomp.opus"));
+});
+
+Load<Sound::Sample> rumble_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("rumble.opus"));
+});
 
 PlayMode::PlayMode()
 	: cave_texture(data_path("cavern_background.png")),
@@ -104,7 +117,12 @@ void PlayMode::update(float elapsed) {
 
 	big_fish.update(elapsed);
 	{ // breaking the first wall wakes the big fish
-		if (cave.events.first_wall_broke) warning_time = 0.0f;
+		if (cave.events.first_wall_broke){ 
+			warning_time = 0.0f;
+			// Play fish noises
+			Sound::play(*fish_roar);
+			Sound::play(*rumble_sound);
+		}
 		if (big_fish.state == BigFish::Waiting && warning_time >= 0.0f) {
 			warning_time += elapsed;
 			cave.drop_ceiling_dust(view_left, view_left + camera.view_size.x, warning_amount(), elapsed);
