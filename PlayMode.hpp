@@ -63,6 +63,10 @@ private:
 		bool space_pressed = false;
 		bool suppress_suction = false;
 	} input;
+	// 12 completes about 95 percent of a turn in 0.25 seconds, 6 takes 0.5 seconds
+	static constexpr float fish_turn_response = 12.0f;
+	// current drawn heading in radians, 0 faces right, 1.57 faces up, 3.14 faces left
+	float fish_visual_angle = 0.0f;
 	double accumulated_time = 0.0;
 	// seconds since the small fish was eaten or escaped
 	float end_time = 0.0f;
