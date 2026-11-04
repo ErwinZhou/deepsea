@@ -48,6 +48,7 @@ struct Cave {
 		std::vector< glm::vec4 > parts;
 		std::vector< glm::vec2 > cracks;
 		glm::vec2 texel_size = glm::vec2(0.0f);
+		glm::vec2 entry = glm::vec2(1.0f, 0.5f);
 	};
 	Target wall_targets[3];
 	Target hanging_targets[3];
@@ -92,6 +93,7 @@ struct Cave {
 	void draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	glm::vec2 shake() const;
 	int wall_stage(Wall const &wall) const;
+	glm::vec2 wall_crack_position(Wall const &wall) const;
 
 	glm::vec2 bounds_min = glm::vec2(0.0f);
 	glm::vec2 bounds_max = glm::vec2(0.0f);

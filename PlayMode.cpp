@@ -57,20 +57,24 @@ PlayMode::PlayMode()
 	warning_length = far_begin + std::max(far_roar_length, passing_time) + near_roar_gap;
 	far_roar_end = far_begin + far_roar_length;
 	near_roar_end = warning_length + float(fish_roar_near->data.size()) / 48000.0f;
-	camera.view_size = glm::vec2(corridor_height * (16.0f / 9.0f), corridor_height);
+	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height);
 	camera.dead_zone = glm::vec2(5.0f, 2.5f);
 	physics.bounds_min = glm::vec2(-0.5f * level_length, -0.5f * corridor_height);
 	physics.bounds_max = glm::vec2(0.5f * level_length, 0.5f * corridor_height);
-	camera.center = camera.constrain(physics.bounds_min, physics.bounds_min, physics.bounds_max);
+	camera.center = camera.constrain(glm::vec2(physics.bounds_min.x, 0.0f), physics.bounds_min, physics.bounds_max);
 	physics.bodies = {
-		{.position = {0.0f, -5.3f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
+		{.radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {10.0f, 6.5f}, .radius = 0.35f},
 		{.position = {5.0f, -4.0f}, .inverse_mass = 0.625f, .radius = 0.43f}
 	};
 	for (auto &body : physics.bodies) body.position += camera.center;
 	cave.setup(physics);
 	jelly_body = physics.bodies.size();
-	physics.bodies.push_back({.position = glm::vec2(cave.first_wall.x, 0.0f) + jelly_from_first_wall, .radius = jelly_radius, .drag = jelly_drag, .current_scale = 0.0f, .kind = Body2D::Jelly});
+	glm::vec2 jelly_start = cave.wall_crack_position(cave.first_wall) - glm::vec2(4.0f, 0.0f);
+	physics.bodies.push_back({.position = jelly_start, .radius = jelly_radius, .drag = jelly_drag, .current_scale = 0.0f, .kind = Body2D::Jelly});
+	//start beside the jellyfish with the crack in view
+	physics.bodies[fish_body].position = jelly_start - glm::vec2(2.4f, -0.2f);
+	camera.center = camera.constrain(physics.bodies[fish_body].position, physics.bounds_min, physics.bounds_max);
 	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 	// starts silent and fades in with the picture
 	ambient = Sound::loop(*ambient_sound, 0.0f);
@@ -185,6 +189,7 @@ void PlayMode::update(float elapsed) {
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
 	big_fish.prey = physics.bodies[fish_body].position;
+	big_fish.follow_height(camera.center.y, elapsed);
 	big_fish.update(elapsed);
 	{ // the big fish wakes once the first room is behind you
 		if (warning_time < 0.0f && view_left > cave.first_wall.x + dark_past_wall) {
@@ -202,13 +207,15 @@ void PlayMode::update(float elapsed) {
 			if (far_roar) far_roar->set_position(glm::vec3(big_fish.far_mouth(far_hinge(camera.center)), -far_roar_depth), elapsed);
 			cave.drop_ceiling_dust(view_left, view_left + camera.view_size.x, roar_amount(), elapsed);
 			if (warning_time >= warning_length) {
+				big_fish.reset_for_world(glm::vec2(physics.bounds_min.x, camera.center.y - 0.5f * camera_height),
+					glm::vec2(physics.bounds_max.x, camera.center.y + 0.5f * camera_height));
 				big_fish.enter(big_fish.out_of_sight_x(view_left));
-				glm::vec3 at = glm::vec3(big_fish.teeth_x(), camera.center.y, 0.0f);
+				glm::vec3 at = glm::vec3(big_fish.teeth_x(), big_fish.position.y, 0.0f);
 				near_roar = Sound::play_3D(*fish_roar_near, near_roar_volume, at, near_roar_reach);
 				presence = Sound::loop_3D(*presence_sound, 1.0f, at, presence_reach);
 			}
 		}
-		glm::vec3 at = glm::vec3(big_fish.teeth_x(), camera.center.y, 0.0f);
+		glm::vec3 at = glm::vec3(big_fish.teeth_x(), big_fish.position.y, 0.0f);
 		if (presence) presence->set_position(at, elapsed);
 		if (near_roar) near_roar->set_position(at, elapsed);
 		if (charge_roar) charge_roar->set_position(at, elapsed);
@@ -230,7 +237,7 @@ void PlayMode::update(float elapsed) {
 
 	{ // charge when the small fish gets too close, kill it when the jaws slam
 		auto &fish = physics.bodies[fish_body];
-		glm::vec3 at = glm::vec3(big_fish.teeth_x(), camera.center.y, 0.0f);
+		glm::vec3 at = glm::vec3(big_fish.teeth_x(), big_fish.position.y, 0.0f);
 		if (fish.active && !escaped && big_fish.in_reach(fish.position)) {
 			big_fish.charge();
 			// starts quiet and gets louder
@@ -413,6 +420,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		amount += TrembleSize * roar_amount();
 		view_center += amount * glm::vec2(std::sin(clock * 67.0f), std::cos(clock * 53.0f));
 	}
+	//keep horizontal shake inside the entrance and exit
+	view_center.x = camera.constrain(view_center, physics.bounds_min, physics.bounds_max).x;
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
@@ -459,7 +468,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	{ // two rock layers scroll at different speeds behind the fish
 		float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
 		auto draw_layer = [&](SpriteTexture const &texture, float parallax, float height, float fade, uint8_t alpha) {
-			height = std::max(height, 2.0f * (std::abs(view_center.y) + half_view.y) + 4.0f);
+			height = std::max(height, physics.bounds_max.y - physics.bounds_min.y + 4.0f);
 			float width = height * float(texture.pixel_size.x) / float(texture.pixel_size.y);
 			glm::vec2 origin(view_center.x * (1.0f - parallax), middle_y);
 			int first = int(std::floor((view_center.x - half_view.x - origin.x) / width));

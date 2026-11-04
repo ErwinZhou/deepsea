@@ -10,7 +10,7 @@ struct BigFish {
 
 	enum State {
 		Waiting, //hidden off screen until enter() is called
-		Normal, //swims after the small fish, faster the further behind it is
+		Normal, //approaches at a steady swimming pace
 		Charging, //speeding up and opening wider
 		Slamming, //jaws shutting
 		Stunned, //pinned by falling rock, stops moving
@@ -35,6 +35,8 @@ struct BigFish {
 	void reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max);
 	void enter(float x);
 	void update(float elapsed);
+	//follow vertical camera movement at a slow swimming pace
+	void follow_height(float middle, float elapsed);
 	void stun(float seconds);
 	void charge();
 	//true while the rock can pin it
@@ -62,8 +64,9 @@ struct BigFish {
 	SpriteTexture lower_jaw;
 
 private:
-	float chase_speed() const;
 	float charge_speed() const;
+	//upper and lower bite limits at the teeth
+	glm::vec2 mouth_edges(float shut) const;
 	//find the mouth center to align it with the middle of the corridor
 	float mouth_offset(float shut) const;
 	float charge_time = 0.0f;

@@ -40,8 +40,9 @@ struct PlayMode : Mode {
 	static constexpr float spit_impulse = 14.0f;
 	static constexpr float spit_clearance = 0.1f;
 	static constexpr float level_length = 170.0f;
-	// the camera shows the full height of the level
-	static constexpr float corridor_height = 20.5f;
+	//the taller corridor scrolls vertically while keeping the current zoom
+	static constexpr float corridor_height = 36.0f;
+	static constexpr float camera_height = 20.5f;
 	UnderwaterPhysics physics;
 	Camera2D camera;
 	glm::vec2 facing{1.0f, 0.0f};
@@ -96,7 +97,6 @@ private:
 	size_t jelly_body = 0;
 	float jelly_light = 1.0f;
 	static constexpr float jelly_fade_time = 0.5f;
-	static constexpr glm::vec2 jelly_from_first_wall = glm::vec2(-11.5f, -5.5f);
 	static constexpr float jelly_radius = 0.5f;
 	static constexpr float jelly_drag = 3.0f;
 	static constexpr float jelly_glow = 1.2f;

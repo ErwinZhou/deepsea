@@ -23,13 +23,14 @@ static constexpr float WallArtRight = 0.84f;
 static constexpr int FirstWallHits = 2;
 static constexpr int LastWallHits = 3;
 static constexpr float CrackLeeway = 0.35f;
+static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
 static constexpr float ExitShift = 2.0f;
 //the hanging rock's png is drawn this many units square, with its top against the ceiling
 static constexpr float HangingSize = 9.0f;
 static constexpr float CoralSize = 3.5f;
 static constexpr int HangingHits = 3;
 //leave room to collect stones between the pillar and final wall
-static constexpr float PillarWallGap = 12.0f;
+static constexpr float PillarWallGap = 40.0f;
 //how it falls once it breaks loose. it drifts left because the crack is on its right
 static constexpr float FallGravity = 25.0f;
 static constexpr float FallDrift = 2.5f;
@@ -89,6 +90,7 @@ static Cave::Target load_target(std::string const &filename) {
 				// the crack paint is gray against the black rock
 				if (std::max(pixel.r, std::max(pixel.g, pixel.b)) >= 96) {
 					target.cracks.emplace_back((float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y));
+					if (target.cracks.back().x < target.entry.x) target.entry = target.cracks.back();
 				}
 			}
 		}
@@ -184,11 +186,19 @@ static glm::vec2 world_point(glm::vec2 const &point, glm::vec2 const &center, gl
 
 static StaticBox2D world_box(glm::vec4 const &part, glm::vec2 const &center, glm::vec2 const &size, float angle) {
 	glm::vec2 middle = world_point(glm::vec2(0.5f * (part.x + part.y), 0.5f * (part.z + part.w)), center, size, angle);
-	glm::vec2 half = 0.5f * size * glm::vec2(part.y - part.x, part.w - part.z);
+	glm::vec2 half = 0.5f * glm::abs(size) * glm::vec2(part.y - part.x, part.w - part.z);
 	float co = std::abs(std::cos(angle));
 	float si = std::abs(std::sin(angle));
 	glm::vec2 extent(co * half.x + si * half.y, si * half.x + co * half.y);
 	return StaticBox2D{middle - extent, middle + extent};
+}
+
+glm::vec2 Cave::wall_crack_position(Wall const &wall) const {
+	float png_width = WallThickness / (WallArtRight - WallArtLeft);
+	float art_middle = 0.5f * (WallArtLeft + WallArtRight);
+	glm::vec2 center(wall.x - (art_middle - 0.5f) * png_width, 0.5f * (bounds_min.y + bounds_max.y));
+	float height = bounds_max.y - bounds_min.y;
+	return world_point(wall_targets[std::min(2, wall_stage(wall))].entry, center, glm::vec2(png_width, &wall == &first_wall ? -height : height), 0.0f);
 }
 
 int Cave::wall_stage(Wall const &wall) const {
@@ -237,7 +247,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 		//chips fly back the way the rock came from
 		glm::vec2 away = -glm::normalize(body.velocity);
 		//damage the target when the impact is close enough to its painted crack
-		auto strikes = [&](Target const &target, glm::vec2 const &center, glm::vec2 const &size, float angle) {
+		auto strikes = [&](Target const &target, glm::vec2 const &center, glm::vec2 const &size, float angle, bool entry_only) {
 			float first = std::numeric_limits<float>::infinity();
 			glm::vec2 contact(0.0f);
 			for (glm::vec4 const &part : target.parts) {
@@ -254,9 +264,16 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			float si = std::sin(angle);
 			glm::vec2 local_contact(co * offset.x + si * offset.y, -si * offset.x + co * offset.y);
 			bool cracked = false;
-			for (glm::vec2 const &pixel : target.cracks) {
-				glm::vec2 delta = size * glm::vec2(pixel.x - 0.5f, 0.5f - pixel.y) - local_contact;
-				if (glm::dot(delta, delta) <= reach * reach) { cracked = true; break; }
+			if (entry_only) {
+				//aim at the point where the crack reaches the wall's left edge
+				glm::vec2 delta = glm::abs(size * glm::vec2(target.entry.x - 0.5f, 0.5f - target.entry.y) - local_contact);
+				glm::vec2 tolerance = WallCrackHalfSize + glm::vec2(reach);
+				cracked = delta.x <= tolerance.x && delta.y <= tolerance.y;
+			} else {
+				for (glm::vec2 const &pixel : target.cracks) {
+					glm::vec2 delta = size * glm::vec2(pixel.x - 0.5f, 0.5f - pixel.y) - local_contact;
+					if (glm::dot(delta, delta) <= reach * reach) { cracked = true; break; }
+				}
 			}
 			if (!cracked) {
 				throw_chips(contact, away, MissChips);
@@ -269,7 +286,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 		};
 		for (Wall *wall : {&first_wall, &last_wall}) {
 			if (hit || missed) break;
-			if (wall->hits_left <= 0 || !strikes(wall_targets[wall_stage(*wall)], wall_center(*wall), glm::vec2(png_width, height), 0.0f)) continue;
+			if (wall->hits_left <= 0 || !strikes(wall_targets[wall_stage(*wall)], wall_center(*wall), glm::vec2(png_width, wall == &first_wall ? -height : height), 0.0f, true)) continue;
 			hit = true;
 			wall->hits_left -= 1;
 			wall->shudder = ShudderTime;
@@ -285,7 +302,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 		}
 		hanging_stage = std::min(2, HangingHits - hanging_rock.hits_left);
 		if (hanging_rock.state == HangingRock::Hanging && !hit && !missed
-			&& strikes(hanging_targets[hanging_stage], hanging_rock.center, glm::vec2(HangingSize), 0.0f)) {
+			&& strikes(hanging_targets[hanging_stage], hanging_rock.center, glm::vec2(HangingSize), 0.0f, false)) {
 			hit = true;
 			hanging_rock.hits_left -= 1;
 			hanging_rock.shudder = ShudderTime;
@@ -348,7 +365,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 		}
 	};
 	for (Wall const *wall : {&first_wall, &last_wall}) {
-		if (wall->hits_left > 0) add_target(wall_targets[wall_stage(*wall)], wall_center(*wall), glm::vec2(png_width, height), 0.0f, 1);
+		if (wall->hits_left > 0) add_target(wall_targets[wall_stage(*wall)], wall_center(*wall), glm::vec2(png_width, wall == &first_wall ? -height : height), 0.0f, 1);
 	}
 	hanging_stage = std::min(2, HangingHits - hanging_rock.hits_left);
 	add_target(hanging_targets[hanging_stage], hanging_rock.center, glm::vec2(HangingSize), hanging_rock.angle, 3);
@@ -417,13 +434,17 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 		if (wall->hits_left <= 0) continue;
 		glm::vec2 center = glm::vec2(wall->x - (art_middle - 0.5f) * png_width + shudder_offset(wall->shudder), middle_y);
 		SpriteTexture const &texture = wall_textures[wall_stage(*wall)];
+		//flip the first wall and its collision shapes together
+		bool flip_y = wall == &first_wall;
+		float top_v = flip_y ? 0.001f : 0.999f;
+		float bottom_v = flip_y ? 0.999f : 0.001f;
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_max.y + 16.0f),
 			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
-			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
+			glm::vec4(0.0f, top_v, 1.0f, top_v));
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_min.y - 16.0f),
 			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
-			glm::vec4(0.0f, 0.001f, 1.0f, 0.001f));
-		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, height), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
+			glm::vec4(0.0f, bottom_v, 1.0f, bottom_v));
+		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, flip_y ? -height : height), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
 	}
 
 	for (Particle const &particle : particles) {

@@ -20,14 +20,13 @@ static constexpr float UpperShutAngle = -11.0f * Degrees;
 static constexpr float LowerOpenAngle = -9.0f * Degrees;
 static constexpr float LowerShutAngle = 10.0f * Degrees;
 
-//swim faster when the player pulls ahead
-static constexpr float ChaseSlowest = 1.0f;
-static constexpr float ChaseGain = 0.11f;
-static constexpr float ChaseFastest = 7.0f;
+//steady approach speed before charging
+static constexpr float SwimSpeed = 0.9f;
 
 //start charging when the player gets close to the teeth
 static constexpr float ChargeRange = 6.0f;
-static constexpr float ChargeAccel = 1.5f;
+static constexpr float ChargeAccel = 0.75f;
+static constexpr float CreepTime = 2.0f;
 
 //the jaws open wider until OpenTime seconds into the charge.
 //for the closed values, 0 is as wide as they go and 1 is shut
@@ -104,7 +103,7 @@ void BigFish::update(float elapsed) {
 	float jaw_target = RestClosed + breathe;
 
 	if (state == Normal) {
-		position.x += chase_speed() * elapsed;
+		position.x += SwimSpeed * elapsed;
 	} else if (state == Charging) {
 		charge_time += elapsed;
 		position.x += charge_speed() * elapsed;
@@ -134,6 +133,12 @@ void BigFish::update(float elapsed) {
 	} else {
 		jaw += (jaw_target - jaw) * (1.0f - std::exp(-elapsed / JawEase));
 	}
+}
+
+void BigFish::follow_height(float middle, float elapsed) {
+	if (!swimming()) return;
+	float step = SwimSpeed * elapsed;
+	base_y += std::clamp(middle - mouth_offset(RestClosed) - base_y, -step, step);
 }
 
 void BigFish::enter(float x) {
@@ -166,26 +171,28 @@ bool BigFish::in_reach(glm::vec2 const &point) const {
 }
 
 bool BigFish::in_mouth(glm::vec2 const &point) const {
-	return point.x < teeth_x() + CatchFront;
+	glm::vec2 edges = mouth_edges(state == Slamming ? slam_from : jaw) + glm::vec2(position.y);
+	return point.x < teeth_x() + CatchFront && point.y >= edges.y && point.y <= edges.x;
 }
 
 float BigFish::closed() const {
 	return jaw;
 }
 
-float BigFish::chase_speed() const {
-	return std::clamp(ChaseSlowest + ChaseGain * (prey.x - teeth_x() - ChargeRange), ChaseSlowest, ChaseFastest);
-}
-
 float BigFish::charge_speed() const {
-	return chase_speed() + ChargeAccel * charge_time;
+	return SwimSpeed + ChargeAccel * std::max(0.0f, charge_time - CreepTime);
 }
 
-float BigFish::mouth_offset(float shut) const {
+glm::vec2 BigFish::mouth_edges(float shut) const {
 	float front = MouthFront * size;
 	float top = MouthTop * size + front * std::tan(glm::mix(UpperOpenAngle, UpperShutAngle, shut));
 	float bottom = -MouthBottom * size + front * std::tan(glm::mix(LowerOpenAngle, LowerShutAngle, shut));
-	return 0.5f * (top + bottom);
+	return glm::vec2(top, bottom);
+}
+
+float BigFish::mouth_offset(float shut) const {
+	glm::vec2 edges = mouth_edges(shut);
+	return 0.5f * (edges.x + edges.y);
 }
 
 float BigFish::art_front() const {
