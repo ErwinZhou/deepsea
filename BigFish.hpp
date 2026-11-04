@@ -20,8 +20,8 @@ struct BigFish {
 	glm::vec2 position = glm::vec2(0.0f);
 	//how wide each jaw png is drawn. the height follows the png's shape
 	float size = 100.0f;
-	// world units per second, 1.5 gives the player more time to collect stones and aim while carrying one
-	float speed = 1.5f;
+	// average swim speed, 1.0 takes about 10 seconds to cover 10 units, 0.8 takes about 12.5 seconds
+	float speed = 0.8f;
 
 	//timer counts down while stunned or slamming. base_y is the height it drifts up and down around
 	float timer = 0.0f;

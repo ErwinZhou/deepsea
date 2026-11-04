@@ -92,7 +92,8 @@ private:
 	float warning_time = -1.0f;
 	static constexpr float dark_past_wall = -1.0f;
 	static constexpr float warning_quiet = 0.5f;
-	static constexpr float warning_length = 3.0f;
+	// 10 seconds from the warning starting to the fish entering
+	static constexpr float warning_length = 10.0f;
 	// 0 before and during the quiet moment, rising to 1 as the big fish arrives
 	float warning_amount() const;
 
