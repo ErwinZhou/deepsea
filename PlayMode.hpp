@@ -63,6 +63,9 @@ private:
 		bool space_pressed = false;
 		bool suppress_suction = false;
 	} input;
+	//smooth visual turns without delaying movement
+	static constexpr float fish_turn_response = 12.0f;
+	float fish_visual_angle = 0.0f;
 	double accumulated_time = 0.0;
 	// seconds since the small fish was eaten or escaped
 	float end_time = 0.0f;
