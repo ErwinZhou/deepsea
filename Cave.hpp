@@ -41,6 +41,16 @@ struct Cave {
 
 	//fixed lights in the cave
 	std::vector< glm::vec3 > light_spots;
+	// coarse outlines keep the shadow pass small
+	std::vector< StaticBox2D > light_blockers;
+
+	struct Target {
+		std::vector< glm::vec4 > parts;
+		std::vector< glm::vec2 > cracks;
+		glm::vec2 texel_size = glm::vec2(0.0f);
+	};
+	Target wall_targets[3];
+	Target hanging_targets[3];
 
 	//what happened during the last update, for PlayMode to react to
 	struct Events {
@@ -78,7 +88,7 @@ struct Cave {
 	void update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed);
 	//walls, the hanging rock and the way out
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
-	//the dropped rock, drawn over the big fish so it looks pinned under it
+	//the pillar draws over the big fish
 	void draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	glm::vec2 shake() const;
 	int wall_stage(Wall const &wall) const;

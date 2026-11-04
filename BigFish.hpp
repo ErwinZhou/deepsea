@@ -49,12 +49,12 @@ struct BigFish {
 	//art_front is the furthest right any part of the jaws reaches from position. anything left of teeth_x is inside the mouth
 	float art_front() const;
 	float teeth_x() const;
-	//the position.x that puts its teeth just off the left of the view
+	//the position.x that puts its head just off the left of the view
 	float out_of_sight_x(float view_left) const;
 	glm::vec2 shake() const;
 
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
-	//its shape far behind the cave, head first to the left, in solid black. hinge is where the jaws meet
+	//its shadow passes behind the cave, head first to the left. hinge is where the jaws meet
 	void draw_far(DrawSprites const &sprites, glm::mat4 const &world_to_clip, glm::vec2 const &hinge) const;
 	glm::vec2 far_mouth(glm::vec2 const &hinge) const;
 
@@ -66,8 +66,6 @@ private:
 	float charge_speed() const;
 	//middle of the mouth's height relative to position, for a given closed()
 	float mouth_offset(float shut) const;
-	float lowest_mouth = 0.0f;
-	float highest_mouth = 0.0f;
 	float charge_time = 0.0f;
 	//what closed() returns, and its value when the slam started
 	float jaw = 0.0f;

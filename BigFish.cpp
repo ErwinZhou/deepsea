@@ -9,8 +9,8 @@
 //LowerLift raises the lower jaw so the pngs meet at the back of the head. MouthTop and MouthBottom are the inner edge of each jaw
 static constexpr float LowerLift = 0.045f;
 static constexpr float MouthFront = 0.6f;
-static constexpr float MouthTop = 0.125f;
-static constexpr float MouthBottom = 0.04f;
+static constexpr float MouthTop = 0.19f;
+static constexpr float MouthBottom = 0.07f;
 static constexpr float ArtFront = 0.66f;
 
 //counterclockwise turn of each jaw with the mouth open and shut
@@ -33,7 +33,7 @@ static constexpr float ChargeAccel = 1.5f;
 //the jaws open wider until OpenTime seconds into the charge.
 //for the closed values, 0 is as wide as they go and 1 is shut
 static constexpr float RestClosed = 0.4f;
-static constexpr float WidestClosed = 0.0f;
+static constexpr float WidestClosed = 0.35f;
 static constexpr float OpenTime = 7.0f;
 static constexpr float JawEase = 0.3f;
 
@@ -48,25 +48,19 @@ static constexpr float BreatheClosed = 0.06f;
 static constexpr float BreathePeriod = 4.0f;
 
 //up and down drift, two sine waves added together so it doesn't look regular
-static constexpr float BobHeight = 0.5f;
-static constexpr float BobPeriod = 6.0f;
-static constexpr float BobSecondPeriod = 2.3f;
+static constexpr float BobHeight = 0.2f;
+static constexpr float BobPeriod = 12.0f;
+static constexpr float BobSecondPeriod = 7.0f;
 static constexpr float BobSecondShare = 0.35f;
 
-//how fast the mouth lines up with the small fish, and how close to the top and bottom of the corridor it can go
-static constexpr float TrackSpeed = 3.0f;
-static constexpr float ChargeTrackSpeed = 6.0f;
-static constexpr float MouthMargin = 3.0f;
-
-//how far off the left of the view its teeth start
+//how far off the left of the view its head starts
 static constexpr float OffView = 4.0f;
 
-//its shape far behind the cave. FarBody is how far its body runs behind the png, then it fades out in FarTailSteps steps of FarTailStep long
+//the distant body stays solid behind the head, then fades into the water
 static constexpr float FarSize = 80.0f;
 static constexpr float FarAngle = -6.0f * Degrees;
 static constexpr float FarBody = 20.0f;
-static constexpr int FarTailSteps = 8;
-static constexpr float FarTailStep = 2.0f;
+static constexpr float FarTailLength = 16.0f;
 
 //screen shake when the jaws slam, and the tremble that builds during a charge
 static constexpr float ShakeSize = 0.5f;
@@ -94,9 +88,8 @@ void BigFish::reset(glm::vec2 const &start) {
 }
 
 void BigFish::reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) {
-	lowest_mouth = bounds_min.y + MouthMargin;
-	highest_mouth = bounds_max.y - MouthMargin;
-	reset(glm::vec2(bounds_min.x - art_front(), 0.0f));
+	float middle = 0.5f * (bounds_min.y + bounds_max.y);
+	reset(glm::vec2(bounds_min.x - art_front(), middle - mouth_offset(RestClosed)));
 }
 
 void BigFish::update(float elapsed) {
@@ -105,9 +98,6 @@ void BigFish::update(float elapsed) {
 	shake_left = std::max(0.0f, shake_left - elapsed);
 	if (state == Waiting) return;
 
-	float mouth_target = std::clamp(prey.y, lowest_mouth, highest_mouth);
-	float step = (state == Normal ? TrackSpeed : ChargeTrackSpeed) * elapsed;
-	base_y += std::clamp(mouth_target - mouth_offset(jaw) - base_y, -step, step);
 	position.y = base_y + BobHeight * ((1.0f - BobSecondShare) * std::sin(time * 2.0f * float(M_PI) / BobPeriod)
 		+ BobSecondShare * std::sin(time * 2.0f * float(M_PI) / BobSecondPeriod + 1.0f));
 
@@ -153,7 +143,7 @@ void BigFish::enter(float x) {
 }
 
 float BigFish::out_of_sight_x(float view_left) const {
-	return view_left - OffView - MouthFront * size;
+	return view_left - OffView - art_front();
 }
 
 void BigFish::stun(float seconds) {
@@ -251,15 +241,12 @@ void BigFish::draw_far(DrawSprites const &sprites, glm::mat4 const &world_to_cli
 	//the body behind the head is the png's last column of pixels, stretched
 	constexpr glm::vec4 LastColumn = glm::vec4(0.001f, 0.0f, 0.001f, 1.0f);
 	auto draw_part = [&](SpriteTexture const &texture, glm::vec2 const &offset) {
-		sprites.draw(texture, world_to_clip, hinge + far_offset(offset), glm::vec2(FarSize, h), -FarAngle, true, tint);
+		sprites.draw(texture, world_to_clip, hinge + far_offset(offset), glm::vec2(FarSize, h), -FarAngle, true, tint, 0.0f, DrawSprites::Surface);
 		sprites.draw(texture, world_to_clip, hinge + far_offset(glm::vec2(-0.5f * FarBody, offset.y)), glm::vec2(FarBody, h), -FarAngle, true, tint,
 			0.0f, DrawSprites::Surface, LastColumn);
-		for (int i = 0; i < FarTailSteps; ++i) {
-			float back = FarBody + (float(i) + 0.5f) * FarTailStep;
-			float solid = 1.0f - (float(i) + 1.0f) / float(FarTailSteps + 1);
-			sprites.draw(texture, world_to_clip, hinge + far_offset(glm::vec2(-back, offset.y)), glm::vec2(FarTailStep, h), -FarAngle, true,
-				glm::u8vec4(0, 0, 0, uint8_t(255.0f * solid)), 0.0f, DrawSprites::Surface, LastColumn);
-		}
+		float back = FarBody + 0.5f * FarTailLength;
+		sprites.draw(texture, world_to_clip, hinge + far_offset(glm::vec2(-back, offset.y)), glm::vec2(FarTailLength, h), -FarAngle, true,
+			tint, 0.0f, DrawSprites::FarTail, LastColumn);
 	};
 	draw_part(lower_jaw, glm::vec2(0.5f * FarSize, -0.5f * h + LowerLift * FarSize));
 	draw_part(upper_jaw, glm::vec2(0.5f * FarSize, 0.5f * h));

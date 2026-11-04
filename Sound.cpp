@@ -24,12 +24,13 @@ namespace {
 	std::list< std::shared_ptr< Sound::PlayingSample > > playing_samples;
 
 	//sounds further than ClearDistance from the listener get muffled. the lowpass cutoff starts at OpenCutoff and halves MuffleDistance past that
-	constexpr float ClearDistance = 18.0f;
+	constexpr float ClearDistance = 32.0f;
 	constexpr float MuffleDistance = 4.0f;
 	constexpr float OpenCutoff = 8000.0f;
 
-	//how far a sound can lean toward one ear. 1 would be that ear only
-	constexpr float PanWidth = 0.6f;
+	//how far a sound can lean toward one ear, reached PanReach units to the side. 1 would be that ear only
+	constexpr float PanWidth = 0.9f;
+	constexpr float PanReach = 20.0f;
 
 	//if all the sounds together go over Ceiling, everything gets turned down, then eases back up over LimiterRelease seconds.
 	//only the audio thread touches limiter_gain
@@ -241,7 +242,7 @@ void compute_pan_from_listener_and_position(
 		*left = *right = std::sqrt(2.0f);
 	} else {
 		//amt ranges from -PanWidth (most left) to PanWidth (most right):
-		float amt = PanWidth * glm::dot(listener_right, to) / distance;
+		float amt = PanWidth * glm::clamp(glm::dot(listener_right, to) / PanReach, -1.0f, 1.0f);
 		//turn into an angle from 0.0f (most left) to pi/2 (most right):
 		float ang = 0.5f * 3.1415926f * (0.5f * (amt + 1.0f));
 		*left = std::cos(ang);
