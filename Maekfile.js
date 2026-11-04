@@ -129,7 +129,6 @@ let copies = [
 	maek.COPY('assets/lower_jaw.png', 'dist/lower_jaw.png'),
 	maek.COPY('assets/cavern_rock.png', 'dist/cavern_rock.png'),
 	maek.COPY('assets/jellyfish.png', 'dist/jellyfish.png'),
-	maek.COPY('assets/lure_glow.png', 'dist/lure_glow.png'),
 	maek.COPY('assets/wall1.png', 'dist/wall1.png'),
 	maek.COPY('assets/wall2.png', 'dist/wall2.png'),
 	maek.COPY('assets/wall3.png', 'dist/wall3.png'),

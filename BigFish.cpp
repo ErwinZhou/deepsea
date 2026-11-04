@@ -20,18 +20,19 @@ static constexpr float UpperShutAngle = -11.0f * Degrees;
 static constexpr float LowerOpenAngle = -9.0f * Degrees;
 static constexpr float LowerShutAngle = 10.0f * Degrees;
 
-//the charge. it starts when the small fish is RevealRange in front of its teeth,
-//keeps normal speed for CreepTime seconds, then gains ChargeAccel units per second every second
-static constexpr float RevealRange = 10.0f;
-static constexpr float CreepTime = 2.0f;
+//its speed is ChaseSlowest at ChargeRange behind the small fish, and gains ChaseGain for every unit further back.
+//that matches the small fish's top speed about 29 units back, a little past the left of the view
+static constexpr float ChaseSlowest = 1.0f;
+static constexpr float ChaseGain = 0.11f;
+static constexpr float ChaseFastest = 7.0f;
+
+//the charge. it starts when the small fish is ChargeRange in front of its teeth, then gains ChargeAccel units per second every second
+static constexpr float ChargeRange = 6.0f;
 static constexpr float ChargeAccel = 1.5f;
 
-//the jaws fade in once the lure has gone up, then open wider until OpenTime seconds into the charge.
+//the jaws open wider until OpenTime seconds into the charge.
 //for the closed values, 0 is as wide as they go and 1 is shut
-static constexpr float RevealDelay = 0.8f;
-static constexpr float RevealTime = 1.5f;
-static constexpr float FadeTime = 2.0f;
-static constexpr float RevealClosed = 0.4f;
+static constexpr float RestClosed = 0.4f;
 static constexpr float WidestClosed = 0.0f;
 static constexpr float OpenTime = 7.0f;
 static constexpr float JawEase = 0.3f;
@@ -42,10 +43,9 @@ static constexpr float SlamTime = 0.18f;
 static constexpr float HoldTime = 2.0f;
 static constexpr float CatchFront = 0.6f;
 
-//the mouth slowly opens and closes, and the lure dims along with it
+//the mouth slowly opens and closes
 static constexpr float BreatheClosed = 0.06f;
 static constexpr float BreathePeriod = 4.0f;
-static constexpr float LureDim = 0.2f;
 
 //up and down drift, two sine waves added together so it doesn't look regular
 static constexpr float BobHeight = 0.5f;
@@ -53,27 +53,20 @@ static constexpr float BobPeriod = 6.0f;
 static constexpr float BobSecondPeriod = 2.3f;
 static constexpr float BobSecondShare = 0.35f;
 
-//its speed while stalking rises and falls on two sine waves, like swimming in strokes.
-//the two sizes add up to 1, so it can slow to a stop but never goes backward
-static constexpr float SwimPeriod = 2.7f;
-static constexpr float SwimSize = 0.75f;
-static constexpr float SwimSecondPeriod = 4.3f;
-static constexpr float SwimSecondSize = 0.25f;
-
 //how fast the mouth lines up with the small fish, and how close to the top and bottom of the corridor it can go
 static constexpr float TrackSpeed = 3.0f;
 static constexpr float ChargeTrackSpeed = 6.0f;
 static constexpr float MouthMargin = 3.0f;
 
-//the lure in the art is far above the view at this size, so the light you see is placed separately.
-//LureOutOfSight is how far off the view its glow stops reaching the screen
-static constexpr float LureAhead = 6.0f;
-static constexpr float LureOutOfSight = 12.0f;
-static constexpr float LureMargin = 3.0f;
-static constexpr float LureGone = 8.0f;
-static constexpr float LureRiseSpeed = 5.0f;
-static constexpr float LureReturnSpeed = 2.0f;
-static constexpr float LureSize = 1.2f;
+//how far off the left of the view its teeth start
+static constexpr float OffView = 4.0f;
+
+//its shape far behind the cave. FarBody is how far its body runs behind the png, then it fades out in FarTailSteps steps of FarTailStep long
+static constexpr float FarSize = 80.0f;
+static constexpr float FarAngle = -6.0f * Degrees;
+static constexpr float FarBody = 20.0f;
+static constexpr int FarTailSteps = 8;
+static constexpr float FarTailStep = 2.0f;
 
 //screen shake when the jaws slam, and the tremble that builds during a charge
 static constexpr float ShakeSize = 0.5f;
@@ -86,8 +79,7 @@ static float smooth(float u) {
 	return u * u * (3.0f - 2.0f * u);
 }
 
-BigFish::BigFish() : upper_jaw(data_path("upper_jaw.png")), lower_jaw(data_path("lower_jaw.png")),
-	lure_texture(data_path("lure_glow.png")) {
+BigFish::BigFish() : upper_jaw(data_path("upper_jaw.png")), lower_jaw(data_path("lower_jaw.png")) {
 }
 
 void BigFish::reset(glm::vec2 const &start) {
@@ -97,16 +89,13 @@ void BigFish::reset(glm::vec2 const &start) {
 	prey = start;
 	time = 0.0f;
 	slammed = false;
-	jaw = RevealClosed;
-	shown = 0.0f;
+	jaw = RestClosed;
 	shake_left = 0.0f;
 }
 
 void BigFish::reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) {
 	lowest_mouth = bounds_min.y + MouthMargin;
 	highest_mouth = bounds_max.y - MouthMargin;
-	lure_top = bounds_max.y;
-	lure_y = lure_top - LureMargin;
 	reset(glm::vec2(bounds_min.x - art_front(), 0.0f));
 }
 
@@ -122,21 +111,15 @@ void BigFish::update(float elapsed) {
 	position.y = base_y + BobHeight * ((1.0f - BobSecondShare) * std::sin(time * 2.0f * float(M_PI) / BobPeriod)
 		+ BobSecondShare * std::sin(time * 2.0f * float(M_PI) / BobSecondPeriod + 1.0f));
 
-	float lure_target = state == Normal ? lure_top - LureMargin : lure_top + LureGone;
-	float lure_step = (state == Normal ? LureReturnSpeed : LureRiseSpeed) * elapsed;
-	lure_y += std::clamp(lure_target - lure_y, -lure_step, lure_step);
-
 	float breathe = BreatheClosed * (0.5f - 0.5f * std::cos(time * 2.0f * float(M_PI) / BreathePeriod));
-	float jaw_target = RevealClosed + breathe;
-	float shown_target = 0.0f;
+	float jaw_target = RestClosed + breathe;
 
 	if (state == Normal) {
-		position.x += speed * stroke() * elapsed;
+		position.x += chase_speed() * elapsed;
 	} else if (state == Charging) {
 		charge_time += elapsed;
 		position.x += charge_speed() * elapsed;
-		jaw_target = glm::mix(RevealClosed + breathe, WidestClosed, smooth(charge_time / OpenTime));
-		if (charge_time > RevealDelay) shown_target = 1.0f;
+		jaw_target = glm::mix(RestClosed + breathe, WidestClosed, smooth(charge_time / OpenTime));
 		if (prey.x < teeth_x() - SnapDepth) {
 			state = Slamming;
 			timer = SlamTime + HoldTime;
@@ -144,7 +127,6 @@ void BigFish::update(float elapsed) {
 		}
 	} else if (state == Slamming) {
 		if (timer > HoldTime) position.x += charge_speed() * elapsed;
-		shown_target = 1.0f;
 		float before = timer;
 		timer -= elapsed;
 		if (before > HoldTime && timer <= HoldTime) {
@@ -153,7 +135,6 @@ void BigFish::update(float elapsed) {
 		}
 		if (timer <= 0.0f) state = Normal;
 	} else {
-		shown_target = 1.0f;
 		timer -= elapsed;
 		if (timer <= 0.0f) state = Normal;
 	}
@@ -164,8 +145,6 @@ void BigFish::update(float elapsed) {
 	} else {
 		jaw += (jaw_target - jaw) * (1.0f - std::exp(-elapsed / JawEase));
 	}
-	float shown_rate = elapsed / (shown_target > shown ? RevealTime : FadeTime);
-	shown += std::clamp(shown_target - shown, -shown_rate, shown_rate);
 }
 
 void BigFish::enter(float x) {
@@ -174,7 +153,7 @@ void BigFish::enter(float x) {
 }
 
 float BigFish::out_of_sight_x(float view_left) const {
-	return view_left - LureOutOfSight - LureAhead - MouthFront * size;
+	return view_left - OffView - MouthFront * size;
 }
 
 void BigFish::stun(float seconds) {
@@ -194,7 +173,7 @@ bool BigFish::swimming() const {
 }
 
 bool BigFish::in_reach(glm::vec2 const &point) const {
-	return state == Normal && point.x - teeth_x() < RevealRange;
+	return state == Normal && point.x - teeth_x() < ChargeRange;
 }
 
 bool BigFish::in_mouth(glm::vec2 const &point) const {
@@ -205,8 +184,12 @@ float BigFish::closed() const {
 	return jaw;
 }
 
+float BigFish::chase_speed() const {
+	return std::clamp(ChaseSlowest + ChaseGain * (prey.x - teeth_x() - ChargeRange), ChaseSlowest, ChaseFastest);
+}
+
 float BigFish::charge_speed() const {
-	return speed + ChargeAccel * std::max(0.0f, charge_time - CreepTime);
+	return chase_speed() + ChargeAccel * charge_time;
 }
 
 float BigFish::mouth_offset(float shut) const {
@@ -216,29 +199,12 @@ float BigFish::mouth_offset(float shut) const {
 	return 0.5f * (top + bottom);
 }
 
-float BigFish::stroke() const {
-	return 1.0f + SwimSize * std::sin(time * 2.0f * float(M_PI) / SwimPeriod)
-		+ SwimSecondSize * std::sin(time * 2.0f * float(M_PI) / SwimSecondPeriod + 1.0f);
-}
-
 float BigFish::art_front() const {
 	return ArtFront * size;
 }
 
 float BigFish::teeth_x() const {
 	return position.x + MouthFront * size;
-}
-
-glm::vec2 BigFish::lure_position() const {
-	return glm::vec2(teeth_x() + LureAhead, lure_y + position.y - base_y);
-}
-
-float BigFish::lure_brightness() const {
-	return 1.0f - LureDim * (0.5f - 0.5f * std::cos(time * 2.0f * float(M_PI) / BreathePeriod));
-}
-
-float BigFish::visibility() const {
-	return smooth(shown);
 }
 
 glm::vec2 BigFish::shake() const {
@@ -256,22 +222,45 @@ void BigFish::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) c
 
 	//each jaw turns around position, so its center swings around that point with it.
 	//based on https://en.wikipedia.org/wiki/Rotation_matrix
-	glm::u8vec4 tint = glm::u8vec4(255, 255, 255, uint8_t(255.0f * visibility()));
 	auto draw_jaw = [&](SpriteTexture const &jaw_texture, glm::vec2 const &offset, float angle) {
 		float co = std::cos(angle);
 		float si = std::sin(angle);
 		glm::vec2 center = position + glm::vec2(co * offset.x - si * offset.y, si * offset.x + co * offset.y);
-		sprites.draw(jaw_texture, world_to_clip, center, glm::vec2(size, h), angle, false, tint, 0.0f, DrawSprites::Predator);
+		sprites.draw(jaw_texture, world_to_clip, center, glm::vec2(size, h), angle, false, glm::u8vec4(255), 0.0f, DrawSprites::Predator);
 	};
 	//upper jaw last so it covers the lower jaw where they overlap
-	if (tint.a > 0) {
-		draw_jaw(lower_jaw, glm::vec2(0.5f * size, -0.5f * h + LowerLift * size), glm::mix(LowerOpenAngle, LowerShutAngle, c));
-		draw_jaw(upper_jaw, glm::vec2(0.5f * size, 0.5f * h), glm::mix(UpperOpenAngle, UpperShutAngle, c));
-	}
+	draw_jaw(lower_jaw, glm::vec2(0.5f * size, -0.5f * h + LowerLift * size), glm::mix(LowerOpenAngle, LowerShutAngle, c));
+	draw_jaw(upper_jaw, glm::vec2(0.5f * size, 0.5f * h), glm::mix(UpperOpenAngle, UpperShutAngle, c));
+}
 
-	//same pale color as the jellyfish
-	constexpr glm::u8vec4 LureColor = glm::u8vec4(175, 185, 190, 200);
-	float bright = std::min(1.0f, 0.6f * lure_brightness());
-	glm::u8vec4 lure_color = glm::u8vec4(glm::vec4(LureColor) * glm::vec4(glm::vec3(bright), 1.0f));
-	sprites.draw(lure_texture, world_to_clip, lure_position(), glm::vec2(LureSize), 0.0f, false, lure_color, 0.0f, DrawSprites::Emissive);
+//turns an offset from the hinge by FarAngle, then mirrors it so the head faces left.
+//based on https://en.wikipedia.org/wiki/Rotation_matrix
+static glm::vec2 far_offset(glm::vec2 const &offset) {
+	float co = std::cos(FarAngle);
+	float si = std::sin(FarAngle);
+	return glm::vec2(-(co * offset.x - si * offset.y), si * offset.x + co * offset.y);
+}
+
+glm::vec2 BigFish::far_mouth(glm::vec2 const &hinge) const {
+	return hinge + far_offset(glm::vec2(MouthFront * FarSize, 0.0f));
+}
+
+void BigFish::draw_far(DrawSprites const &sprites, glm::mat4 const &world_to_clip, glm::vec2 const &hinge) const {
+	float h = FarSize * float(upper_jaw.pixel_size.y) / float(upper_jaw.pixel_size.x);
+	constexpr glm::u8vec4 tint = glm::u8vec4(0, 0, 0, 255);
+	//the body behind the head is the png's last column of pixels, stretched
+	constexpr glm::vec4 LastColumn = glm::vec4(0.001f, 0.0f, 0.001f, 1.0f);
+	auto draw_part = [&](SpriteTexture const &texture, glm::vec2 const &offset) {
+		sprites.draw(texture, world_to_clip, hinge + far_offset(offset), glm::vec2(FarSize, h), -FarAngle, true, tint);
+		sprites.draw(texture, world_to_clip, hinge + far_offset(glm::vec2(-0.5f * FarBody, offset.y)), glm::vec2(FarBody, h), -FarAngle, true, tint,
+			0.0f, DrawSprites::Surface, LastColumn);
+		for (int i = 0; i < FarTailSteps; ++i) {
+			float back = FarBody + (float(i) + 0.5f) * FarTailStep;
+			float solid = 1.0f - (float(i) + 1.0f) / float(FarTailSteps + 1);
+			sprites.draw(texture, world_to_clip, hinge + far_offset(glm::vec2(-back, offset.y)), glm::vec2(FarTailStep, h), -FarAngle, true,
+				glm::u8vec4(0, 0, 0, uint8_t(255.0f * solid)), 0.0f, DrawSprites::Surface, LastColumn);
+		}
+	};
+	draw_part(lower_jaw, glm::vec2(0.5f * FarSize, -0.5f * h + LowerLift * FarSize));
+	draw_part(upper_jaw, glm::vec2(0.5f * FarSize, 0.5f * h));
 }
