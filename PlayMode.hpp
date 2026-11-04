@@ -82,7 +82,7 @@ private:
 	// frozen time when a spat rock hits something
 	float hit_stop = 0.0f;
 	// 1 is fully lit, 0 is dark. a jellyfish goes dark over jelly_fade_time seconds when the big fish reaches it
-	std::array< float, 4 > jelly_light = {1.0f, 1.0f, 1.0f, 1.0f};
+	std::array< float, 2 > jelly_light = {1.0f, 1.0f};
 	static constexpr float jelly_fade_time = 0.5f;
 	glm::vec2 jelly_position(size_t i) const;
 	// false after the big fish gets pinned, until it swims back up to the edge of the view

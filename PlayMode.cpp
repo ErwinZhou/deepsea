@@ -254,10 +254,8 @@ void PlayMode::update(float elapsed) {
 glm::vec2 PlayMode::jelly_position(size_t i) const {
 	// four units left of the crack keeps the 1.8-unit jellyfish clear of the wall
 	const glm::vec2 wall_offset(-4.0f, 0.0f);
-	std::array<glm::vec2, 4> const homes = {
+	std::array<glm::vec2, 2> const homes = {
 		cave.wall_crack_position(cave.first_wall) + wall_offset,
-		glm::vec2(cave.hanging_rock.center.x - 7.0f, 3.0f),
-		glm::vec2(cave.last_wall.x - 7.0f, 3.8f),
 		cave.wall_crack_position(cave.last_wall) + wall_offset
 	};
 	return homes[i] + glm::vec2(0.18f * std::sin(clock * 0.3f + float(i)), 0.25f * std::sin(clock * 0.65f + float(i) * 2.0f));
@@ -361,7 +359,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
-	std::array<glm::vec2, 4> jelly_positions = {jelly_position(0), jelly_position(1), jelly_position(2), jelly_position(3)};
+	std::array<glm::vec2, 2> jelly_positions = {jelly_position(0), jelly_position(1)};
 	{ // lights stay at their positions in the cave
 		constexpr glm::vec2 GlowRadius = glm::vec2(5.5f, 4.0f);
 
