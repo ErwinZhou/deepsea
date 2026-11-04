@@ -39,8 +39,8 @@ static constexpr PngBox HangingShape[] = {
 //its crack runs out to the right side of the lower part
 static constexpr PngBox HangingCrack = {0.6f, 1.0f, 0.35f, 0.72f};
 static constexpr int HangingHits = 3;
-// distance between pillar and final wall, 12 world units keeps both visible together with room to collect stones
-static constexpr float PillarWallGap = 12.0f;
+// 40 units restores the earlier layout, with the pillar at x = 8 and the final wall at x = 48
+static constexpr float PillarWallGap = 40.0f;
 //how it falls once it breaks loose. it drifts left because the crack is on its right
 static constexpr float FallGravity = 25.0f;
 static constexpr float FallDrift = 2.5f;

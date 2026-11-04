@@ -87,13 +87,13 @@ private:
 	glm::vec2 jelly_position(size_t i) const;
 	// false after the big fish gets pinned, until it swims back up to the edge of the view
 	bool leashed = true;
-	// the big fish wakes once the view's left edge is dark_past_wall past the first wall, when the first jellyfish's light has faded.
+	// the warning starts when the view's left edge passes first_wall.x - 1
 	// then a quiet moment, the roar, and it arrives. warning_time is below 0 before it wakes
 	float warning_time = -1.0f;
 	static constexpr float dark_past_wall = -1.0f;
 	static constexpr float warning_quiet = 0.5f;
-	// 10 seconds from the warning starting to the fish entering
-	static constexpr float warning_length = 10.0f;
+	// 6 seconds from the warning starting to the fish entering
+	static constexpr float warning_length = 6.0f;
 	// 0 before and during the quiet moment, rising to 1 as the big fish arrives
 	float warning_amount() const;
 
