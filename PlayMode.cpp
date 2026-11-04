@@ -52,11 +52,12 @@ PlayMode::PlayMode()
 	  cavern_texture(data_path("cavern_rock.png")),
 	  background_texture(data_path("cavern_background.png")),
 	  jellyfish_texture(data_path("jellyfish.png")) {
-	camera.view_size = glm::vec2(corridor_height * (16.0f / 9.0f), corridor_height);
+	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height);
 	camera.dead_zone = glm::vec2(5.0f, 2.5f);
 	physics.bounds_min = glm::vec2(-0.5f * level_length, -0.5f * corridor_height);
 	physics.bounds_max = glm::vec2(0.5f * level_length, 0.5f * corridor_height);
-	camera.center = camera.constrain(physics.bounds_min, physics.bounds_min, physics.bounds_max);
+	// keep the opening at y = 0 instead of moving it to the bottom of the taller corridor
+	camera.center = camera.constrain(glm::vec2(physics.bounds_min.x, 0.0f), physics.bounds_min, physics.bounds_max);
 	physics.bodies = {
 		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
@@ -403,7 +404,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	{ // two rock layers scroll at different speeds behind the fish
 		float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
 		auto draw_layer = [&](SpriteTexture const &texture, float parallax, float height, float fade, uint8_t alpha) {
-			height = std::max(height, 2.0f * (std::abs(view_center.y) + half_view.y) + 4.0f);
+			// cover all 36 units plus shake padding so swimming up does not resize the background
+			height = std::max(height, physics.bounds_max.y - physics.bounds_min.y + 4.0f);
 			float width = height * float(texture.pixel_size.x) / float(texture.pixel_size.y);
 			glm::vec2 origin(view_center.x * (1.0f - parallax), middle_y);
 			int first = int(std::floor((view_center.x - half_view.x - origin.x) / width));

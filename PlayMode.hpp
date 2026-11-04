@@ -40,8 +40,9 @@ struct PlayMode : Mode {
 	static constexpr float spit_impulse = 14.0f;
 	static constexpr float spit_clearance = 0.1f;
 	static constexpr float level_length = 120.0f;
-	// the camera shows the full height of the level
-	static constexpr float corridor_height = 20.5f;
+	// the 36-unit corridor takes two 18-unit views to explore from floor to ceiling
+	static constexpr float corridor_height = 36.0f;
+	static constexpr float camera_height = 18.0f;
 	UnderwaterPhysics physics;
 	Camera2D camera;
 	glm::vec2 facing{1.0f, 0.0f};
