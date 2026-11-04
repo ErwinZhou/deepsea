@@ -18,10 +18,10 @@ static constexpr float WallArtLeft = 0.28f;
 static constexpr float WallArtRight = 0.84f;
 static constexpr int FirstWallHits = 2;
 static constexpr int LastWallHits = 3;
-// target height ranges measured from wall1, wall2 and wall3, as fractions down from the png top
-static glm::vec2 const WallCrackHeights[] = {
-	{0.48f, 0.95f}, {0.16f, 0.95f}, {0.0f, 0.98f}
-};
+// the leftmost crack entry is at row 591 in all three 682-pixel wall images, measured down from the top
+static constexpr float WallCrackEntryHeight = 591.0f / 682.0f;
+// the target is 0.3 units wide and 1 unit tall, a stone with radius 0.4 adds 0.4 units of tolerance on each side
+static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
 
 //a box on a png, as fractions of the png measured from its top left
 struct PngBox {
@@ -137,13 +137,11 @@ static bool inside(glm::vec2 const &point, StaticBox2D const &box, float pad) {
 	return point.x >= box.min.x - pad && point.x <= box.max.x + pad && point.y >= box.min.y - pad && point.y <= box.max.y + pad;
 }
 
-static StaticBox2D wall_crack(Cave::Wall const &wall, int stage, bool flip_y) {
+static StaticBox2D wall_crack(Cave::Wall const &wall, bool flip_y) {
 	const float height = wall.box.max.y - wall.box.min.y;
-	// flipping the first image changes its crack from 48–95 percent down to 5–52 percent down
-	const glm::vec2 crack_heights = flip_y ? glm::vec2(1.0f - WallCrackHeights[stage].y, 1.0f - WallCrackHeights[stage].x)
-		: WallCrackHeights[stage];
-	return StaticBox2D{glm::vec2(wall.box.min.x, wall.box.max.y - crack_heights.y * height),
-		glm::vec2(wall.box.max.x, wall.box.max.y - crack_heights.x * height)};
+	const float entry_height = flip_y ? 1.0f - WallCrackEntryHeight : WallCrackEntryHeight;
+	const glm::vec2 entry(wall.box.min.x, wall.box.max.y - entry_height * height);
+	return StaticBox2D{entry - WallCrackHalfSize, entry + WallCrackHalfSize};
 }
 
 int Cave::wall_stage(Wall const &wall) const {
@@ -206,7 +204,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			return true;
 		};
 		for (Wall *wall : {&first_wall, &last_wall}) {
-			if (wall->hits_left <= 0 || !strikes(wall->box, wall_crack(*wall, wall_stage(*wall), wall == &first_wall))) continue;
+			if (wall->hits_left <= 0 || !strikes(wall->box, wall_crack(*wall, wall == &first_wall))) continue;
 			hit = true;
 			wall->hits_left -= 1;
 			wall->shudder = ShudderTime;
