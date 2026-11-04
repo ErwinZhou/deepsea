@@ -352,6 +352,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		if (big_fish.state == BigFish::Waiting) amount += TrembleSize * warning_amount();
 		view_center += amount * glm::vec2(std::sin(clock * 67.0f), std::cos(clock * 53.0f));
 	}
+	// stop horizontal shake from looking past the entrance or exit, keeping vertical rumble
+	view_center.x = camera.constrain(view_center, physics.bounds_min, physics.bounds_max).x;
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
