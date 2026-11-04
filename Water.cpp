@@ -117,7 +117,7 @@ void Water::Uniforms::upload(Look const &look) const {
 }
 
 //based on https://registry.khronos.org/OpenGL-Refpages/gl4/html/gl_VertexID.xhtml
-// one triangle covers the viewport
+//draw haze and postprocessing over the whole screen
 static char const *whole_view_vertex_shader =
 	"#version 330\n"
 	"out vec2 uv;\n"
@@ -181,7 +181,7 @@ Water::Water() {
 		"	vec3 color = texture(SCENE, uv).rgb;\n"
 		// darker toward the edges, darkest in the corners
 		"	color *= 1.0 - EDGE_DARKNESS * smoothstep(0.5, 1.45, length(2.0 * uv - 1.0));\n"
-		// grain hides bands in dark gradients
+		//grain reduces color banding in dark water
 		"	uvec2 pixel = uvec2(gl_FragCoord.xy);\n"
 		"	float grain = random(pixel.x ^ hash(pixel.y ^ hash(FRAME)));\n"
 		"	fragColor = vec4(to_srgb(max(color, 0.0)) + GRAIN * (grain - 0.5), 1.0);\n"
@@ -210,12 +210,14 @@ Water::~Water() {
 void Water::begin(Look const &look) {
 	glGetIntegerv(GL_VIEWPORT, viewport);
 	glm::uvec2 size = glm::uvec2(std::max(1, viewport[2]), std::max(1, viewport[3]));
-	float render_scale = std::min(1.0f, std::min(1600.0f / float(size.x), 900.0f / float(size.y)));
+	// cap the scene size on high resolution displays
+	constexpr glm::vec2 MaxSceneSize = glm::vec2(2560.0f, 1440.0f);
+	float render_scale = std::min(1.0f, std::min(MaxSceneSize.x / float(size.x), MaxSceneSize.y / float(size.y)));
 	size = glm::max(glm::uvec2(1), glm::uvec2(glm::vec2(size) * render_scale));
 	if (size != scene_size) {
 		scene_size = size;
 		glBindTexture(GL_TEXTURE_2D, scene_texture);
-		// float storage keeps dark gradients smooth
+		//preserve subtle brightness differences in dark areas
 		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, scene_size.x, scene_size.y, 0, GL_RGBA, GL_FLOAT, nullptr);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);

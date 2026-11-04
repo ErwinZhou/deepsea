@@ -42,7 +42,7 @@ struct Water {
 		GLint column_count = -1, columns = -1;
 	};
 
-	// draw into the scene texture, capped at 1600 by 900
+	// draw into the scene texture
 	void begin(Look const &look);
 	void haze();
 	// draw the scene to the window

@@ -4,7 +4,7 @@
 
 #include <glm/glm.hpp>
 
-//the big fish that chases the player. its mouth only opens wide when it is going to bite, and every bite is real
+//chases the player and catches it when the jaws close
 struct BigFish {
 	BigFish();
 
@@ -16,7 +16,7 @@ struct BigFish {
 		Stunned, //pinned by falling rock, stops moving
 	} state = Waiting;
 
-	//left edge of the jaw pngs, at the line where the two jaws meet. the jaws turn around this point
+	//pivot at the back of the mouth, shared by both jaws
 	glm::vec2 position = glm::vec2(0.0f);
 	//how wide each jaw png is drawn. the height follows the png's shape
 	float size = 100.0f;
@@ -40,13 +40,13 @@ struct BigFish {
 	//true while the rock can pin it
 	bool swimming() const;
 
-	//in_reach sets off a charge, in_mouth gets caught when the jaws slam
+	//check whether the player is close enough to trigger a charge or be caught
 	bool in_reach(glm::vec2 const &point) const;
 	bool in_mouth(glm::vec2 const &point) const;
 
 	//0 when the mouth is at its widest, 1 when it's shut
 	float closed() const;
-	//art_front is the furthest right any part of the jaws reaches from position. anything left of teeth_x is inside the mouth
+	//front of the artwork for offscreen placement, and the teeth for catching the player
 	float art_front() const;
 	float teeth_x() const;
 	//the position.x that puts its head just off the left of the view
@@ -64,7 +64,7 @@ struct BigFish {
 private:
 	float chase_speed() const;
 	float charge_speed() const;
-	//middle of the mouth's height relative to position, for a given closed()
+	//find the mouth center to align it with the middle of the corridor
 	float mouth_offset(float shut) const;
 	float charge_time = 0.0f;
 	//what closed() returns, and its value when the slam started

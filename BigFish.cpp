@@ -5,8 +5,8 @@
 #include <algorithm>
 #include <cmath>
 
-//measured off the jaw pngs, as fractions of the png width. if the art changes, these need to be measured again.
-//LowerLift raises the lower jaw so the pngs meet at the back of the head. MouthTop and MouthBottom are the inner edge of each jaw
+//align the jaw artwork and collision checks using measurements from the pngs
+//raise the lower jaw so both pieces meet at the back of the head
 static constexpr float LowerLift = 0.045f;
 static constexpr float MouthFront = 0.6f;
 static constexpr float MouthTop = 0.19f;
@@ -20,13 +20,12 @@ static constexpr float UpperShutAngle = -11.0f * Degrees;
 static constexpr float LowerOpenAngle = -9.0f * Degrees;
 static constexpr float LowerShutAngle = 10.0f * Degrees;
 
-//its speed is ChaseSlowest at ChargeRange behind the small fish, and gains ChaseGain for every unit further back.
-//that matches the small fish's top speed about 29 units back, a little past the left of the view
+//swim faster when the player pulls ahead
 static constexpr float ChaseSlowest = 1.0f;
 static constexpr float ChaseGain = 0.11f;
 static constexpr float ChaseFastest = 7.0f;
 
-//the charge. it starts when the small fish is ChargeRange in front of its teeth, then gains ChargeAccel units per second every second
+//start charging when the player gets close to the teeth
 static constexpr float ChargeRange = 6.0f;
 static constexpr float ChargeAccel = 1.5f;
 
@@ -37,7 +36,7 @@ static constexpr float WidestClosed = 0.35f;
 static constexpr float OpenTime = 7.0f;
 static constexpr float JawEase = 0.3f;
 
-//the slam happens once the small fish is SnapDepth inside the mouth. HoldTime outlasts the fade to black after being eaten
+//snap shut once the player is inside the mouth, then hold through the death fade
 static constexpr float SnapDepth = 3.0f;
 static constexpr float SlamTime = 0.18f;
 static constexpr float HoldTime = 2.0f;
@@ -47,7 +46,7 @@ static constexpr float CatchFront = 0.6f;
 static constexpr float BreatheClosed = 0.06f;
 static constexpr float BreathePeriod = 4.0f;
 
-//up and down drift, two sine waves added together so it doesn't look regular
+//slow vertical drift while swimming
 static constexpr float BobHeight = 0.2f;
 static constexpr float BobPeriod = 12.0f;
 static constexpr float BobSecondPeriod = 7.0f;
@@ -200,7 +199,7 @@ float BigFish::teeth_x() const {
 glm::vec2 BigFish::shake() const {
 	float amount = ShakeSize * shake_left / ShakeTime;
 	if (state == Charging) amount += ChargeShake * smooth(charge_time / OpenTime);
-	//two sines at unrelated rates make an uneven wobble
+	//shake the camera during a bite or charge
 	return amount * glm::vec2(std::sin(time * 73.0f), std::cos(time * 59.0f));
 }
 
@@ -210,7 +209,7 @@ void BigFish::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) c
 	float h = size * float(upper_jaw.pixel_size.y) / float(upper_jaw.pixel_size.x);
 	float c = closed();
 
-	//each jaw turns around position, so its center swings around that point with it.
+	//rotate each jaw around the back of the mouth
 	//based on https://en.wikipedia.org/wiki/Rotation_matrix
 	auto draw_jaw = [&](SpriteTexture const &jaw_texture, glm::vec2 const &offset, float angle) {
 		float co = std::cos(angle);
@@ -223,7 +222,7 @@ void BigFish::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) c
 	draw_jaw(upper_jaw, glm::vec2(0.5f * size, 0.5f * h), glm::mix(UpperOpenAngle, UpperShutAngle, c));
 }
 
-//turns an offset from the hinge by FarAngle, then mirrors it so the head faces left.
+//position the distant fish facing left
 //based on https://en.wikipedia.org/wiki/Rotation_matrix
 static glm::vec2 far_offset(glm::vec2 const &offset) {
 	float co = std::cos(FarAngle);
@@ -238,7 +237,7 @@ glm::vec2 BigFish::far_mouth(glm::vec2 const &hinge) const {
 void BigFish::draw_far(DrawSprites const &sprites, glm::mat4 const &world_to_clip, glm::vec2 const &hinge) const {
 	float h = FarSize * float(upper_jaw.pixel_size.y) / float(upper_jaw.pixel_size.x);
 	constexpr glm::u8vec4 tint = glm::u8vec4(0, 0, 0, 255);
-	//the body behind the head is the png's last column of pixels, stretched
+	//extend the back of the head into a body using the edge of the artwork
 	constexpr glm::vec4 LastColumn = glm::vec4(0.001f, 0.0f, 0.001f, 1.0f);
 	auto draw_part = [&](SpriteTexture const &texture, glm::vec2 const &offset) {
 		sprites.draw(texture, world_to_clip, hinge + far_offset(offset), glm::vec2(FarSize, h), -FarAngle, true, tint, 0.0f, DrawSprites::Surface);

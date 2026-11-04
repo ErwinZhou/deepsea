@@ -1,10 +1,14 @@
 #include "Cave.hpp"
 
 #include "data_path.hpp"
+#include "load_save_png.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <limits>
+#include <string>
+#include <cstddef>
 
 static std::mt19937 rng{std::random_device{}()};
 //based on https://en.cppreference.com/w/cpp/numeric/random/uniform_real_distribution
@@ -18,45 +22,28 @@ static constexpr float WallArtLeft = 0.28f;
 static constexpr float WallArtRight = 0.84f;
 static constexpr int FirstWallHits = 2;
 static constexpr int LastWallHits = 3;
-// target height ranges measured from wall1, wall2 and wall3, as fractions down from the png top
-static glm::vec2 const WallCrackHeights[] = {
-	{0.48f, 0.95f}, {0.16f, 0.95f}, {0.0f, 0.98f}
-};
-
-//a box on a png, as fractions of the png measured from its top left
-struct PngBox {
-	float left, right, top, bottom;
-};
-
+static constexpr float CrackLeeway = 0.35f;
+static constexpr float ExitShift = 2.0f;
 //the hanging rock's png is drawn this many units square, with its top against the ceiling
 static constexpr float HangingSize = 9.0f;
-//the hanging rock's outline, as three boxes stacked from the ceiling down because it narrows toward its tip
-static constexpr PngBox HangingShape[] = {
-	{0.13f, 0.94f, 0.0f, 0.42f},
-	{0.2f, 0.85f, 0.42f, 0.66f},
-	{0.33f, 0.7f, 0.66f, 0.87f},
-};
-//its crack runs out to the right side of the lower part
-static constexpr PngBox HangingCrack = {0.6f, 1.0f, 0.35f, 0.72f};
+static constexpr float CoralSize = 3.5f;
 static constexpr int HangingHits = 3;
-// distance between pillar and final wall, 12 world units keeps both visible together with room to collect stones
+//leave room to collect stones between the pillar and final wall
 static constexpr float PillarWallGap = 12.0f;
 //how it falls once it breaks loose. it drifts left because the crack is on its right
 static constexpr float FallGravity = 25.0f;
 static constexpr float FallDrift = 2.5f;
 static constexpr float FallSpin = 0.6f;
-//how big the pile is once it lands, as fractions of HangingSize
-static constexpr float RubbleHalfWidth = 0.35f;
-static constexpr float RubbleHeight = 0.45f;
 //how long the big fish is held up when the rock lands on it, or when it has to get past the pile
 static constexpr float PinTime = 9.0f;
 static constexpr float ChewTime = 3.0f;
 //how far in front of its teeth the rock can land and still catch the big fish
 static constexpr float PinReach = 2.0f;
+static constexpr float PinHalfWidth = 0.35f;
 
-//a rock moving slower than this was pushed, not spat. pushing tops out a little under 4, spitting starts above 10
+//require a fast impact to damage a wall or pillar
 static constexpr float RockHitSpeed = 5.0f;
-//a hit thing shudders and throws chips
+//shake damaged rock and knock off chips
 static constexpr float ShudderTime = 0.25f;
 static constexpr float ShudderSize = 0.15f;
 static constexpr int HitChips = 8;
@@ -65,27 +52,60 @@ static constexpr int MissChips = 2;
 static constexpr int BreakChips = 24;
 static constexpr float HitCooldown = 0.3f;
 static constexpr float LooseRockRadius = 0.4f;
-// two starting stones, six and eight units right of the pillar, cannot open the three-hit final wall without a pillar batch
+//the final wall needs extra stones dropped by hitting the pillar
 static glm::vec2 const FinalRockOffsets[] = {{6.0f, -2.0f}, {8.0f, 2.0f}};
-// drop offsets clear the pillar, different downward speeds drift about 3.7 and 5 units before water drag stops them
-// zero current influence keeps the stones suspended once their initial momentum fades
+//drop stones beside the pillar, then let them settle in the water
 static Body2D const RockfallStones[] = {
 	{.position = {6.0f, 0.0f}, .velocity = {-0.4f, -3.0f}, .radius = LooseRockRadius, .current_scale = 0.0f},
 	{.position = {8.0f, 0.0f}, .velocity = {0.6f, -4.0f}, .radius = LooseRockRadius, .current_scale = 0.0f}
 };
-// four cosmetic chips per stone mark the ceiling source without adding collectible clutter
+//chips show where the stones fell from
 static constexpr int RockfallChips = 4;
-// maximum shake per axis in world units, 0.06 stays below the monster arrival tremble of 0.08
+//keep rockfall shake weaker than the big fish's arrival
 static constexpr float RockfallShakeSize = 0.06f;
 //particles slow down in the water at this rate per second
 static constexpr float WaterDrag = 2.0f;
 //height of the fallen rock's middle above the floor, as a fraction of HangingSize
 static constexpr float RestHeight = 0.32f;
 
+// build collision boxes and crack hit locations from the wall or pillar image
+static Cave::Target load_target(std::string const &filename) {
+	glm::uvec2 size;
+	std::vector< glm::u8vec4 > pixels;
+	load_png(filename, &size, &pixels, UpperLeftOrigin);
+	Cave::Target target;
+	target.texel_size = 1.0f / glm::vec2(size);
+	constexpr unsigned Strips = 16;
+	for (unsigned strip = 0; strip < Strips; ++strip) {
+		glm::vec4 part(1.0f, 0.0f, 1.0f, 0.0f);
+		for (unsigned y = strip * size.y / Strips; y < (strip + 1) * size.y / Strips; ++y) {
+			for (unsigned x = 0; x < size.x; ++x) {
+				glm::u8vec4 const &pixel = pixels[size_t(y) * size.x + x];
+				if (pixel.a < 128) continue;
+				part.x = std::min(part.x, float(x) / float(size.x));
+				part.y = std::max(part.y, float(x + 1) / float(size.x));
+				part.z = std::min(part.z, float(y) / float(size.y));
+				part.w = std::max(part.w, float(y + 1) / float(size.y));
+				// the crack paint is gray against the black rock
+				if (std::max(pixel.r, std::max(pixel.g, pixel.b)) >= 96) {
+					target.cracks.emplace_back((float(x) + 0.5f) / float(size.x), (float(y) + 0.5f) / float(size.y));
+				}
+			}
+		}
+		if (part.x < part.y) target.parts.push_back(part);
+	}
+	return target;
+}
+
 Cave::Cave() : wall_textures{SpriteTexture(data_path("wall1.png")), SpriteTexture(data_path("wall2.png")), SpriteTexture(data_path("wall3.png"))},
 	hanging_textures{SpriteTexture(data_path("big_rock1.png")), SpriteTexture(data_path("big_rock2.png")), SpriteTexture(data_path("big_rock3.png"))},
 	exit_texture(data_path("exit.png")),
+	coral_texture(data_path("coral.png")),
 	chip_texture(data_path("small_rock.png")) {
+	for (int stage = 0; stage < 3; ++stage) {
+		wall_targets[stage] = load_target(data_path("wall" + std::to_string(stage + 1) + ".png"));
+		hanging_targets[stage] = load_target(data_path("big_rock" + std::to_string(stage + 1) + ".png"));
+	}
 }
 
 void Cave::setup(UnderwaterPhysics &physics) {
@@ -100,15 +120,17 @@ void Cave::setup(UnderwaterPhysics &physics) {
 	//positions are measured from the left end of the level
 	place_wall(first_wall, bounds_min.x + 32.0f, FirstWallHits);
 	place_wall(last_wall, bounds_max.x - 12.0f, LastWallHits);
-	exit_x = bounds_max.x - 5.0f;
+	exit_x = bounds_max.x - 5.0f + ExitShift;
 
 	hanging_rock = HangingRock();
 	hanging_rock.hits_left = HangingHits;
 	hanging_rock.center = glm::vec2(last_wall.x - PillarWallGap, bounds_max.y - 0.5f * HangingSize);
+	coral_position = glm::vec2(hanging_rock.center.x - 6.5f, bounds_max.y - 0.5f * CoralSize);
 
 	float middle_y = 0.5f * (bounds_min.y + bounds_max.y);
 	light_spots = {
 		glm::vec3(exit_x, middle_y, 2.4f),
+		glm::vec3(coral_position + glm::vec2(0.0f, 0.8f), 1.0f),
 	};
 
 	for (glm::vec2 const &offset : FinalRockOffsets) {
@@ -116,31 +138,57 @@ void Cave::setup(UnderwaterPhysics &physics) {
 	}
 }
 
-//true if a rock moving fast will touch box within about this frame.
-//the nearest point on the box comes from the same clamp UnderwaterPhysics::resolve_contact uses
-static bool hits_box(Body2D const &rock, StaticBox2D const &box, float elapsed) {
-	float speed = glm::length(rock.velocity);
-	if (speed < RockHitSpeed) return false;
+//find when a moving rock hits the collision box, or infinity if it misses
+static float hit_time(Body2D const &rock, StaticBox2D const &box, float elapsed, glm::vec2 *contact) {
+	float miss = std::numeric_limits<float>::infinity();
 	glm::vec2 away = rock.position - glm::clamp(rock.position, box.min, box.max);
-	float distance = glm::length(away);
-	if (distance > rock.radius + 2.0f * speed * elapsed) return false;
-	//a rock already moving away from the box just bounced off it
-	return glm::dot(rock.velocity, away) < 0.0f;
+	if (glm::dot(rock.velocity, away) >= 0.0f) return miss;
+	float first = 0.0f;
+	float last = elapsed;
+	for (int axis = 0; axis < 2; ++axis) {
+		float low = box.min[axis] - rock.radius;
+		float high = box.max[axis] + rock.radius;
+		if (std::abs(rock.velocity[axis]) < 0.00001f) {
+			if (rock.position[axis] < low || rock.position[axis] > high) return miss;
+		} else {
+			float a = (low - rock.position[axis]) / rock.velocity[axis];
+			float b = (high - rock.position[axis]) / rock.velocity[axis];
+			first = std::max(first, std::min(a, b));
+			last = std::min(last, std::max(a, b));
+		}
+	}
+	if (first > last) return miss;
+	glm::vec2 center = rock.position + rock.velocity * first;
+	*contact = glm::clamp(center, box.min, box.max);
+	if (glm::dot(center - *contact, center - *contact) > rock.radius * rock.radius + 0.00001f) {
+		// at a corner the circle reaches the box after its bounding square does
+		glm::vec2 offset = rock.position - *contact;
+		float a = glm::dot(rock.velocity, rock.velocity);
+		float b = glm::dot(offset, rock.velocity);
+		float c = glm::dot(offset, offset) - rock.radius * rock.radius;
+		float discriminant = b * b - a * c;
+		if (discriminant < 0.0f) return miss;
+		first = (-b - std::sqrt(discriminant)) / a;
+		if (first < 0.0f || first > last) return miss;
+		*contact = glm::clamp(rock.position + rock.velocity * first, box.min, box.max);
+	}
+	return first;
 }
 
-//where a box on a png drawn size units square around center ends up in the world
-static StaticBox2D world_box(PngBox const &box, glm::vec2 const &center, float size) {
-	return StaticBox2D{center + size * glm::vec2(box.left - 0.5f, 0.5f - box.bottom), center + size * glm::vec2(box.right - 0.5f, 0.5f - box.top)};
+static glm::vec2 world_point(glm::vec2 const &point, glm::vec2 const &center, glm::vec2 const &size, float angle) {
+	glm::vec2 offset = size * glm::vec2(point.x - 0.5f, 0.5f - point.y);
+	float co = std::cos(angle);
+	float si = std::sin(angle);
+	return center + glm::vec2(co * offset.x - si * offset.y, si * offset.x + co * offset.y);
 }
 
-static bool inside(glm::vec2 const &point, StaticBox2D const &box, float pad) {
-	return point.x >= box.min.x - pad && point.x <= box.max.x + pad && point.y >= box.min.y - pad && point.y <= box.max.y + pad;
-}
-
-static StaticBox2D wall_crack(Cave::Wall const &wall, int stage) {
-	float height = wall.box.max.y - wall.box.min.y;
-	return StaticBox2D{glm::vec2(wall.box.min.x, wall.box.max.y - WallCrackHeights[stage].y * height),
-		glm::vec2(wall.box.max.x, wall.box.max.y - WallCrackHeights[stage].x * height)};
+static StaticBox2D world_box(glm::vec4 const &part, glm::vec2 const &center, glm::vec2 const &size, float angle) {
+	glm::vec2 middle = world_point(glm::vec2(0.5f * (part.x + part.y), 0.5f * (part.z + part.w)), center, size, angle);
+	glm::vec2 half = 0.5f * size * glm::vec2(part.y - part.x, part.w - part.z);
+	float co = std::abs(std::cos(angle));
+	float si = std::abs(std::sin(angle));
+	glm::vec2 extent(co * half.x + si * half.y, si * half.x + co * half.y);
+	return StaticBox2D{middle - extent, middle + extent};
 }
 
 int Cave::wall_stage(Wall const &wall) const {
@@ -151,13 +199,15 @@ int Cave::wall_stage(Wall const &wall) const {
 	return LastWallHits - wall.hits_left;
 }
 
-static StaticBox2D rubble_box(Cave::HangingRock const &rock, float floor) {
-	return StaticBox2D{glm::vec2(rock.center.x - RubbleHalfWidth * HangingSize, floor),
-		glm::vec2(rock.center.x + RubbleHalfWidth * HangingSize, floor + RubbleHeight * HangingSize)};
-}
-
 void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) {
 	events = Events();
+	float height = bounds_max.y - bounds_min.y;
+	float png_width = WallThickness / (WallArtRight - WallArtLeft);
+	float art_middle = 0.5f * (WallArtLeft + WallArtRight);
+	auto wall_center = [&](Wall const &wall) {
+		return glm::vec2(wall.x - (art_middle - 0.5f) * png_width, 0.5f * (bounds_min.y + bounds_max.y));
+	};
+	int hanging_stage = std::min(2, HangingHits - hanging_rock.hits_left);
 	for (Wall *wall : {&first_wall, &last_wall}) {
 		wall->shudder = std::max(0.0f, wall->shudder - elapsed);
 	}
@@ -180,20 +230,35 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 	for (size_t i = 0; i < hit_cooldown.size(); ++i) {
 		// copy the body because a pillar hit appends stones and can reallocate the list
 		Body2D body = physics.bodies[i];
-		if (!body.active || body.kind != Body2D::Rock || !body.player_spat || hit_cooldown[i] > 0.0f) continue;
+		if (!body.active || body.kind != Body2D::Rock || !body.player_spat || hit_cooldown[i] > 0.0f || glm::length(body.velocity) < RockHitSpeed) continue;
 
 		bool hit = false;
 		bool missed = false;
 		//chips fly back the way the rock came from
 		glm::vec2 away = -glm::normalize(body.velocity);
-		//true if the rock lands on the crack. landing anywhere else only knocks off a couple of chips
-		auto strikes = [&](StaticBox2D const &box, StaticBox2D const &crack) {
-			if (!hits_box(body, box, elapsed)) return false;
-			// a missed shot stays collectible, but its rebound cannot count as another deliberate hit
+		//damage the target when the impact is close enough to its painted crack
+		auto strikes = [&](Target const &target, glm::vec2 const &center, glm::vec2 const &size, float angle) {
+			float first = std::numeric_limits<float>::infinity();
+			glm::vec2 contact(0.0f);
+			for (glm::vec4 const &part : target.parts) {
+				glm::vec2 at;
+				float when = hit_time(body, world_box(part, center, size, angle), std::min(elapsed, 0.1f), &at);
+				if (when < first) { first = when; contact = at; }
+			}
+			if (!std::isfinite(first)) return false;
 			physics.bodies[i].player_spat = false;
-			glm::vec2 contact = glm::clamp(body.position, box.min, box.max);
 			events.at = contact;
-			if (!inside(contact, crack, body.radius)) {
+			float reach = body.radius + CrackLeeway + 0.5f * glm::length(target.texel_size * size);
+			glm::vec2 offset = contact - center;
+			float co = std::cos(angle);
+			float si = std::sin(angle);
+			glm::vec2 local_contact(co * offset.x + si * offset.y, -si * offset.x + co * offset.y);
+			bool cracked = false;
+			for (glm::vec2 const &pixel : target.cracks) {
+				glm::vec2 delta = size * glm::vec2(pixel.x - 0.5f, 0.5f - pixel.y) - local_contact;
+				if (glm::dot(delta, delta) <= reach * reach) { cracked = true; break; }
+			}
+			if (!cracked) {
 				throw_chips(contact, away, MissChips);
 				missed = true;
 				return false;
@@ -203,7 +268,8 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			return true;
 		};
 		for (Wall *wall : {&first_wall, &last_wall}) {
-			if (wall->hits_left <= 0 || !strikes(wall->box, wall_crack(*wall, wall_stage(*wall)))) continue;
+			if (hit || missed) break;
+			if (wall->hits_left <= 0 || !strikes(wall_targets[wall_stage(*wall)], wall_center(*wall), glm::vec2(png_width, height), 0.0f)) continue;
 			hit = true;
 			wall->hits_left -= 1;
 			wall->shudder = ShudderTime;
@@ -217,10 +283,9 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 				events.first_wall_broke = true;
 			}
 		}
-		StaticBox2D crack = world_box(HangingCrack, hanging_rock.center, HangingSize);
-		for (PngBox const &part : HangingShape) {
-			if (hanging_rock.state != HangingRock::Hanging || hit || missed) break;
-			if (!strikes(world_box(part, hanging_rock.center, HangingSize), crack)) continue;
+		hanging_stage = std::min(2, HangingHits - hanging_rock.hits_left);
+		if (hanging_rock.state == HangingRock::Hanging && !hit && !missed
+			&& strikes(hanging_targets[hanging_stage], hanging_rock.center, glm::vec2(HangingSize), 0.0f)) {
 			hit = true;
 			hanging_rock.hits_left -= 1;
 			hanging_rock.shudder = ShudderTime;
@@ -254,28 +319,39 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 				throw_chips(hanging_rock.center + glm::vec2(random_between(-3.0f, 3.0f), -2.0f), glm::vec2(0.0f, 1.0f), 1);
 			}
 			//landing on the big fish's head pins it for a long time
-			float rock_left = hanging_rock.center.x - RubbleHalfWidth * HangingSize;
+			float rock_left = hanging_rock.center.x - PinHalfWidth * HangingSize;
 			if (big_fish.swimming() && rock_left < big_fish.teeth_x() + PinReach && hanging_rock.center.x > big_fish.position.x) {
 				big_fish.stun(PinTime);
 				hanging_rock.used = true;
 			}
 		}
 	}
-	//a pile the big fish hasn't been caught by yet still holds it up while it gets past
+	//fallen rubble slows the big fish once
 	if (hanging_rock.state == HangingRock::Fallen && !hanging_rock.used && big_fish.swimming()
-		&& big_fish.teeth_x() >= rubble_box(hanging_rock, bounds_min.y).min.x) {
+		&& big_fish.teeth_x() >= hanging_rock.center.x - PinHalfWidth * HangingSize) {
 		big_fish.stun(ChewTime);
 		hanging_rock.used = true;
 	}
 
 	physics.obstacles.clear();
+	light_blockers.clear();
+	auto add_target = [&](Target const &target, glm::vec2 const &center, glm::vec2 const &size, float angle, size_t shadow_parts) {
+		for (size_t group = 0; group < shadow_parts; ++group) {
+			StaticBox2D shadow{glm::vec2(std::numeric_limits<float>::infinity()), glm::vec2(-std::numeric_limits<float>::infinity())};
+			for (size_t i = group * target.parts.size() / shadow_parts; i < (group + 1) * target.parts.size() / shadow_parts; ++i) {
+				StaticBox2D box = world_box(target.parts[i], center, size, angle);
+				physics.obstacles.push_back(box);
+				shadow.min = glm::min(shadow.min, box.min);
+				shadow.max = glm::max(shadow.max, box.max);
+			}
+			if (shadow.min.x <= shadow.max.x) light_blockers.push_back(shadow);
+		}
+	};
 	for (Wall const *wall : {&first_wall, &last_wall}) {
-		if (wall->hits_left > 0) physics.obstacles.push_back(wall->box);
+		if (wall->hits_left > 0) add_target(wall_targets[wall_stage(*wall)], wall_center(*wall), glm::vec2(png_width, height), 0.0f, 1);
 	}
-	if (hanging_rock.state == HangingRock::Hanging) {
-		for (PngBox const &part : HangingShape) physics.obstacles.push_back(world_box(part, hanging_rock.center, HangingSize));
-	}
-	if (hanging_rock.state == HangingRock::Fallen) physics.obstacles.push_back(rubble_box(hanging_rock, bounds_min.y));
+	hanging_stage = std::min(2, HangingHits - hanging_rock.hits_left);
+	add_target(hanging_targets[hanging_stage], hanging_rock.center, glm::vec2(HangingSize), hanging_rock.angle, 3);
 }
 
 void Cave::throw_chips(glm::vec2 const &at, glm::vec2 const &away, int count) {
@@ -312,7 +388,7 @@ void Cave::drop_ceiling_dust(float left, float right, float amount, float elapse
 	}
 }
 
-//sideways wobble for something hit shudder seconds ago, dying away as the shudder runs out
+//fade out the sideways shake after an impact
 static float shudder_offset(float shudder) {
 	return ShudderSize * (shudder / ShudderTime) * std::sin(shudder * 90.0f);
 }
@@ -325,10 +401,13 @@ glm::vec2 Cave::shake() const {
 void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
 	float height = bounds_max.y - bounds_min.y;
 	float middle_y = 0.5f * (bounds_min.y + bounds_max.y);
+	// coral hangs from the ceiling beside the pillar
+	sprites.draw(coral_texture, world_to_clip, coral_position, glm::vec2(CoralSize), float(M_PI), false,
+		glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
 
 	{ //the way out, past the last wall
 		constexpr float ExitWidth = 6.0f;
-		sprites.draw(exit_texture, world_to_clip, glm::vec2(bounds_max.x - 0.5f * ExitWidth, middle_y), glm::vec2(ExitWidth, height));
+		sprites.draw(exit_texture, world_to_clip, glm::vec2(bounds_max.x - 0.5f * ExitWidth + ExitShift, middle_y), glm::vec2(ExitWidth, height));
 	}
 
 	//the wall png is wider than its art, so it is shifted to put the art on the wall's box
@@ -344,16 +423,7 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_min.y - 16.0f),
 			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
 			glm::vec4(0.0f, 0.001f, 1.0f, 0.001f));
-		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, height));
-	}
-
-	if (hanging_rock.state == HangingRock::Hanging) {
-		glm::vec2 center = hanging_rock.center + glm::vec2(shudder_offset(hanging_rock.shudder), 0.0f);
-		SpriteTexture const &texture = hanging_textures[HangingHits - hanging_rock.hits_left];
-		sprites.draw(texture, world_to_clip, glm::vec2(center.x, center.y + 0.5f * HangingSize + 16.0f),
-			glm::vec2(HangingSize, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
-			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
-		sprites.draw(texture, world_to_clip, center, glm::vec2(HangingSize));
+		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, height), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
 	}
 
 	for (Particle const &particle : particles) {
@@ -365,6 +435,15 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 }
 
 void Cave::draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
-	if (hanging_rock.state == HangingRock::Hanging) return;
-	sprites.draw(hanging_textures[2], world_to_clip, hanging_rock.center, glm::vec2(HangingSize), hanging_rock.angle);
+	// the pillar draws in front of the jaws
+	if (hanging_rock.state == HangingRock::Hanging) {
+		glm::vec2 center = hanging_rock.center + glm::vec2(shudder_offset(hanging_rock.shudder), 0.0f);
+		SpriteTexture const &texture = hanging_textures[HangingHits - hanging_rock.hits_left];
+		sprites.draw(texture, world_to_clip, glm::vec2(center.x, center.y + 0.5f * HangingSize + 16.0f),
+			glm::vec2(HangingSize, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
+			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
+		sprites.draw(texture, world_to_clip, center, glm::vec2(HangingSize), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
+		return;
+	}
+	sprites.draw(hanging_textures[2], world_to_clip, hanging_rock.center, glm::vec2(HangingSize), hanging_rock.angle, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
 }

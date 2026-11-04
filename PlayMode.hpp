@@ -23,7 +23,7 @@ struct PlayMode : Mode {
 
 	static constexpr size_t fish_body = 0;
 	static constexpr float swim_force = 9.0f;
-	// tunes added inertia per unit of rock radius, 6.0 makes current rocks take about 3 to 4 times longer to reach the same top speed
+	//larger swallowed rocks make the fish accelerate more slowly
 	static constexpr float carried_inertia_per_radius = 6.0f;
 	static constexpr float max_swim_speed = 3.5f;
 	// drawn height of the small fish png and the size of its body for bumping into things
@@ -67,7 +67,7 @@ private:
 	// seconds since the small fish was eaten or escaped
 	float end_time = 0.0f;
 	bool escaped = false;
-	// seconds left of the rumble when the hanging rock comes down, and a clock to wobble it by
+	//rockfall shake duration and animation time
 	float rumble = 0.0f;
 	float clock = 0.0f;
 	float scene_brightness = 1.0f;
@@ -131,12 +131,12 @@ private:
 	std::shared_ptr< Sound::PlayingSample > near_roar;
 	std::shared_ptr< Sound::PlayingSample > charge_roar;
 	void stop_roars(float fade);
-	// the deep water sound drops when the big fish wakes and stays down. it comes back only while the big fish is held up
+	//quiet the ambience during the chase and restore it while the big fish is pinned
 	static constexpr float ambient_quiet_volume = 0.15f;
 	static constexpr float ambient_fade_down = 0.3f;
 	static constexpr float ambient_fade_up = 8.0f;
 	bool was_held_up = false;
-	// the far roar follows its mouth this far behind the view, which makes it quieter and muffled. the charge roar starts quiet and gets louder
+	//place the distant roar behind the cave so it sounds quieter and muffled
 	static constexpr float far_roar_depth = 40.0f;
 	static constexpr float far_roar_volume = 0.75f;
 	static constexpr float far_roar_reach = 24.0f;
@@ -159,6 +159,7 @@ private:
 	SpriteTexture fish_texture;
 	SpriteTexture kirby_texture;
 	SpriteTexture fat_texture;
+	SpriteTexture fat_glow_texture;
 	SpriteTexture stone_texture;
 	SpriteTexture cavern_texture;
 	SpriteTexture background_texture;

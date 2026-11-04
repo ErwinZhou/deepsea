@@ -23,16 +23,16 @@ namespace {
 	//list of all currently playing samples:
 	std::list< std::shared_ptr< Sound::PlayingSample > > playing_samples;
 
-	//sounds further than ClearDistance from the listener get muffled. the lowpass cutoff starts at OpenCutoff and halves MuffleDistance past that
+	//muffle distant sounds by reducing high frequencies
 	constexpr float ClearDistance = 32.0f;
 	constexpr float MuffleDistance = 4.0f;
 	constexpr float OpenCutoff = 8000.0f;
 
-	//how far a sound can lean toward one ear, reached PanReach units to the side. 1 would be that ear only
+	//spread positional sounds between the left and right speakers
 	constexpr float PanWidth = 0.9f;
 	constexpr float PanReach = 20.0f;
 
-	//if all the sounds together go over Ceiling, everything gets turned down, then eases back up over LimiterRelease seconds.
+	//reduce the mix volume when overlapping sounds get too loud
 	//only the audio thread touches limiter_gain
 	constexpr float Ceiling = 0.89f;
 	constexpr float LimiterRelease = 0.3f;
@@ -400,7 +400,7 @@ void SDLCALL mix_audio(void *, SDL_AudioStream *stream_, int additional_amount, 
 		end_pan.l *= end_volume * playing_sample.volume.value;
 		end_pan.r *= end_volume * playing_sample.volume.value;
 
-		//how much of the sound the muffling lets through. 1 is all of it, for "2D" sounds
+		//apply distance muffling to positional sounds
 		//based on https://en.wikipedia.org/wiki/Low-pass_filter#Simple_infinite_impulse_response_filter
 		float pass = 1.0f;
 		if (!(playing_sample.pan.value == playing_sample.pan.value)) {
@@ -418,7 +418,7 @@ void SDLCALL mix_audio(void *, SDL_AudioStream *stream_, int additional_amount, 
 		assert(playing_sample.i < playing_sample.data.size());
 
 		for (uint32_t i = 0; i < samples; ++i) {
-			//muffle it, twice to cut the highs harder
+			//filter twice to soften distant sounds
 			float value = playing_sample.data[playing_sample.i];
 			playing_sample.muffle[0] += pass * (value - playing_sample.muffle[0]);
 			playing_sample.muffle[1] += pass * (playing_sample.muffle[0] - playing_sample.muffle[1]);

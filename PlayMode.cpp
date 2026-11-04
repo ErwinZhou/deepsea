@@ -47,6 +47,7 @@ PlayMode::PlayMode()
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
+	  fat_glow_texture(data_path("fat_with_glow.png")),
 	  stone_texture(data_path("small_rock.png")),
 	  cavern_texture(data_path("cavern_rock.png")),
 	  background_texture(data_path("cavern_background.png")),
@@ -77,7 +78,7 @@ PlayMode::PlayMode()
 }
 
 PlayMode::~PlayMode() {
-	// starting over makes a new PlayMode, which starts its own ambient
+	//stop this run's sounds before restarting
 	if (ambient) ambient->stop();
 	if (presence) presence->stop();
 	stop_roars(0.0f);
@@ -237,7 +238,7 @@ void PlayMode::update(float elapsed) {
 			if (charge_roar) charge_roar->stop();
 			charge_roar = nullptr;
 			if (fish.active && !escaped && big_fish.in_mouth(fish.position)) {
-				// dead for now. later this could send you into the big fish's stomach level
+				//being caught starts the death fade
 				fish.active = false;
 				if (ambient) ambient->set_volume(0.0f, death_fade_time);
 				if (presence) presence->stop(death_fade_time);
@@ -246,7 +247,7 @@ void PlayMode::update(float elapsed) {
 		}
 	}
 
-	{ // a new line fades in once the old one has faded out
+	{ //fade between tutorial hints
 		char const *wanted = wanted_hint();
 		float step = elapsed / hint_fade_time;
 		hint_amount = wanted == shown_hint ? std::min(1.0f, hint_amount + step) : std::max(0.0f, hint_amount - step);
@@ -271,7 +272,7 @@ bool PlayMode::jelly_in_belly() const {
 }
 
 glm::vec2 PlayMode::jelly_position() const {
-	// a slow drift on top of where it floats
+	//let the jellyfish drift around its position
 	return physics.bodies[jelly_body].position + glm::vec2(0.18f * std::sin(clock * 0.3f), 0.25f * std::sin(clock * 0.65f));
 }
 
@@ -345,7 +346,7 @@ void PlayMode::update_interaction() {
 	if (!target) return;
 	auto &body = physics.bodies[*target];
 	if (nearest_distance <= body.radius + capture_distance) {
-		// switch it off but keep it in the list, so spitting brings back the same rock
+		//hide the swallowed body until it is released
 		body.active = false;
 		body.velocity = glm::vec2(0.0f);
 		body.force = glm::vec2(0.0f);
@@ -393,7 +394,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::vec2 const &render_view = camera.view_size;
 	glm::vec2 view_center = camera.center - big_fish.shake() + cave.shake();
 	glm::vec2 half_view = 0.5f * render_view;
-	{ // rockfalls rumble, roars tremble
+	{ //shake the camera during rockfalls and roars
 		constexpr float RumbleSize = 0.25f;
 		// the rumble eases off over its last moments
 		constexpr float RumbleFade = 0.3f;
@@ -405,7 +406,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
-	// the small fish's eye and whatever glows in its belly go out with it
+	//fade the player's lights after it is caught
 	constexpr float EyeOutTime = 0.15f;
 	float eye = physics.bodies[fish_body].active ? 1.0f : std::max(0.0f, 1.0f - end_time / EyeOutTime);
 	{ // lights stay at their positions in the cave
@@ -471,7 +472,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			0.04f * std::sin(clock * 0.4f), false, glm::u8vec4(175, 185, 190, uint8_t(165.0f * jelly_light)), 0.0f, DrawSprites::Emissive);
 	}
 
-	// size from a height, keeping the png's shape
+	//scale artwork to the requested height without stretching it
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
 		return glm::vec2(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
 	};
@@ -490,7 +491,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	bool flip_x = facing.x < 0.0f;
 	glm::vec2 rotation_direction = flip_x ? -facing : facing;
 	float angle = std::atan2(rotation_direction.y, rotation_direction.x);
-	SpriteTexture const &current_fish_texture = state == FishState::Fat ? fat_texture
+	SpriteTexture const &current_fish_texture = jelly_in_belly() ? fat_glow_texture : state == FishState::Fat ? fat_texture
 		: state == FishState::Kirby ? kirby_texture : fish_texture;
 	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
 	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
@@ -509,7 +510,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		}
 	}
 
-	// center the text around its measured width
+	//center text on the requested position
 	auto draw_centered_text = [&](char const *text, glm::vec2 const &center, float text_height, glm::u8vec4 const &color) {
 		DrawLines lines(world_to_clip);
 		glm::vec3 text_end;
