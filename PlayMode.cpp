@@ -117,6 +117,13 @@ void PlayMode::update(float elapsed) {
 		// face the way the keys point, even while still drifting the other way
 		facing = move;
 	}
+	{
+		const float full_turn = glm::radians(360.0f);
+		const float target_angle = std::atan2(facing.y, facing.x);
+		// wrap the difference so going from 179 to -179 degrees turns 2 degrees
+		const float turn = std::remainder(target_angle - fish_visual_angle, full_turn);
+		fish_visual_angle = std::remainder(fish_visual_angle + turn * (1.0f - std::exp(-fish_turn_response * elapsed)), full_turn);
+	}
 	clock += elapsed;
 	rumble = std::max(0.0f, rumble - elapsed);
 	cave.update(physics, big_fish, elapsed);
@@ -432,9 +439,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	}
 	auto const &fish = physics.bodies[fish_body];
 	// the fish png faces right, so flip it when swimming left
-	bool flip_x = facing.x < 0.0f;
-	glm::vec2 rotation_direction = flip_x ? -facing : facing;
-	float angle = std::atan2(rotation_direction.y, rotation_direction.x);
+	const bool flip_x = std::abs(fish_visual_angle) > glm::radians(90.0f);
+	const float angle = flip_x ? fish_visual_angle - std::copysign(glm::radians(180.0f), fish_visual_angle) : fish_visual_angle;
 	SpriteTexture const &current_fish_texture = state == FishState::Fat ? fat_texture
 		: state == FishState::Kirby ? kirby_texture : fish_texture;
 	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
