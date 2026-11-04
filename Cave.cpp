@@ -18,10 +18,10 @@ static constexpr float WallArtLeft = 0.28f;
 static constexpr float WallArtRight = 0.84f;
 static constexpr int FirstWallHits = 2;
 static constexpr int LastWallHits = 3;
-// target height ranges measured from wall1, wall2 and wall3, as fractions down from the png top
-static glm::vec2 const WallCrackHeights[] = {
-	{0.48f, 0.95f}, {0.16f, 0.95f}, {0.0f, 0.98f}
-};
+// the leftmost crack entry is at row 591 in all three 682-pixel wall images, measured down from the top
+static constexpr float WallCrackEntryHeight = 591.0f / 682.0f;
+// the target is 0.3 units wide and 1 unit tall, a stone with radius 0.4 adds 0.4 units of tolerance on each side
+static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
 
 //a box on a png, as fractions of the png measured from its top left
 struct PngBox {
@@ -39,8 +39,8 @@ static constexpr PngBox HangingShape[] = {
 //its crack runs out to the right side of the lower part
 static constexpr PngBox HangingCrack = {0.6f, 1.0f, 0.35f, 0.72f};
 static constexpr int HangingHits = 3;
-// distance between pillar and final wall, 12 world units keeps both visible together with room to collect stones
-static constexpr float PillarWallGap = 12.0f;
+// 40 units restores the earlier layout, with the pillar at x = 8 and the final wall at x = 48
+static constexpr float PillarWallGap = 40.0f;
 //how it falls once it breaks loose. it drifts left because the crack is on its right
 static constexpr float FallGravity = 25.0f;
 static constexpr float FallDrift = 2.5f;
@@ -137,10 +137,16 @@ static bool inside(glm::vec2 const &point, StaticBox2D const &box, float pad) {
 	return point.x >= box.min.x - pad && point.x <= box.max.x + pad && point.y >= box.min.y - pad && point.y <= box.max.y + pad;
 }
 
-static StaticBox2D wall_crack(Cave::Wall const &wall, int stage) {
-	float height = wall.box.max.y - wall.box.min.y;
-	return StaticBox2D{glm::vec2(wall.box.min.x, wall.box.max.y - WallCrackHeights[stage].y * height),
-		glm::vec2(wall.box.max.x, wall.box.max.y - WallCrackHeights[stage].x * height)};
+static StaticBox2D wall_crack(Cave::Wall const &wall, bool flip_y) {
+	const float height = wall.box.max.y - wall.box.min.y;
+	const float entry_height = flip_y ? 1.0f - WallCrackEntryHeight : WallCrackEntryHeight;
+	const glm::vec2 entry(wall.box.min.x, wall.box.max.y - entry_height * height);
+	return StaticBox2D{entry - WallCrackHalfSize, entry + WallCrackHalfSize};
+}
+
+glm::vec2 Cave::wall_crack_position(Wall const &wall) const {
+	const StaticBox2D crack = wall_crack(wall, &wall == &first_wall);
+	return 0.5f * (crack.min + crack.max);
 }
 
 int Cave::wall_stage(Wall const &wall) const {
@@ -203,7 +209,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			return true;
 		};
 		for (Wall *wall : {&first_wall, &last_wall}) {
-			if (wall->hits_left <= 0 || !strikes(wall->box, wall_crack(*wall, wall_stage(*wall)))) continue;
+			if (wall->hits_left <= 0 || !strikes(wall->box, wall_crack(*wall, wall == &first_wall))) continue;
 			hit = true;
 			wall->hits_left -= 1;
 			wall->shudder = ShudderTime;
@@ -338,13 +344,17 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 		if (wall->hits_left <= 0) continue;
 		glm::vec2 center = glm::vec2(wall->x - (art_middle - 0.5f) * png_width + shudder_offset(wall->shudder), middle_y);
 		SpriteTexture const &texture = wall_textures[wall_stage(*wall)];
+		// a negative height flips the first wall vertically, with its edge strips taken from the matching png ends
+		const bool flip_y = wall == &first_wall;
+		const float top_v = flip_y ? 0.001f : 0.999f;
+		const float bottom_v = flip_y ? 0.999f : 0.001f;
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_max.y + 16.0f),
 			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
-			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
+			glm::vec4(0.0f, top_v, 1.0f, top_v));
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_min.y - 16.0f),
 			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
-			glm::vec4(0.0f, 0.001f, 1.0f, 0.001f));
-		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, height));
+			glm::vec4(0.0f, bottom_v, 1.0f, bottom_v));
+		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, flip_y ? -height : height));
 	}
 
 	if (hanging_rock.state == HangingRock::Hanging) {

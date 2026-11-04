@@ -40,8 +40,9 @@ struct PlayMode : Mode {
 	static constexpr float spit_impulse = 14.0f;
 	static constexpr float spit_clearance = 0.1f;
 	static constexpr float level_length = 120.0f;
-	// the camera shows the full height of the level
-	static constexpr float corridor_height = 20.5f;
+	// the 36-unit corridor takes two 18-unit views to explore from floor to ceiling
+	static constexpr float corridor_height = 36.0f;
+	static constexpr float camera_height = 18.0f;
 	UnderwaterPhysics physics;
 	Camera2D camera;
 	glm::vec2 facing{1.0f, 0.0f};
@@ -81,17 +82,18 @@ private:
 	// frozen time when a spat rock hits something
 	float hit_stop = 0.0f;
 	// 1 is fully lit, 0 is dark. a jellyfish goes dark over jelly_fade_time seconds when the big fish reaches it
-	std::array< float, 3 > jelly_light = {1.0f, 1.0f, 1.0f};
+	std::array< float, 2 > jelly_light = {1.0f, 1.0f};
 	static constexpr float jelly_fade_time = 0.5f;
 	glm::vec2 jelly_position(size_t i) const;
 	// false after the big fish gets pinned, until it swims back up to the edge of the view
 	bool leashed = true;
-	// the big fish wakes once the view's left edge is dark_past_wall past the first wall, when the first jellyfish's light has faded.
+	// the warning starts when the view's left edge passes first_wall.x - 1
 	// then a quiet moment, the roar, and it arrives. warning_time is below 0 before it wakes
 	float warning_time = -1.0f;
 	static constexpr float dark_past_wall = -1.0f;
 	static constexpr float warning_quiet = 0.5f;
-	static constexpr float warning_length = 3.0f;
+	// 6 seconds from the warning starting to the fish entering
+	static constexpr float warning_length = 6.0f;
 	// 0 before and during the quiet moment, rising to 1 as the big fish arrives
 	float warning_amount() const;
 

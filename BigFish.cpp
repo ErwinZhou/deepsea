@@ -24,7 +24,8 @@ static constexpr float LowerShutAngle = 10.0f * Degrees;
 //keeps normal speed for CreepTime seconds, then gains ChargeAccel units per second every second
 static constexpr float RevealRange = 10.0f;
 static constexpr float CreepTime = 2.0f;
-static constexpr float ChargeAccel = 1.5f;
+// with speed = 1, charging reaches 1.75 units per second at 3 seconds and 2.5 at 4 seconds
+static constexpr float ChargeAccel = 0.75f;
 
 //the jaws fade in once the lure has gone up, then open wider until OpenTime seconds into the charge.
 //for the closed values, 0 is as wide as they go and 1 is shut
@@ -65,10 +66,10 @@ static constexpr float TrackSpeed = 3.0f;
 static constexpr float ChargeTrackSpeed = 6.0f;
 static constexpr float MouthMargin = 3.0f;
 
-//the lure in the art is far above the view at this size, so the light you see is placed separately.
-//LureOutOfSight is how far off the view its glow stops reaching the screen
+// the lure in the art is far above the view at this size, so the light you see is placed separately
 static constexpr float LureAhead = 6.0f;
-static constexpr float LureOutOfSight = 12.0f;
+// 1 puts the lure 1 unit left of the screen and the teeth 7 units left, 6 leaves the teeth 12 units back
+static constexpr float LureOutOfSight = 1.0f;
 static constexpr float LureMargin = 3.0f;
 static constexpr float LureGone = 8.0f;
 static constexpr float LureRiseSpeed = 5.0f;

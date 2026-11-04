@@ -52,11 +52,12 @@ PlayMode::PlayMode()
 	  cavern_texture(data_path("cavern_rock.png")),
 	  background_texture(data_path("cavern_background.png")),
 	  jellyfish_texture(data_path("jellyfish.png")) {
-	camera.view_size = glm::vec2(corridor_height * (16.0f / 9.0f), corridor_height);
+	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height);
 	camera.dead_zone = glm::vec2(5.0f, 2.5f);
 	physics.bounds_min = glm::vec2(-0.5f * level_length, -0.5f * corridor_height);
 	physics.bounds_max = glm::vec2(0.5f * level_length, 0.5f * corridor_height);
-	camera.center = camera.constrain(physics.bounds_min, physics.bounds_min, physics.bounds_max);
+	// keep the opening at y = 0 instead of moving it to the bottom of the taller corridor
+	camera.center = camera.constrain(glm::vec2(physics.bounds_min.x, 0.0f), physics.bounds_min, physics.bounds_max);
 	physics.bodies = {
 		{.position = {4.0f, 0.0f}, .radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
 		{.position = {-1.5f, 1.8f}, .radius = 0.35f},
@@ -251,10 +252,11 @@ void PlayMode::update(float elapsed) {
 }
 
 glm::vec2 PlayMode::jelly_position(size_t i) const {
-	std::array<glm::vec2, 3> const homes = {
-		glm::vec2(cave.first_wall.x - 11.5f, 4.1f),
-		glm::vec2(cave.hanging_rock.center.x - 7.0f, 3.0f),
-		glm::vec2(cave.last_wall.x - 7.0f, 3.8f)
+	// four units left of the crack keeps the 1.8-unit jellyfish clear of the wall
+	const glm::vec2 wall_offset(-4.0f, 0.0f);
+	std::array<glm::vec2, 2> const homes = {
+		cave.wall_crack_position(cave.first_wall) + wall_offset,
+		cave.wall_crack_position(cave.last_wall) + wall_offset
 	};
 	return homes[i] + glm::vec2(0.18f * std::sin(clock * 0.3f + float(i)), 0.25f * std::sin(clock * 0.65f + float(i) * 2.0f));
 }
@@ -352,10 +354,12 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		if (big_fish.state == BigFish::Waiting) amount += TrembleSize * warning_amount();
 		view_center += amount * glm::vec2(std::sin(clock * 67.0f), std::cos(clock * 53.0f));
 	}
+	// stop horizontal shake from looking past the entrance or exit, keeping vertical rumble
+	view_center.x = camera.constrain(view_center, physics.bounds_min, physics.bounds_max).x;
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
-	std::array<glm::vec2, 3> jelly_positions = {jelly_position(0), jelly_position(1), jelly_position(2)};
+	std::array<glm::vec2, 2> jelly_positions = {jelly_position(0), jelly_position(1)};
 	{ // lights stay at their positions in the cave
 		constexpr glm::vec2 GlowRadius = glm::vec2(5.5f, 4.0f);
 
@@ -401,7 +405,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	{ // two rock layers scroll at different speeds behind the fish
 		float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
 		auto draw_layer = [&](SpriteTexture const &texture, float parallax, float height, float fade, uint8_t alpha) {
-			height = std::max(height, 2.0f * (std::abs(view_center.y) + half_view.y) + 4.0f);
+			// cover all 36 units plus shake padding so swimming up does not resize the background
+			height = std::max(height, physics.bounds_max.y - physics.bounds_min.y + 4.0f);
 			float width = height * float(texture.pixel_size.x) / float(texture.pixel_size.y);
 			glm::vec2 origin(view_center.x * (1.0f - parallax), middle_y);
 			int first = int(std::floor((view_center.x - half_view.x - origin.x) / width));
