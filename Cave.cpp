@@ -137,10 +137,13 @@ static bool inside(glm::vec2 const &point, StaticBox2D const &box, float pad) {
 	return point.x >= box.min.x - pad && point.x <= box.max.x + pad && point.y >= box.min.y - pad && point.y <= box.max.y + pad;
 }
 
-static StaticBox2D wall_crack(Cave::Wall const &wall, int stage) {
-	float height = wall.box.max.y - wall.box.min.y;
-	return StaticBox2D{glm::vec2(wall.box.min.x, wall.box.max.y - WallCrackHeights[stage].y * height),
-		glm::vec2(wall.box.max.x, wall.box.max.y - WallCrackHeights[stage].x * height)};
+static StaticBox2D wall_crack(Cave::Wall const &wall, int stage, bool flip_y) {
+	const float height = wall.box.max.y - wall.box.min.y;
+	// flipping the first image changes its crack from 48–95 percent down to 5–52 percent down
+	const glm::vec2 crack_heights = flip_y ? glm::vec2(1.0f - WallCrackHeights[stage].y, 1.0f - WallCrackHeights[stage].x)
+		: WallCrackHeights[stage];
+	return StaticBox2D{glm::vec2(wall.box.min.x, wall.box.max.y - crack_heights.y * height),
+		glm::vec2(wall.box.max.x, wall.box.max.y - crack_heights.x * height)};
 }
 
 int Cave::wall_stage(Wall const &wall) const {
@@ -203,7 +206,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			return true;
 		};
 		for (Wall *wall : {&first_wall, &last_wall}) {
-			if (wall->hits_left <= 0 || !strikes(wall->box, wall_crack(*wall, wall_stage(*wall)))) continue;
+			if (wall->hits_left <= 0 || !strikes(wall->box, wall_crack(*wall, wall_stage(*wall), wall == &first_wall))) continue;
 			hit = true;
 			wall->hits_left -= 1;
 			wall->shudder = ShudderTime;
@@ -338,13 +341,17 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 		if (wall->hits_left <= 0) continue;
 		glm::vec2 center = glm::vec2(wall->x - (art_middle - 0.5f) * png_width + shudder_offset(wall->shudder), middle_y);
 		SpriteTexture const &texture = wall_textures[wall_stage(*wall)];
+		// a negative height flips the first wall vertically, with its edge strips taken from the matching png ends
+		const bool flip_y = wall == &first_wall;
+		const float top_v = flip_y ? 0.001f : 0.999f;
+		const float bottom_v = flip_y ? 0.999f : 0.001f;
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_max.y + 16.0f),
 			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
-			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
+			glm::vec4(0.0f, top_v, 1.0f, top_v));
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_min.y - 16.0f),
 			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
-			glm::vec4(0.0f, 0.001f, 1.0f, 0.001f));
-		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, height));
+			glm::vec4(0.0f, bottom_v, 1.0f, bottom_v));
+		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, flip_y ? -height : height));
 	}
 
 	if (hanging_rock.state == HangingRock::Hanging) {
