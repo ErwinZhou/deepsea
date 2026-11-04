@@ -32,8 +32,6 @@ struct DrawSprites {
 		glm::vec4 const &uv_rect = glm::vec4(0.0f, 0.0f, 1.0f, 1.0f)) const;
 	// call once a frame before drawing, so sprites match the water around them
 	void set_look(Water::Look const &look) const;
-	// the small fish's eye, which lights the big fish's jaws at close range. 0 is off
-	void set_predator_light(glm::vec2 const &position, float strength) const;
 	// the jellyfish light makes cracks visible
 	void set_jelly_light(glm::vec3 const &light) const;
 
@@ -46,8 +44,6 @@ private:
 	GLint FADE_float = -1;
 	GLint MATERIAL_int = -1;
 	GLint TEX_RECT_vec4 = -1;
-	GLint PREDATOR_LIGHT_vec2 = -1;
-	GLint PREDATOR_LIGHT_STRENGTH_float = -1;
 	GLint JELLY_LIGHT_vec3 = -1;
 	Water::Uniforms look_uniforms;
 };

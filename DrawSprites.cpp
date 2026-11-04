@@ -63,8 +63,6 @@ DrawSprites::DrawSprites() {
 		"uniform int MATERIAL;\n"
 		"uniform vec4 TEX_RECT;\n"
 		"uniform mat4 OBJECT_TO_CLIP;\n"
-		"uniform vec2 PREDATOR_LIGHT;\n"
-		"uniform float PREDATOR_LIGHT_STRENGTH;\n"
 		"uniform vec3 JELLY_LIGHT;\n"
 		"in vec2 texCoord;\n"
 		"in vec2 clip;\n"
@@ -104,14 +102,12 @@ DrawSprites::DrawSprites() {
 		"		vec3 normal = normalize(vec3(-3.0 * world_slope, 1.0));\n"
 		//give the teeth a wider light radius so they show up before the rest of the head
 		// based on https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
-		"		const float EYE_REACH = 6.0;\n"
 		"		float diffuse = 0.0;\n"
 		"		float shine = 0.0;\n"
-		"		for (int i = 0; i <= GLOW_COUNT; ++i) {\n"
-		"			bool eye = i == GLOW_COUNT;\n"
-		"			vec2 to_light = (eye ? PREDATOR_LIGHT : GLOWS[i % MAX_GLOWS].xy) - world;\n"
-		"			vec2 falloff = to_light / (eye ? vec2(EYE_REACH) : 2.0 * GLOW_RADIUS);\n"
-		"			float reach = (eye ? PREDATOR_LIGHT_STRENGTH : GLOWS[i % MAX_GLOWS].z) * exp(-dot(falloff, falloff));\n"
+		"		for (int i = 0; i < GLOW_COUNT; ++i) {\n"
+		"			vec2 to_light = GLOWS[i].xy - world;\n"
+		"			vec2 falloff = to_light / (2.0 * GLOW_RADIUS);\n"
+		"			float reach = GLOWS[i].z * exp(-dot(falloff, falloff));\n"
 		"			vec3 light_direction = normalize(vec3(to_light, 3.0));\n"
 		"			vec3 halfway = normalize(light_direction + vec3(0.0, 0.0, 1.0));\n"
 		"			diffuse += reach * max(0.0, dot(normal, light_direction));\n"
@@ -174,8 +170,6 @@ DrawSprites::DrawSprites() {
 	FADE_float = glGetUniformLocation(program, "FADE");
 	MATERIAL_int = glGetUniformLocation(program, "MATERIAL");
 	look_uniforms = Water::Uniforms(program);
-	PREDATOR_LIGHT_vec2 = glGetUniformLocation(program, "PREDATOR_LIGHT");
-	PREDATOR_LIGHT_STRENGTH_float = glGetUniformLocation(program, "PREDATOR_LIGHT_STRENGTH");
 	JELLY_LIGHT_vec3 = glGetUniformLocation(program, "JELLY_LIGHT");
 	TEX_RECT_vec4 = glGetUniformLocation(program, "TEX_RECT");
 	glUseProgram(program);
@@ -219,13 +213,6 @@ DrawSprites::~DrawSprites() {
 
 void DrawSprites::set_look(Water::Look const &look) const {
 	look_uniforms.upload(look);
-}
-
-void DrawSprites::set_predator_light(glm::vec2 const &position, float strength) const {
-	glUseProgram(program);
-	glUniform2fv(PREDATOR_LIGHT_vec2, 1, glm::value_ptr(position));
-	glUniform1f(PREDATOR_LIGHT_STRENGTH_float, strength);
-	glUseProgram(0);
 }
 
 void DrawSprites::set_jelly_light(glm::vec3 const &light) const {

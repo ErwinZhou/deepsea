@@ -449,7 +449,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(cave.last_wall.x - 4.0f, physics.bounds_min.y - 1.5f, physics.bounds_max.y + 2.0f)
 		};
 		sprites.set_look(look);
-		sprites.set_predator_light(physics.bodies[fish_body].position, eye);
 		water.begin(look);
 	}
 	glDisable(GL_DEPTH_TEST);
