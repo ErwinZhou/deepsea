@@ -82,6 +82,7 @@ struct Cave {
 	void draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	glm::vec2 shake() const;
 	int wall_stage(Wall const &wall) const;
+	glm::vec2 wall_crack_position(Wall const &wall) const;
 
 	glm::vec2 bounds_min = glm::vec2(0.0f);
 	glm::vec2 bounds_max = glm::vec2(0.0f);

@@ -144,6 +144,11 @@ static StaticBox2D wall_crack(Cave::Wall const &wall, bool flip_y) {
 	return StaticBox2D{entry - WallCrackHalfSize, entry + WallCrackHalfSize};
 }
 
+glm::vec2 Cave::wall_crack_position(Wall const &wall) const {
+	const StaticBox2D crack = wall_crack(wall, &wall == &first_wall);
+	return 0.5f * (crack.min + crack.max);
+}
+
 int Cave::wall_stage(Wall const &wall) const {
 	// the two-hit first wall skips wall2 so its first hit shows the most damaged artwork
 	if (&wall == &first_wall) {
