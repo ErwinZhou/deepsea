@@ -6,8 +6,7 @@
 
 #include <vector>
 
-//the demo level: a cave corridor with a cracked wall to learn on, a cracked rock hanging from the ceiling,
-//a second cracked wall in front of the way out, and the way out
+//cave obstacles and the way out
 struct Cave {
 	Cave();
 
@@ -39,8 +38,22 @@ struct Cave {
 	//swimming past this x is escaping
 	float exit_x = 0.0f;
 
-	//fixed lights in the cave
+	//exit and coral light sources
 	std::vector< glm::vec3 > light_spots;
+	glm::vec2 coral_position = glm::vec2(0.0f);
+	//keep the coral and its light attached to the pillar
+	void update_coral();
+	//use fewer boxes for shadows than for collisions
+	std::vector< StaticBox2D > light_blockers;
+
+	struct Target {
+		std::vector< glm::vec4 > parts;
+		std::vector< glm::vec2 > cracks;
+		glm::vec2 texel_size = glm::vec2(0.0f);
+		glm::vec2 entry = glm::vec2(1.0f, 0.5f);
+	};
+	Target wall_targets[3];
+	Target hanging_targets[3];
 
 	//what happened during the last update, for PlayMode to react to
 	struct Events {
@@ -50,7 +63,7 @@ struct Cave {
 		bool broke = false;
 		bool first_wall_broke = false;
 		bool crashed = false;
-		//where the last hit, miss, break or crash happened, so its sound comes from there
+		//play impact sounds at the last collision
 		glm::vec2 at = glm::vec2(0.0f);
 	} events;
 
@@ -67,9 +80,9 @@ struct Cave {
 		float gravity = 0.0f;
 	};
 	std::vector< Particle > particles;
-	//throws count chips out from the point at, flying roughly in the direction away
+	//throw chips away from an impact
 	void throw_chips(glm::vec2 const &at, glm::vec2 const &away, int count);
-	//shakes dust down from the ceiling between left and right. amount 0 is none, 1 is a lot
+	//drop ceiling dust in the visible part of the cave
 	void drop_ceiling_dust(float left, float right, float amount, float elapsed);
 
 	//places everything in the corridor and adds the loose rocks to physics
@@ -78,7 +91,7 @@ struct Cave {
 	void update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed);
 	//walls, the hanging rock and the way out
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
-	//the dropped rock, drawn over the big fish so it looks pinned under it
+	//the pillar draws over the big fish
 	void draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	glm::vec2 shake() const;
 	int wall_stage(Wall const &wall) const;
@@ -92,5 +105,6 @@ struct Cave {
 	SpriteTexture wall_textures[3];
 	SpriteTexture hanging_textures[3];
 	SpriteTexture exit_texture;
+	SpriteTexture coral_texture;
 	SpriteTexture chip_texture;
 };

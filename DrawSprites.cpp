@@ -39,7 +39,10 @@ DrawSprites::DrawSprites() {
 		"#define BACKGROUND " + std::to_string(Background) + "\n" +
 		"#define STONE " + std::to_string(Stone) + "\n" +
 		"#define PREDATOR " + std::to_string(Predator) + "\n" +
-		"#define PLAYER " + std::to_string(Player) + "\n";
+		"#define PLAYER " + std::to_string(Player) + "\n" +
+		"#define CRACKED " + std::to_string(Cracked) + "\n" +
+		"#define PILLAR " + std::to_string(Pillar) + "\n" +
+		"#define FAR_TAIL " + std::to_string(FarTail) + "\n";
 
 	program = gl_compile_program(
 		"#version 330\n"
@@ -61,35 +64,34 @@ DrawSprites::DrawSprites() {
 		"uniform int MATERIAL;\n"
 		"uniform vec4 TEX_RECT;\n"
 		"uniform mat4 OBJECT_TO_CLIP;\n"
-		"uniform vec2 PREDATOR_LIGHT;\n"
-		"uniform float PREDATOR_LIGHT_STRENGTH;\n"
+		"uniform vec3 JELLY_LIGHT;\n"
 		"in vec2 texCoord;\n"
 		"in vec2 clip;\n"
 		"out vec4 fragColor;\n"
 		"void main() {\n"
 		"	vec2 sample_uv = mix(TEX_RECT.xy, TEX_RECT.zw, texCoord);\n"
 		"	vec4 color = texture(TEX, sample_uv) * TINT;\n"
+		"	if (MATERIAL == FAR_TAIL) color.a *= smoothstep(0.0, 1.0, texCoord.x);\n"
 		"	float eye_halo = 0.0;\n"
 		"	float eye_core = 0.0;\n"
 		"	float eye_light = 0.0;\n"
 		"	if (MATERIAL == PLAYER) {\n"
-		// manually tweaked eye glow based on fish pngs
+		//place a soft glow over the player's eye
 		"		vec2 eye_offset = sample_uv - vec2(0.7267, 0.5952);\n"
 		"		eye_halo = exp(-dot(eye_offset, eye_offset) / 0.0025);\n"
 		"		eye_core = exp(-dot(eye_offset, eye_offset) / 0.00015);\n"
-		// eye glow
 		"		eye_light = exp(-dot(eye_offset, eye_offset) / 0.03);\n"
 		"	}\n"
 		"	if (color.a < 0.0039 && eye_halo < 0.01) discard;\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, 0.5 * clip + 0.5);\n"
-		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER;\n"
+		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR;\n"
 		"	float lit = MATERIAL != EMISSIVE ? light(world, surface) : 1.0;\n"
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
-		// per material lighting for each asset
+		//adjust brightness for each kind of sprite
 		"	if (MATERIAL == PLAYER) shade = 0.03 + 0.55 * lit + 0.35 * eye_light;\n"
 		"	float wet_shine = 0.0;\n"
 		"	if (MATERIAL == PREDATOR) {\n"
-		// the art is flat colors, so treat its blurred brightness as height. that makes each tooth a rounded shape the light can catch
+		//use the jaw artwork as a height map to give teeth rounded lighting
 		// based on https://en.wikipedia.org/wiki/Normal_mapping
 		"		const float BLUR = 5.0;\n"
 		"		vec2 reach = pow(2.0, BLUR) / vec2(textureSize(TEX, 0));\n"
@@ -99,16 +101,30 @@ DrawSprites::DrawSprites() {
 		"		vec2 extent = VIEW_MAX - VIEW_MIN;\n"
 		"		vec2 world_slope = normalize(OBJECT_TO_CLIP[0].xy * extent) * slope.x + normalize(OBJECT_TO_CLIP[1].xy * extent) * slope.y;\n"
 		"		vec3 normal = normalize(vec3(-3.0 * world_slope, 1.0));\n"
-		// the small fish's eye is the light, a little in front of the jaws. it only reaches a short way, so the rest of the mouth stays black
-		"		vec2 to_eye = PREDATOR_LIGHT - world;\n"
-		"		vec3 light_direction = normalize(vec3(to_eye, 3.0));\n"
-		"		float reach_eye = PREDATOR_LIGHT_STRENGTH * exp(-dot(to_eye, to_eye) / (9.0 * 9.0));\n"
-		"		shade = 0.015 + 0.3 * lit + 1.6 * reach_eye * max(0.0, dot(normal, light_direction));\n"
+		//give the teeth a wider light radius so they show up before the rest of the head
 		// based on https://en.wikipedia.org/wiki/Blinn%E2%80%93Phong_reflection_model
-		"		vec3 halfway = normalize(light_direction + vec3(0.0, 0.0, 1.0));\n"
-		"		wet_shine = 0.5 * reach_eye * pow(max(0.0, dot(normal, halfway)), 30.0) * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
+		"		float diffuse = 0.0;\n"
+		"		float shine = 0.0;\n"
+		"		for (int i = 0; i < GLOW_COUNT; ++i) {\n"
+		"			vec2 to_light = GLOWS[i].xy - world;\n"
+		"			vec2 falloff = to_light / (2.0 * GLOW_RADIUS);\n"
+		"			float reach = GLOWS[i].z * exp(-dot(falloff, falloff));\n"
+		"			vec3 light_direction = normalize(vec3(to_light, 3.0));\n"
+		"			vec3 halfway = normalize(light_direction + vec3(0.0, 0.0, 1.0));\n"
+		"			diffuse += reach * max(0.0, dot(normal, light_direction));\n"
+		"			shine += reach * pow(max(0.0, dot(normal, halfway)), 30.0);\n"
+		"		}\n"
+		"		shade = 0.004 + 0.3 * max(0.0, lit - BRIGHTNESS * DIM) + 1.6 * diffuse;\n"
+		"		wet_shine = 0.5 * shine * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
 		"	}\n"
 		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
+		//wall cracks need the jellyfish nearby
+		"	if (MATERIAL == CRACKED) {\n"
+		"		vec2 from_jelly = (world - JELLY_LIGHT.xy) / GLOW_RADIUS;\n"
+		"		shade = 0.002 + 1.2 * JELLY_LIGHT.z * exp(-dot(from_jelly, from_jelly));\n"
+		"	}\n"
+		//the coral lights the pillar face without the pillar blocking its own light
+		"	if (MATERIAL == PILLAR) shade = 0.002 + 1.2 * max(0.0, light(world, false) - BRIGHTNESS * DIM);\n"
 		"	color.rgb *= shade;\n"
 		// Light modulation informed by https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics
 		"	if (MATERIAL == BACKGROUND) {\n"
@@ -157,8 +173,7 @@ DrawSprites::DrawSprites() {
 	FADE_float = glGetUniformLocation(program, "FADE");
 	MATERIAL_int = glGetUniformLocation(program, "MATERIAL");
 	look_uniforms = Water::Uniforms(program);
-	PREDATOR_LIGHT_vec2 = glGetUniformLocation(program, "PREDATOR_LIGHT");
-	PREDATOR_LIGHT_STRENGTH_float = glGetUniformLocation(program, "PREDATOR_LIGHT_STRENGTH");
+	JELLY_LIGHT_vec3 = glGetUniformLocation(program, "JELLY_LIGHT");
 	TEX_RECT_vec4 = glGetUniformLocation(program, "TEX_RECT");
 	glUseProgram(program);
 	glUniform1i(glGetUniformLocation(program, "TEX"), 0);
@@ -203,10 +218,9 @@ void DrawSprites::set_look(Water::Look const &look) const {
 	look_uniforms.upload(look);
 }
 
-void DrawSprites::set_predator_light(glm::vec2 const &position, float strength) const {
+void DrawSprites::set_jelly_light(glm::vec3 const &light) const {
 	glUseProgram(program);
-	glUniform2fv(PREDATOR_LIGHT_vec2, 1, glm::value_ptr(position));
-	glUniform1f(PREDATOR_LIGHT_STRENGTH_float, strength);
+	glUniform3fv(JELLY_LIGHT_vec3, 1, glm::value_ptr(light));
 	glUseProgram(0);
 }
 

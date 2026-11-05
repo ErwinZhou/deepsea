@@ -9,7 +9,7 @@
 #include "Water.hpp"
 #include "Sound.hpp"
 
-#include <array>
+#include <cstddef>
 #include <optional>
 
 struct PlayMode : Mode {
@@ -23,7 +23,7 @@ struct PlayMode : Mode {
 
 	static constexpr size_t fish_body = 0;
 	static constexpr float swim_force = 9.0f;
-	// tunes added inertia per unit of rock radius, 6.0 makes current rocks take about 3 to 4 times longer to reach the same top speed
+	//larger swallowed rocks make the fish accelerate more slowly
 	static constexpr float carried_inertia_per_radius = 6.0f;
 	static constexpr float max_swim_speed = 3.5f;
 	// drawn height of the small fish png and the size of its body for bumping into things
@@ -39,10 +39,14 @@ struct PlayMode : Mode {
 	static constexpr float capture_distance = 0.25f;
 	static constexpr float spit_impulse = 14.0f;
 	static constexpr float spit_clearance = 0.1f;
-	static constexpr float level_length = 120.0f;
-	// the 36-unit corridor takes two 18-unit views to explore from floor to ceiling
-	static constexpr float corridor_height = 36.0f;
-	static constexpr float camera_height = 18.0f;
+	static constexpr float level_length = 170.0f;
+	//the swimming bounds cover the whole widest camera view
+	static constexpr float corridor_height = 32.0f;
+	static constexpr float camera_height = 20.5f;
+	//widen the shot gradually between the first wall and the hanging rock
+	static constexpr float hallway_camera_height = corridor_height;
+	static constexpr float camera_zoom_time = 3.0f;
+	float camera_progress = 0.0f;
 	UnderwaterPhysics physics;
 	Camera2D camera;
 	glm::vec2 facing{1.0f, 0.0f};
@@ -64,15 +68,14 @@ private:
 		bool space_pressed = false;
 		bool suppress_suction = false;
 	} input;
-	// 12 completes about 95 percent of a turn in 0.25 seconds, 6 takes 0.5 seconds
+	//smooth visual turns without delaying movement
 	static constexpr float fish_turn_response = 12.0f;
-	// current drawn heading in radians, 0 faces right, 1.57 faces up, 3.14 faces left
 	float fish_visual_angle = 0.0f;
 	double accumulated_time = 0.0;
 	// seconds since the small fish was eaten or escaped
 	float end_time = 0.0f;
 	bool escaped = false;
-	// seconds left of the rumble when the hanging rock comes down, and a clock to wobble it by
+	//rockfall shake duration and animation time
 	float rumble = 0.0f;
 	float clock = 0.0f;
 	float scene_brightness = 1.0f;
@@ -81,40 +84,79 @@ private:
 	static constexpr float death_fade_time = 1.5f;
 	// frozen time when a spat rock hits something
 	float hit_stop = 0.0f;
-	// 1 is fully lit, 0 is dark. a jellyfish goes dark over jelly_fade_time seconds when the big fish reaches it
-	std::array< float, 2 > jelly_light = {1.0f, 1.0f};
+	// hints stay completed across retries
+	static inline bool has_swum = false;
+	static inline bool has_sucked = false;
+	static inline bool has_spat = false;
+	static constexpr float suck_hint_range = 5.0f;
+	static constexpr float hint_fade_time = 0.4f;
+	static constexpr float hint_height = 0.6f;
+	static constexpr float hint_above_fish = 1.3f;
+	char const *wanted_hint() const;
+	char const *shown_hint = nullptr;
+	float hint_amount = 0.0f;
+	// carrying the jellyfish lights the way but leaves no room for a rock
+	// design based on https://frictionalgames.com/2013-12-the-five-foundational-design-pillars-of-soma/
+	// 1 is fully lit, 0 is dark. left behind, it goes dark over jelly_fade_time seconds once the big fish reaches it
+	size_t jelly_body = 0;
+	float jelly_light = 1.0f;
 	static constexpr float jelly_fade_time = 0.5f;
-	glm::vec2 jelly_position(size_t i) const;
-	// false after the big fish gets pinned, until it swims back up to the edge of the view
-	bool leashed = true;
-	// the warning starts when the view's left edge passes first_wall.x - 1
-	// then a quiet moment, the roar, and it arrives. warning_time is below 0 before it wakes
+	static constexpr float jelly_radius = 0.5f;
+	static constexpr float jelly_drag = 3.0f;
+	static constexpr float jelly_glow = 1.2f;
+	static constexpr float jelly_glow_pulse = 0.12f;
+	bool jelly_in_belly() const;
+	glm::vec2 jelly_position() const;
+	// the big fish wakes once the view's left edge is dark_past_wall past the first wall.
+	// the near roar follows the distant pass after a quiet gap.
+	// warning_time is below 0 before it wakes
 	float warning_time = -1.0f;
 	static constexpr float dark_past_wall = -1.0f;
 	static constexpr float warning_quiet = 0.5f;
-	// 6 seconds from the warning starting to the fish entering
-	static constexpr float warning_length = 6.0f;
+	float warning_length = 0.0f;
+	float far_roar_end = 0.0f;
+	float near_roar_end = 0.0f;
+	// time to read the cave after the distant pass and roar end
+	static constexpr float near_roar_gap = 6.0f;
+	// only part of the distant fish fits in the view as it passes
+	static constexpr float far_begin = 1.0f;
+	static constexpr float far_speed = 8.0f;
+	static constexpr float far_start = 68.0f;
+	static constexpr float far_end = -54.0f;
+	static constexpr float far_height = -22.0f;
 	// 0 before and during the quiet moment, rising to 1 as the big fish arrives
 	float warning_amount() const;
+	float roar_amount() const;
+	// true while it passes far behind the cave
+	bool far_passing() const;
+	glm::vec2 far_hinge(glm::vec2 const &view_center) const;
 
-	// the deep water sound, the big fish's breathing, and the roar during a charge
+	// sounds that continue between frames
 	std::shared_ptr< Sound::PlayingSample > ambient;
 	std::shared_ptr< Sound::PlayingSample > presence;
+	std::shared_ptr< Sound::PlayingSample > far_roar;
+	std::shared_ptr< Sound::PlayingSample > near_roar;
 	std::shared_ptr< Sound::PlayingSample > charge_roar;
-	// the deep water sound drops while the big fish wakes, so the roar stands out
-	static constexpr float ambient_quiet_volume = 0.25f;
+	void stop_roars(float fade);
+	//quiet the ambience during the chase and restore it while the big fish is pinned
+	static constexpr float ambient_quiet_volume = 0.15f;
 	static constexpr float ambient_fade_down = 0.3f;
 	static constexpr float ambient_fade_up = 8.0f;
-	// the first roar leans left, where -1 is the left ear only. the charge roar starts quiet and gets louder
-	static constexpr float far_roar_pan = -0.5f;
-	static constexpr float charge_roar_start_volume = 0.3f;
+	bool was_held_up = false;
+	//place the distant roar behind the cave so it sounds quieter and muffled
+	static constexpr float far_roar_depth = 40.0f;
+	static constexpr float far_roar_volume = 0.75f;
+	static constexpr float far_roar_reach = 24.0f;
+	static constexpr float near_roar_volume = 1.2f;
+	static constexpr float near_roar_reach = 90.0f;
+	static constexpr float charge_roar_start_volume = 0.45f;
 	static constexpr float charge_roar_fade_in = 3.0f;
 	static constexpr float charge_roar_fade_out = 0.5f;
 	// distance at which each sound is half as loud. the listener sits listener_depth in front of the screen
 	static constexpr float listener_depth = 16.0f;
 	static constexpr float roar_reach = 60.0f;
 	static constexpr float rumble_reach = 15.0f;
-	static constexpr float presence_reach = 10.0f;
+	static constexpr float presence_reach = 20.0f;
 	static constexpr float rock_reach = 10.0f;
 	static constexpr float rock_miss_volume = 0.5f;
 	DrawSprites sprites;
@@ -124,6 +166,7 @@ private:
 	SpriteTexture fish_texture;
 	SpriteTexture kirby_texture;
 	SpriteTexture fat_texture;
+	SpriteTexture fat_glow_texture;
 	SpriteTexture stone_texture;
 	SpriteTexture cavern_texture;
 	SpriteTexture background_texture;
