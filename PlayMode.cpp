@@ -59,6 +59,7 @@ PlayMode::PlayMode()
 	near_roar_end = warning_length + float(fish_roar_near->data.size()) / 48000.0f;
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height);
 	camera.dead_zone = glm::vec2(5.0f, 2.5f);
+	camera.follow_speed = 4.0f;
 	physics.bounds_min = glm::vec2(-0.5f * level_length, -0.5f * corridor_height);
 	physics.bounds_max = glm::vec2(0.5f * level_length, 0.5f * corridor_height);
 	camera.center = camera.constrain(glm::vec2(physics.bounds_min.x, 0.0f), physics.bounds_min, physics.bounds_max);
@@ -184,15 +185,22 @@ void PlayMode::update(float elapsed) {
 		accumulated_time -= UnderwaterPhysics::fixed_step;
 	}
 
+	//keep the wider framing when the player doubles back
+	float zoom_end = glm::mix(cave.first_wall.x, cave.last_wall.x, 0.6f);
+	float progress = std::clamp((physics.bodies[fish_body].position.x - cave.first_wall.x) / (zoom_end - cave.first_wall.x), 0.0f, 1.0f);
+	camera_progress = std::max(camera_progress, progress);
+	float blend = camera_progress * camera_progress * (3.0f - 2.0f * camera_progress);
+	float height = glm::mix(camera_height, hallway_camera_height, blend);
+	height = glm::mix(camera.view_size.y, height, 1.0f - std::exp(-elapsed / camera_zoom_time));
+	camera.view_size = glm::vec2(height * (16.0f / 9.0f), height);
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	float view_left = camera.center.x - 0.5f * camera.view_size.x;
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
 	big_fish.prey = physics.bodies[fish_body].position;
-	big_fish.follow_height(camera.center.y, elapsed);
 	big_fish.update(elapsed);
 	{ // the big fish wakes once the first room is behind you
-		if (warning_time < 0.0f && view_left > cave.first_wall.x + dark_past_wall) {
+		if (warning_time < 0.0f && camera.center.x - 0.5f * camera_height * (16.0f / 9.0f) > cave.first_wall.x + dark_past_wall) {
 			warning_time = 0.0f;
 			if (ambient) ambient->set_volume(ambient_quiet_volume, ambient_fade_down);
 		}
@@ -207,8 +215,7 @@ void PlayMode::update(float elapsed) {
 			if (far_roar) far_roar->set_position(glm::vec3(big_fish.far_mouth(far_hinge(camera.center)), -far_roar_depth), elapsed);
 			cave.drop_ceiling_dust(view_left, view_left + camera.view_size.x, roar_amount(), elapsed);
 			if (warning_time >= warning_length) {
-				big_fish.reset_for_world(glm::vec2(physics.bounds_min.x, camera.center.y - 0.5f * camera_height),
-					glm::vec2(physics.bounds_max.x, camera.center.y + 0.5f * camera_height));
+				big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 				big_fish.enter(big_fish.out_of_sight_x(view_left));
 				glm::vec3 at = glm::vec3(big_fish.teeth_x(), big_fish.position.y, 0.0f);
 				near_roar = Sound::play_3D(*fish_roar_near, near_roar_volume, at, near_roar_reach);
@@ -468,7 +475,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	{ // two rock layers scroll at different speeds behind the fish
 		float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
 		auto draw_layer = [&](SpriteTexture const &texture, float parallax, float height, float fade, uint8_t alpha) {
-			height = std::max(height, physics.bounds_max.y - physics.bounds_min.y + 4.0f);
+			height = std::max(height, std::max(corridor_height, hallway_camera_height) + 4.0f);
 			float width = height * float(texture.pixel_size.x) / float(texture.pixel_size.y);
 			glm::vec2 origin(view_center.x * (1.0f - parallax), middle_y);
 			int first = int(std::floor((view_center.x - half_view.x - origin.x) / width));
@@ -556,7 +563,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		// the cave png tinted black covers the whole view
 		sprites.draw(cave_texture, world_to_clip, view_center, render_view, 0.0f, false, glm::u8vec4(0x00, 0x00, 0x00, uint8_t(255.0f * fade)));
 
-		draw_centered_text("You Escaped", view_center, TextHeight, glm::u8vec4(0xff, 0xff, 0xff, uint8_t(255.0f * text_fade)));
+		draw_centered_text("You Escaped", view_center, TextHeight * render_view.y / camera_height, glm::u8vec4(0xff, 0xff, 0xff, uint8_t(255.0f * text_fade)));
 	}
 
 	glDisable(GL_BLEND);

@@ -19,7 +19,7 @@ struct BigFish {
 	//pivot at the back of the mouth, shared by both jaws
 	glm::vec2 position = glm::vec2(0.0f);
 	//how wide each jaw png is drawn. the height follows the png's shape
-	float size = 100.0f;
+	float size = 125.0f;
 
 	//timer counts down while stunned or slamming. base_y is the height it drifts up and down around
 	float timer = 0.0f;
@@ -35,8 +35,6 @@ struct BigFish {
 	void reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max);
 	void enter(float x);
 	void update(float elapsed);
-	//follow vertical camera movement at a slow swimming pace
-	void follow_height(float middle, float elapsed);
 	void stun(float seconds);
 	void charge();
 	//true while the rock can pin it

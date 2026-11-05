@@ -38,9 +38,11 @@ struct Cave {
 	//swimming past this x is escaping
 	float exit_x = 0.0f;
 
-	//fixed lights in the cave
+	//exit and coral light sources
 	std::vector< glm::vec3 > light_spots;
 	glm::vec2 coral_position = glm::vec2(0.0f);
+	//keep the coral and its light attached to the pillar
+	void update_coral();
 	//use fewer boxes for shadows than for collisions
 	std::vector< StaticBox2D > light_blockers;
 

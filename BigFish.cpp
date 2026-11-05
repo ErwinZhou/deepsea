@@ -11,13 +11,13 @@ static constexpr float LowerLift = 0.045f;
 static constexpr float MouthFront = 0.6f;
 static constexpr float MouthTop = 0.19f;
 static constexpr float MouthBottom = 0.07f;
-static constexpr float ArtFront = 0.66f;
+static constexpr float ArtFront = 0.625f;
 
 //counterclockwise turn of each jaw with the mouth open and shut
 static constexpr float Degrees = float(M_PI) / 180.0f;
-static constexpr float UpperOpenAngle = -6.0f * Degrees;
+static constexpr float UpperOpenAngle = 8.0f * Degrees;
 static constexpr float UpperShutAngle = -11.0f * Degrees;
-static constexpr float LowerOpenAngle = -9.0f * Degrees;
+static constexpr float LowerOpenAngle = -20.0f * Degrees;
 static constexpr float LowerShutAngle = 10.0f * Degrees;
 
 //steady approach speed before charging
@@ -42,7 +42,7 @@ static constexpr float HoldTime = 2.0f;
 static constexpr float CatchFront = 0.6f;
 
 //the mouth slowly opens and closes
-static constexpr float BreatheClosed = 0.06f;
+static constexpr float BreatheClosed = 0.02f;
 static constexpr float BreathePeriod = 4.0f;
 
 //slow vertical drift while swimming
@@ -133,12 +133,6 @@ void BigFish::update(float elapsed) {
 	} else {
 		jaw += (jaw_target - jaw) * (1.0f - std::exp(-elapsed / JawEase));
 	}
-}
-
-void BigFish::follow_height(float middle, float elapsed) {
-	if (!swimming()) return;
-	float step = SwimSpeed * elapsed;
-	base_y += std::clamp(middle - mouth_offset(RestClosed) - base_y, -step, step);
 }
 
 void BigFish::enter(float x) {

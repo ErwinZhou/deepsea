@@ -41,6 +41,7 @@ DrawSprites::DrawSprites() {
 		"#define PREDATOR " + std::to_string(Predator) + "\n" +
 		"#define PLAYER " + std::to_string(Player) + "\n" +
 		"#define CRACKED " + std::to_string(Cracked) + "\n" +
+		"#define PILLAR " + std::to_string(Pillar) + "\n" +
 		"#define FAR_TAIL " + std::to_string(FarTail) + "\n";
 
 	program = gl_compile_program(
@@ -83,7 +84,7 @@ DrawSprites::DrawSprites() {
 		"	}\n"
 		"	if (color.a < 0.0039 && eye_halo < 0.01) discard;\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, 0.5 * clip + 0.5);\n"
-		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED;\n"
+		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR;\n"
 		"	float lit = MATERIAL != EMISSIVE ? light(world, surface) : 1.0;\n"
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
 		//adjust brightness for each kind of sprite
@@ -117,11 +118,13 @@ DrawSprites::DrawSprites() {
 		"		wet_shine = 0.5 * shine * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
 		"	}\n"
 		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
-		// cracks can't be seen without the jellyfish nearby
+		//wall cracks need the jellyfish nearby
 		"	if (MATERIAL == CRACKED) {\n"
 		"		vec2 from_jelly = (world - JELLY_LIGHT.xy) / GLOW_RADIUS;\n"
 		"		shade = 0.002 + 1.2 * JELLY_LIGHT.z * exp(-dot(from_jelly, from_jelly));\n"
 		"	}\n"
+		//the coral lights the pillar face without the pillar blocking its own light
+		"	if (MATERIAL == PILLAR) shade = 0.002 + 1.2 * max(0.0, light(world, false) - BRIGHTNESS * DIM);\n"
 		"	color.rgb *= shade;\n"
 		// Light modulation informed by https://developer.nvidia.com/gpugems/gpugems/part-i-natural-effects/chapter-2-rendering-water-caustics
 		"	if (MATERIAL == BACKGROUND) {\n"

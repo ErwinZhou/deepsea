@@ -23,6 +23,7 @@ static constexpr float WallArtRight = 0.84f;
 static constexpr int FirstWallHits = 2;
 static constexpr int LastWallHits = 3;
 static constexpr float CrackLeeway = 0.35f;
+static constexpr float HangingCrackLeeway = 0.55f;
 static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
 static constexpr float ExitShift = 2.0f;
 //the hanging rock's png is drawn this many units square, with its top against the ceiling
@@ -127,13 +128,13 @@ void Cave::setup(UnderwaterPhysics &physics) {
 	hanging_rock = HangingRock();
 	hanging_rock.hits_left = HangingHits;
 	hanging_rock.center = glm::vec2(last_wall.x - PillarWallGap, bounds_max.y - 0.5f * HangingSize);
-	coral_position = glm::vec2(hanging_rock.center.x - 6.5f, bounds_max.y - 0.5f * CoralSize);
 
 	float middle_y = 0.5f * (bounds_min.y + bounds_max.y);
 	light_spots = {
 		glm::vec3(exit_x, middle_y, 2.4f),
-		glm::vec3(coral_position + glm::vec2(0.0f, 0.8f), 1.0f),
+		glm::vec3(0.0f),
 	};
+	update_coral();
 
 	for (glm::vec2 const &offset : FinalRockOffsets) {
 		physics.bodies.push_back({.position = glm::vec2(hanging_rock.center.x + offset.x, offset.y), .radius = LooseRockRadius});
@@ -258,7 +259,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			if (!std::isfinite(first)) return false;
 			physics.bodies[i].player_spat = false;
 			events.at = contact;
-			float reach = body.radius + CrackLeeway + 0.5f * glm::length(target.texel_size * size);
+			float reach = body.radius + (entry_only ? CrackLeeway : HangingCrackLeeway) + 0.5f * glm::length(target.texel_size * size);
 			glm::vec2 offset = contact - center;
 			float co = std::cos(angle);
 			float si = std::sin(angle);
@@ -369,6 +370,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 	}
 	hanging_stage = std::min(2, HangingHits - hanging_rock.hits_left);
 	add_target(hanging_targets[hanging_stage], hanging_rock.center, glm::vec2(HangingSize), hanging_rock.angle, 3);
+	update_coral();
 }
 
 void Cave::throw_chips(glm::vec2 const &at, glm::vec2 const &away, int count) {
@@ -410,6 +412,15 @@ static float shudder_offset(float shudder) {
 	return ShudderSize * (shudder / ShudderTime) * std::sin(shudder * 90.0f);
 }
 
+void Cave::update_coral() {
+	float co = std::cos(hanging_rock.angle);
+	float si = std::sin(hanging_rock.angle);
+	constexpr glm::vec2 Mount(-3.6f, -0.8f);
+	coral_position = hanging_rock.center + glm::vec2(co * Mount.x - si * Mount.y, si * Mount.x + co * Mount.y);
+	if (hanging_rock.state == HangingRock::Hanging) coral_position.x += shudder_offset(hanging_rock.shudder);
+	light_spots[1] = glm::vec3(coral_position + 0.6f * glm::vec2(co, si), 1.0f);
+}
+
 glm::vec2 Cave::shake() const {
 	const float amount = RockfallShakeSize * hanging_rock.shudder / ShudderTime;
 	return amount * glm::vec2(std::sin(hanging_rock.shudder * 67.0f), std::cos(hanging_rock.shudder * 53.0f));
@@ -418,9 +429,6 @@ glm::vec2 Cave::shake() const {
 void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
 	float height = bounds_max.y - bounds_min.y;
 	float middle_y = 0.5f * (bounds_min.y + bounds_max.y);
-	// coral hangs from the ceiling beside the pillar
-	sprites.draw(coral_texture, world_to_clip, coral_position, glm::vec2(CoralSize), float(M_PI), false,
-		glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
 
 	{ //the way out, past the last wall
 		constexpr float ExitWidth = 6.0f;
@@ -438,11 +446,12 @@ void Cave::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) cons
 		bool flip_y = wall == &first_wall;
 		float top_v = flip_y ? 0.001f : 0.999f;
 		float bottom_v = flip_y ? 0.999f : 0.001f;
+		//extend only the silhouette, without stretching the painted cracks
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_max.y + 16.0f),
-			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
+			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(0, 0, 0, 255), 0.0f, DrawSprites::Surface,
 			glm::vec4(0.0f, top_v, 1.0f, top_v));
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, bounds_min.y - 16.0f),
-			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
+			glm::vec2(png_width, 32.0f), 0.0f, false, glm::u8vec4(0, 0, 0, 255), 0.0f, DrawSprites::Surface,
 			glm::vec4(0.0f, bottom_v, 1.0f, bottom_v));
 		sprites.draw(texture, world_to_clip, center, glm::vec2(png_width, flip_y ? -height : height), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
 	}
@@ -461,10 +470,12 @@ void Cave::draw_over_big_fish(DrawSprites const &sprites, glm::mat4 const &world
 		glm::vec2 center = hanging_rock.center + glm::vec2(shudder_offset(hanging_rock.shudder), 0.0f);
 		SpriteTexture const &texture = hanging_textures[HangingHits - hanging_rock.hits_left];
 		sprites.draw(texture, world_to_clip, glm::vec2(center.x, center.y + 0.5f * HangingSize + 16.0f),
-			glm::vec2(HangingSize, 32.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Surface,
+			glm::vec2(HangingSize, 32.0f), 0.0f, false, glm::u8vec4(0, 0, 0, 255), 0.0f, DrawSprites::Surface,
 			glm::vec4(0.0f, 0.999f, 1.0f, 0.999f));
-		sprites.draw(texture, world_to_clip, center, glm::vec2(HangingSize), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
-		return;
+		sprites.draw(texture, world_to_clip, center, glm::vec2(HangingSize), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Pillar);
+	} else {
+		sprites.draw(hanging_textures[2], world_to_clip, hanging_rock.center, glm::vec2(HangingSize), hanging_rock.angle, false, glm::u8vec4(255), 0.0f, DrawSprites::Pillar);
 	}
-	sprites.draw(hanging_textures[2], world_to_clip, hanging_rock.center, glm::vec2(HangingSize), hanging_rock.angle, false, glm::u8vec4(255), 0.0f, DrawSprites::Cracked);
+	sprites.draw(coral_texture, world_to_clip, coral_position, glm::vec2(CoralSize), hanging_rock.angle + 0.5f * float(M_PI), false,
+		glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
 }
