@@ -65,11 +65,13 @@ PlayMode::PlayMode()
 	camera.center = camera.constrain(glm::vec2(physics.bounds_min.x, 0.0f), physics.bounds_min, physics.bounds_max);
 	physics.bodies = {
 		{.radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish},
-		{.position = {10.0f, 6.5f}, .radius = 0.35f},
-		{.position = {5.0f, -4.0f}, .inverse_mass = 0.625f, .radius = 0.43f}
+		{.radius = 0.35f},
+		{.inverse_mass = 0.625f, .radius = 0.43f}
 	};
-	for (auto &body : physics.bodies) body.position += camera.center;
 	cave.setup(physics);
+	//place stones relative to the wall so changing the camera cannot move them into it
+	physics.bodies[1].position = glm::vec2(cave.first_wall.x - 6.0f, 6.5f);
+	physics.bodies[2].position = glm::vec2(cave.first_wall.x - 11.0f, -4.0f);
 	jelly_body = physics.bodies.size();
 	glm::vec2 jelly_start = cave.wall_crack_position(cave.first_wall) - glm::vec2(4.0f, 0.0f);
 	physics.bodies.push_back({.position = jelly_start, .radius = jelly_radius, .drag = jelly_drag, .current_scale = 0.0f, .kind = Body2D::Jelly});
@@ -185,14 +187,6 @@ void PlayMode::update(float elapsed) {
 		accumulated_time -= UnderwaterPhysics::fixed_step;
 	}
 
-	//keep the wider framing when the player doubles back
-	float zoom_end = glm::mix(cave.first_wall.x, cave.last_wall.x, 0.6f);
-	float progress = std::clamp((physics.bodies[fish_body].position.x - cave.first_wall.x) / (zoom_end - cave.first_wall.x), 0.0f, 1.0f);
-	camera_progress = std::max(camera_progress, progress);
-	float blend = camera_progress * camera_progress * (3.0f - 2.0f * camera_progress);
-	float height = glm::mix(camera_height, hallway_camera_height, blend);
-	height = glm::mix(camera.view_size.y, height, 1.0f - std::exp(-elapsed / camera_zoom_time));
-	camera.view_size = glm::vec2(height * (16.0f / 9.0f), height);
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	float view_left = camera.center.x - 0.5f * camera.view_size.x;
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
@@ -200,7 +194,7 @@ void PlayMode::update(float elapsed) {
 	big_fish.prey = physics.bodies[fish_body].position;
 	big_fish.update(elapsed);
 	{ // the big fish wakes once the first room is behind you
-		if (warning_time < 0.0f && camera.center.x - 0.5f * camera_height * (16.0f / 9.0f) > cave.first_wall.x + dark_past_wall) {
+		if (warning_time < 0.0f && view_left > cave.first_wall.x + dark_past_wall) {
 			warning_time = 0.0f;
 			if (ambient) ambient->set_volume(ambient_quiet_volume, ambient_fade_down);
 		}
@@ -217,12 +211,12 @@ void PlayMode::update(float elapsed) {
 			if (warning_time >= warning_length) {
 				big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 				big_fish.enter(big_fish.out_of_sight_x(view_left));
-				glm::vec3 at = glm::vec3(big_fish.teeth_x(), big_fish.position.y, 0.0f);
+				glm::vec3 at = glm::vec3(big_fish.mouth_position(), 0.0f);
 				near_roar = Sound::play_3D(*fish_roar_near, near_roar_volume, at, near_roar_reach);
 				presence = Sound::loop_3D(*presence_sound, 1.0f, at, presence_reach);
 			}
 		}
-		glm::vec3 at = glm::vec3(big_fish.teeth_x(), big_fish.position.y, 0.0f);
+		glm::vec3 at = glm::vec3(big_fish.mouth_position(), 0.0f);
 		if (presence) presence->set_position(at, elapsed);
 		if (near_roar) near_roar->set_position(at, elapsed);
 		if (charge_roar) charge_roar->set_position(at, elapsed);
@@ -244,7 +238,7 @@ void PlayMode::update(float elapsed) {
 
 	{ // charge when the small fish gets too close, kill it when the jaws slam
 		auto &fish = physics.bodies[fish_body];
-		glm::vec3 at = glm::vec3(big_fish.teeth_x(), big_fish.position.y, 0.0f);
+		glm::vec3 at = glm::vec3(big_fish.mouth_position(), 0.0f);
 		if (fish.active && !escaped && big_fish.in_reach(fish.position)) {
 			big_fish.charge();
 			// starts quiet and gets louder
@@ -475,7 +469,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	{ // two rock layers scroll at different speeds behind the fish
 		float middle_y = 0.5f * (physics.bounds_min.y + physics.bounds_max.y);
 		auto draw_layer = [&](SpriteTexture const &texture, float parallax, float height, float fade, uint8_t alpha) {
-			height = std::max(height, std::max(corridor_height, hallway_camera_height) + 4.0f);
+			height = std::max(height, corridor_height + 4.0f);
 			float width = height * float(texture.pixel_size.x) / float(texture.pixel_size.y);
 			glm::vec2 origin(view_center.x * (1.0f - parallax), middle_y);
 			int first = int(std::floor((view_center.x - half_view.x - origin.x) / width));
@@ -563,7 +557,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		// the cave png tinted black covers the whole view
 		sprites.draw(cave_texture, world_to_clip, view_center, render_view, 0.0f, false, glm::u8vec4(0x00, 0x00, 0x00, uint8_t(255.0f * fade)));
 
-		draw_centered_text("You Escaped", view_center, TextHeight * render_view.y / camera_height, glm::u8vec4(0xff, 0xff, 0xff, uint8_t(255.0f * text_fade)));
+		draw_centered_text("You Escaped", view_center, TextHeight, glm::u8vec4(0xff, 0xff, 0xff, uint8_t(255.0f * text_fade)));
 	}
 
 	glDisable(GL_BLEND);

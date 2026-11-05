@@ -20,6 +20,14 @@ static constexpr float UpperShutAngle = -11.0f * Degrees;
 static constexpr float LowerOpenAngle = -20.0f * Degrees;
 static constexpr float LowerShutAngle = 10.0f * Degrees;
 
+//turn the whole head with enough inertia to avoid snapping after the player
+static constexpr float TurnLimit = 25.0f * Degrees;
+static constexpr float TurnSpeed = 4.0f * Degrees;
+static constexpr float TurnAccel = 6.0f * Degrees;
+static constexpr float TurnResponse = 1.5f;
+//hold the heading while the player has room between the jaws
+static constexpr float TurnSlack = 4.0f;
+
 //steady approach speed before charging
 static constexpr float SwimSpeed = 0.9f;
 
@@ -83,6 +91,8 @@ void BigFish::reset(glm::vec2 const &start) {
 	slammed = false;
 	jaw = RestClosed;
 	shake_left = 0.0f;
+	angle = 0.0f;
+	turn_speed = 0.0f;
 }
 
 void BigFish::reset_for_world(glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) {
@@ -101,6 +111,7 @@ void BigFish::update(float elapsed) {
 
 	float breathe = BreatheClosed * (0.5f - 0.5f * std::cos(time * 2.0f * float(M_PI) / BreathePeriod));
 	float jaw_target = RestClosed + breathe;
+	if (swimming()) update_turn(elapsed);
 
 	if (state == Normal) {
 		position.x += SwimSpeed * elapsed;
@@ -108,7 +119,7 @@ void BigFish::update(float elapsed) {
 		charge_time += elapsed;
 		position.x += charge_speed() * elapsed;
 		jaw_target = glm::mix(RestClosed + breathe, WidestClosed, smooth(charge_time / OpenTime));
-		if (prey.x < teeth_x() - SnapDepth) {
+		if (local_point(prey).x < MouthFront * size - SnapDepth) {
 			state = Slamming;
 			timer = SlamTime + HoldTime;
 			slam_from = jaw;
@@ -140,6 +151,32 @@ void BigFish::enter(float x) {
 	position.x = x;
 }
 
+void BigFish::update_turn(float elapsed) {
+	glm::vec2 delta = prey - position;
+	float mouth_angle = std::atan2(mouth_offset(jaw), MouthFront * size);
+	float target = std::clamp(std::atan2(delta.y, std::max(1.0f, delta.x)) - mouth_angle, -TurnLimit, TurnLimit);
+	float difference = target - angle;
+	float slack = std::atan2(TurnSlack, std::max(MouthFront * size, delta.x));
+	difference = std::copysign(std::max(0.0f, std::abs(difference) - slack), difference);
+	target = angle + difference;
+	float speed = std::clamp(TurnResponse * difference, -TurnSpeed, TurnSpeed);
+	turn_speed += std::clamp(speed - turn_speed, -TurnAccel * elapsed, TurnAccel * elapsed);
+	float step = turn_speed * elapsed;
+	if (step * difference > 0.0f && std::abs(step) > std::abs(difference)) {
+		angle = target;
+		turn_speed = 0.0f;
+	} else {
+		angle = std::clamp(angle + step, -TurnLimit, TurnLimit);
+	}
+}
+
+glm::vec2 BigFish::local_point(glm::vec2 const &point) const {
+	glm::vec2 offset = point - position;
+	float co = std::cos(angle);
+	float si = std::sin(angle);
+	return glm::vec2(co * offset.x + si * offset.y, -si * offset.x + co * offset.y);
+}
+
 float BigFish::out_of_sight_x(float view_left) const {
 	return view_left - OffView - art_front();
 }
@@ -148,6 +185,7 @@ void BigFish::stun(float seconds) {
 	if (state == Waiting) return;
 	state = Stunned;
 	timer = seconds;
+	turn_speed = 0.0f;
 }
 
 void BigFish::charge() {
@@ -161,12 +199,13 @@ bool BigFish::swimming() const {
 }
 
 bool BigFish::in_reach(glm::vec2 const &point) const {
-	return state == Normal && point.x - teeth_x() < ChargeRange;
+	return state == Normal && local_point(point).x - MouthFront * size < ChargeRange;
 }
 
 bool BigFish::in_mouth(glm::vec2 const &point) const {
-	glm::vec2 edges = mouth_edges(state == Slamming ? slam_from : jaw) + glm::vec2(position.y);
-	return point.x < teeth_x() + CatchFront && point.y >= edges.y && point.y <= edges.x;
+	glm::vec2 local = local_point(point);
+	glm::vec2 edges = mouth_edges(state == Slamming ? slam_from : jaw);
+	return local.x < MouthFront * size + CatchFront && local.y >= edges.y && local.y <= edges.x;
 }
 
 float BigFish::closed() const {
@@ -194,7 +233,15 @@ float BigFish::art_front() const {
 }
 
 float BigFish::teeth_x() const {
-	return position.x + MouthFront * size;
+	return mouth_position().x;
+}
+
+glm::vec2 BigFish::mouth_position() const {
+	float offset = mouth_offset(state == Slamming ? slam_from : jaw);
+	float front = MouthFront * size;
+	float co = std::cos(angle);
+	float si = std::sin(angle);
+	return position + glm::vec2(co * front - si * offset, si * front + co * offset);
 }
 
 glm::vec2 BigFish::shake() const {
@@ -212,11 +259,12 @@ void BigFish::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) c
 
 	//rotate each jaw around the back of the mouth
 	//based on https://en.wikipedia.org/wiki/Rotation_matrix
-	auto draw_jaw = [&](SpriteTexture const &jaw_texture, glm::vec2 const &offset, float angle) {
-		float co = std::cos(angle);
-		float si = std::sin(angle);
+	auto draw_jaw = [&](SpriteTexture const &jaw_texture, glm::vec2 const &offset, float jaw_angle) {
+		jaw_angle += angle;
+		float co = std::cos(jaw_angle);
+		float si = std::sin(jaw_angle);
 		glm::vec2 center = position + glm::vec2(co * offset.x - si * offset.y, si * offset.x + co * offset.y);
-		sprites.draw(jaw_texture, world_to_clip, center, glm::vec2(size, h), angle, false, glm::u8vec4(255), 0.0f, DrawSprites::Predator);
+		sprites.draw(jaw_texture, world_to_clip, center, glm::vec2(size, h), jaw_angle, false, glm::u8vec4(255), 0.0f, DrawSprites::Predator);
 	};
 	//upper jaw last so it covers the lower jaw where they overlap
 	draw_jaw(lower_jaw, glm::vec2(0.5f * size, -0.5f * h + LowerLift * size), glm::mix(LowerOpenAngle, LowerShutAngle, c));

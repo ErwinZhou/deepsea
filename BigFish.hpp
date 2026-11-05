@@ -19,7 +19,7 @@ struct BigFish {
 	//pivot at the back of the mouth, shared by both jaws
 	glm::vec2 position = glm::vec2(0.0f);
 	//how wide each jaw png is drawn. the height follows the png's shape
-	float size = 125.0f;
+	float size = 105.0f;
 
 	//timer counts down while stunned or slamming. base_y is the height it drifts up and down around
 	float timer = 0.0f;
@@ -49,6 +49,8 @@ struct BigFish {
 	//front of the artwork for offscreen placement, and the teeth for catching the player
 	float art_front() const;
 	float teeth_x() const;
+	//world position of the mouth center, including the head's turn
+	glm::vec2 mouth_position() const;
 	//the position.x that puts its head just off the left of the view
 	float out_of_sight_x(float view_left) const;
 	glm::vec2 shake() const;
@@ -62,6 +64,10 @@ struct BigFish {
 	SpriteTexture lower_jaw;
 
 private:
+	void update_turn(float elapsed);
+	glm::vec2 local_point(glm::vec2 const &point) const;
+	float angle = 0.0f;
+	float turn_speed = 0.0f;
 	float charge_speed() const;
 	//upper and lower bite limits at the teeth
 	glm::vec2 mouth_edges(float shut) const;

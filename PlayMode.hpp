@@ -40,13 +40,9 @@ struct PlayMode : Mode {
 	static constexpr float spit_impulse = 14.0f;
 	static constexpr float spit_clearance = 0.1f;
 	static constexpr float level_length = 170.0f;
-	//the swimming bounds cover the whole widest camera view
+	//the corridor scrolls vertically inside the tighter view
 	static constexpr float corridor_height = 32.0f;
-	static constexpr float camera_height = 20.5f;
-	//widen the shot gradually between the first wall and the hanging rock
-	static constexpr float hallway_camera_height = corridor_height;
-	static constexpr float camera_zoom_time = 3.0f;
-	float camera_progress = 0.0f;
+	static constexpr float camera_height = 24.0f;
 	UnderwaterPhysics physics;
 	Camera2D camera;
 	glm::vec2 facing{1.0f, 0.0f};
