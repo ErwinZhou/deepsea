@@ -20,8 +20,7 @@ static float random_between(float low, float high) {
 static constexpr float WallThickness = 3.0f;
 static constexpr float WallArtLeft = 0.28f;
 static constexpr float WallArtRight = 0.84f;
-static constexpr int FirstWallHits = 2;
-static constexpr int LastWallHits = 3;
+static constexpr int WallHits = 3;
 static constexpr float CrackLeeway = 0.35f;
 static constexpr float HangingCrackLeeway = 0.55f;
 static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
@@ -121,8 +120,8 @@ void Cave::setup(UnderwaterPhysics &physics) {
 		wall.box = StaticBox2D{glm::vec2(x - 0.5f * WallThickness, bounds_min.y), glm::vec2(x + 0.5f * WallThickness, bounds_max.y)};
 	};
 	//positions are measured from the left end of the level
-	place_wall(first_wall, bounds_min.x + 32.0f, FirstWallHits);
-	place_wall(last_wall, bounds_max.x - 12.0f, LastWallHits);
+	place_wall(first_wall, bounds_min.x + 32.0f, WallHits);
+	place_wall(last_wall, bounds_max.x - 12.0f, WallHits);
 	exit_x = bounds_max.x - 5.0f + ExitShift;
 
 	hanging_rock = HangingRock();
@@ -203,11 +202,7 @@ glm::vec2 Cave::wall_crack_position(Wall const &wall) const {
 }
 
 int Cave::wall_stage(Wall const &wall) const {
-	// the two-hit first wall skips wall2 so its first hit shows the most damaged artwork
-	if (&wall == &first_wall) {
-		return wall.hits_left == FirstWallHits ? 0 : 2;
-	}
-	return LastWallHits - wall.hits_left;
+	return WallHits - wall.hits_left;
 }
 
 void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) {
