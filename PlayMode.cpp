@@ -77,6 +77,8 @@ PlayMode::PlayMode()
 	physics.bodies.push_back({.position = jelly_start, .radius = jelly_radius, .drag = jelly_drag, .current_scale = 0.0f, .kind = Body2D::Jelly});
 	//start beside the jellyfish with the crack in view
 	physics.bodies[fish_body].position = jelly_start - glm::vec2(2.4f, -0.2f);
+	const glm::vec2 extra_rock_offset(-4.0f, 2.0f);
+	physics.bodies.push_back({.position = physics.bodies[fish_body].position + extra_rock_offset, .radius = 0.35f});
 	camera.center = camera.constrain(physics.bodies[fish_body].position, physics.bounds_min, physics.bounds_max);
 	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 	// starts silent and fades in with the picture
