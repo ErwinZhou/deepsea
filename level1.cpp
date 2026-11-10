@@ -136,16 +136,16 @@ static Level1::Target load_target(std::string const &filename) {
 	return target;
 }
 
-Level1::Level1() : wall_textures{SpriteTexture(data_path("wall1.png")), SpriteTexture(data_path("wall2.png")), SpriteTexture(data_path("wall3.png"))},
-	hanging_textures{SpriteTexture(data_path("big_rock1.png")), SpriteTexture(data_path("big_rock2.png")), SpriteTexture(data_path("big_rock3.png"))},
-	exit_texture(data_path("exit.png")),
+Level1::Level1() : wall_textures{SpriteTexture(data_path("level1/wall1.png")), SpriteTexture(data_path("level1/wall2.png")), SpriteTexture(data_path("level1/wall3.png"))},
+	hanging_textures{SpriteTexture(data_path("level1/big_rock1.png")), SpriteTexture(data_path("level1/big_rock2.png")), SpriteTexture(data_path("level1/big_rock3.png"))},
+	exit_texture(data_path("level1/exit.png")),
 	coral_texture(data_path("coral.png")),
 	chip_texture(data_path("small_rock.png")),
 	fade_texture(data_path("cavern_background.png")),
 	jellyfish_texture(data_path("jellyfish.png")) {
 	for (int stage = 0; stage < 3; ++stage) {
-		wall_targets[stage] = load_target(data_path("wall" + std::to_string(stage + 1) + ".png"));
-		hanging_targets[stage] = load_target(data_path("big_rock" + std::to_string(stage + 1) + ".png"));
+		wall_targets[stage] = load_target(data_path("level1/wall" + std::to_string(stage + 1) + ".png"));
+		hanging_targets[stage] = load_target(data_path("level1/big_rock" + std::to_string(stage + 1) + ".png"));
 	}
 }
 
