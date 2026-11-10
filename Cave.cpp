@@ -24,6 +24,7 @@ static constexpr int WallHits = 3;
 static constexpr float CrackLeeway = 0.35f;
 static constexpr float HangingCrackLeeway = 0.55f;
 static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
+static constexpr float WallCrackHitboxScale = 1.4f;
 static constexpr float ExitShift = 2.0f;
 //the hanging rock's png is drawn this many units square, with its top against the ceiling
 static constexpr float HangingSize = 9.0f;
@@ -263,7 +264,7 @@ void Cave::update(UnderwaterPhysics &physics, BigFish &big_fish, float elapsed) 
 			if (entry_only) {
 				//aim at the point where the crack reaches the wall's left edge
 				glm::vec2 delta = glm::abs(size * glm::vec2(target.entry.x - 0.5f, 0.5f - target.entry.y) - local_contact);
-				glm::vec2 tolerance = WallCrackHalfSize + glm::vec2(reach);
+				glm::vec2 const tolerance = WallCrackHitboxScale * (WallCrackHalfSize + glm::vec2(reach));
 				cracked = delta.x <= tolerance.x && delta.y <= tolerance.y;
 			} else {
 				for (glm::vec2 const &pixel : target.cracks) {
