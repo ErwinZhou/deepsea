@@ -7,6 +7,9 @@
 //For asset loading:
 #include "Load.hpp"
 
+//For sound init:
+#include "Sound.hpp"
+
 //GL.hpp will include a non-namespace-polluting set of opengl prototypes:
 #include "GL.hpp"
 
@@ -23,6 +26,9 @@
 #include <stdexcept>
 #include <memory>
 #include <algorithm>
+#include <string>
+#include <vector>
+#include <cstdint>
 
 #ifdef _WIN32
 extern "C" { uint32_t GetACP(); }
@@ -48,7 +54,7 @@ int main(int argc, char **argv) {
 	//Initialize SDL library:
 	SDL_Init(SDL_INIT_VIDEO);
 
-	//Ask for an OpenGL context version 3.3, core profile, enable debug:
+	//based on https://wiki.libsdl.org/SDL3/SDL_GLContextFlag
 	SDL_GL_ResetAttributes();
 	SDL_GL_SetAttribute(SDL_GL_RED_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE, 8);
@@ -58,13 +64,19 @@ int main(int argc, char **argv) {
 	SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+#ifdef __APPLE__
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 1);
+#else
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
 	SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+#endif
 
 	//create window:
 	Mode::window = SDL_CreateWindow(
-		"gp26 game6: physics", //TODO: remember to set a title for your game!
+		"DeepSea",
 		1280, 720, //TODO: modify window size if you'd like
 		SDL_WINDOW_OPENGL
 		| SDL_WINDOW_RESIZABLE //uncomment to allow resizing
@@ -91,12 +103,9 @@ int main(int argc, char **argv) {
 	//On windows, load OpenGL entrypoints: (does nothing on other platforms)
 	init_GL();
 
-	//Set VSYNC + Late Swap (prevents crazy FPS):
-	if (!SDL_GL_SetSwapInterval(-1)) {
-		std::cerr << "NOTE: couldn't set vsync + late swap tearing (" << SDL_GetError() << ")." << std::endl;
-		if (!SDL_GL_SetSwapInterval(1)) {
-			std::cerr << "NOTE: couldn't set vsync (" << SDL_GetError() << ")." << std::endl;
-		}
+	//based on https://wiki.libsdl.org/SDL3/SDL_GL_SetSwapInterval
+	if (!SDL_GL_SetSwapInterval(1)) {
+		std::cerr << "NOTE: couldn't set vsync (" << SDL_GetError() << ")." << std::endl;
 	}
 
 	//Set automatic SRGB encoding if framebuffer needs it:
@@ -104,6 +113,9 @@ int main(int argc, char **argv) {
 
 	//Hide mouse cursor (note: showing can be useful for debugging):
 	//SDL_ShowCursor(SDL_DISABLE);
+
+	//------------ init sound --------------
+	Sound::init();
 
 	//------------ load assets --------------
 	call_load_functions();
@@ -127,6 +139,9 @@ int main(int argc, char **argv) {
 		glViewport(0, 0, drawable_size.x, drawable_size.y);
 	};
 	on_resize();
+	auto previous_time = std::chrono::steady_clock::now();
+	auto next_frame = previous_time;
+	constexpr auto FramePeriod = std::chrono::nanoseconds(1000000000 / 60);
 
 	//This will loop until the current mode is set to null:
 	while (Mode::current) {
@@ -169,9 +184,17 @@ int main(int argc, char **argv) {
 			if (!Mode::current) break;
 		}
 
+		//based on https://wiki.libsdl.org/SDL3/SDL_GetWindowFlags
+		SDL_WindowFlags flags = SDL_GetWindowFlags(Mode::window);
+		if ((flags & SDL_WINDOW_MINIMIZED) || !(flags & SDL_WINDOW_INPUT_FOCUS)) {
+			SDL_Delay(100);
+			previous_time = std::chrono::steady_clock::now();
+			next_frame = previous_time;
+			continue;
+		}
+
 		{ //(2) call the current mode's "update" function to deal with elapsed time:
-			auto current_time = std::chrono::high_resolution_clock::now();
-			static auto previous_time = current_time;
+			auto current_time = std::chrono::steady_clock::now();
 			float elapsed = std::chrono::duration< float >(current_time - previous_time).count();
 			previous_time = current_time;
 
@@ -190,10 +213,20 @@ int main(int argc, char **argv) {
 
 		//Wait until the recently-drawn frame is shown before doing it all again:
 		SDL_GL_SwapWindow(Mode::window);
+		next_frame += FramePeriod;
+		auto now = std::chrono::steady_clock::now();
+		if (next_frame > now) {
+			//based on https://wiki.libsdl.org/SDL3/SDL_DelayNS
+			SDL_DelayNS(Uint64(std::chrono::duration_cast<std::chrono::nanoseconds>(next_frame - now).count()));
+		} else {
+			next_frame = now;
+		}
 	}
 
 
 	//------------  teardown ------------
+	Mode::set_current(nullptr);
+	Sound::shutdown();
 
 	SDL_GL_DestroyContext(context);
 	context = 0;

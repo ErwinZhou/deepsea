@@ -1,21 +1,23 @@
-# (TODO: your game's title)
+# DeepSea
 
-Author: (TODO: your name)
+A 2D underwater horror exploration game about a small fish surviving the chase of a mysterious monstrous creature and a much larger world.
 
-Design: (TODO: In two sentences or fewer, describe what is new and interesting about your game.)
+![Screen Shot](docs/screenshot.png)
 
-Screen Shot:
+Team: Haoran Xie, Yuchen Zhou, Sarah Garland.
 
-![Screen Shot](screenshot.png)
+## Build and run
 
-How To Play:
+You need Node.js, a C++20 compiler, and the course's `nest-libs` in a folder next to this one. [NEST.md](NEST.md) has the full setup.
 
-(TODO: describe the controls and (if needed) goals/strategy.)
+```sh
+node Maekfile.js
+./dist/game
+```
 
-## Extra Credit
+On Windows, run `dist\game.exe`. Escape quits.
 
-Are your Physics Deterministic? If so, how can we verify this?
+Built on the course's base code. See [LICENSE](LICENSE).
 
-Are your Physics Rewindable? If so, how can we verify this?
-
-This game was built with [NEST](NEST.md).
+Credits: the fish, jaw, rock, wall, cavern background, jellyfish, coral and seaweed art in `assets/` was drawn by Sarah Garland for this game.
+`cavern_rock.png` is a softened version of Sarah's cavern background. The roar, rumble, chomp and rock hit sounds in `assets/sound/` were provided by Sarah Garland, and the `modified_` files are edited versions of them.
