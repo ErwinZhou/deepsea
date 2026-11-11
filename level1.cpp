@@ -14,6 +14,7 @@
 #include <string>
 #include <cstddef>
 
+// ================== Sound Sample Loading ==================
 static Load<Sound::Sample> fish_roar(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("modified_big_fish_roar.opus"));
 });
@@ -52,6 +53,7 @@ static float random_between(float low, float high) {
 	return std::uniform_real_distribution< float >(low, high)(rng);
 }
 
+// ================== Game Constants ==================
 //how thick the walls are, and where the wall art sits across its png, as fractions of the png width
 static constexpr float WallThickness = 3.0f;
 static constexpr float WallArtLeft = 0.28f;
@@ -61,6 +63,7 @@ static constexpr float CrackLeeway = 0.35f;
 static constexpr float HangingCrackLeeway = 0.55f;
 static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
 static constexpr float WallCrackHitboxScale = 1.4f;
+static constexpr float HangingCrackHitboxScale = 1.2f;
 static constexpr float ExitShift = 2.0f;
 //the hanging rock's png is drawn this many units square, with its top against the ceiling
 static constexpr float HangingSize = 9.0f;
@@ -336,9 +339,10 @@ void Level1::update_obstacles(UnderwaterPhysics &physics, float elapsed) {
 				glm::vec2 const tolerance = WallCrackHitboxScale * (WallCrackHalfSize + glm::vec2(reach));
 				cracked = delta.x <= tolerance.x && delta.y <= tolerance.y;
 			} else {
+				const float tolerance = HangingCrackHitboxScale * reach;
 				for (glm::vec2 const &pixel : target.cracks) {
 					glm::vec2 delta = size * glm::vec2(pixel.x - 0.5f, 0.5f - pixel.y) - local_contact;
-					if (glm::dot(delta, delta) <= reach * reach) { cracked = true; break; }
+					if (glm::dot(delta, delta) <= tolerance * tolerance) { cracked = true; break; }
 				}
 			}
 			if (!cracked) {

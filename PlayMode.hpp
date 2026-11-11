@@ -5,6 +5,7 @@
 #include "UnderwaterPhysics.hpp"
 #include "Camera2D.hpp"
 #include "level1.hpp"
+#include "level2.hpp"
 #include "CaveBackground.hpp"
 #include "Water.hpp"
 
@@ -13,8 +14,9 @@
 
 struct PlayMode : Mode {
 	enum class FishState { Normal, Kirby, Fat };
+	enum class LevelId { One = 1, Two = 2 };
 
-	PlayMode();
+	explicit PlayMode(LevelId start_level = LevelId::One);
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
 	void update(float elapsed) override;
@@ -43,7 +45,9 @@ struct PlayMode : Mode {
 	glm::vec2 facing{1.0f, 0.0f};
 	FishState state = FishState::Normal;
 	std::optional<size_t> carried_body;
-	Level1 level1;
+	LevelId const level_id;
+	std::optional<Level1> level1;
+	std::optional<Level2> level2;
 
 private:
 	void update_interaction();

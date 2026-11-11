@@ -168,6 +168,7 @@ const game_names = [
 	maek.CPP('main.cpp'),
 	maek.CPP('BigFish.cpp'),
 	maek.CPP('level1.cpp'),
+	maek.CPP('level2.cpp'),
 	maek.CPP('CaveBackground.cpp'),
 	maek.CPP('Water.cpp'),
 	maek.CPP('Sound.cpp'),

@@ -7,16 +7,25 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
-PlayMode::PlayMode()
-	: fish_texture(data_path("normal.png")),
+PlayMode::PlayMode(LevelId start_level)
+	: level_id(start_level),
+	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
 	  fat_glow_texture(data_path("fat_with_glow.png")),
 	  stone_texture(data_path("small_rock.png")) {
 	physics.bodies.push_back({.radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish});
-	level1.setup(physics, camera, fish_body);
+	if (level_id == LevelId::One) {
+		level1.emplace();
+		level1->setup(physics, camera, fish_body);
+	} else {
+		assert(level_id == LevelId::Two && "play mode requires a supported level");
+		level2.emplace();
+		level2->setup(physics, camera, fish_body);
+	}
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
@@ -56,7 +65,9 @@ void PlayMode::update(float elapsed) {
 	glm::vec2 move(float(input.right) - float(input.left), float(input.up) - float(input.down));
 	if (move != glm::vec2(0.0f)) {
 		move = glm::normalize(move);
-		level1.has_swum = true;
+		if (level1) {
+			level1->has_swum = true;
+		}
 		// face the way the keys point, even while still drifting the other way
 		facing = move;
 	}
@@ -70,7 +81,11 @@ void PlayMode::update(float elapsed) {
 		//control responsiveness based on https://www.gamedeveloper.com/design/principles-of-virtual-sensation
 		if (input.space) fish_visual_angle = target_angle;
 	}
-	hit_stop = level1.before_physics(physics, elapsed);
+	if (level1) {
+		hit_stop = level1->before_physics(physics, elapsed);
+	} else {
+		level2->update(elapsed);
+	}
 
 	// step physics at a fixed rate so it plays the same at any frame rate
 	accumulated_time += std::min(elapsed, 0.1f);
@@ -94,12 +109,14 @@ void PlayMode::update(float elapsed) {
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
-	level1.after_physics(physics, camera, carried_body, elapsed);
+	if (level1) {
+		level1->after_physics(physics, camera, carried_body, elapsed);
 
-	if (level1.restart_requested(physics)) {
-		//keep this mode alive until update returns after replacing it
-		std::shared_ptr<Mode> const keep = shared_from_this();
-		Mode::set_current(std::make_shared<PlayMode>());
+		if (level1->restart_requested(physics)) {
+			//keep this mode alive until update returns after replacing it
+			std::shared_ptr<Mode> const keep = shared_from_this();
+			Mode::set_current(std::make_shared<PlayMode>(level_id));
+		}
 	}
 }
 
@@ -144,7 +161,9 @@ void PlayMode::update_interaction() {
 		body.player_spat = false;
 		carried_body = target;
 		state = FishState::Fat;
-		level1.has_sucked = true;
+		if (level1) {
+			level1->has_sucked = true;
+		}
 	} else {
 		// pull with the same strength at any distance
 		body.add_force((mouth - body.position) * (suction_force / nearest_distance));
@@ -166,7 +185,9 @@ void PlayMode::spit() {
 	if (body.kind == Body2D::Rock) body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
-	level1.has_spat = true;
+	if (level1) {
+		level1->has_spat = true;
+	}
 	// so holding space after a spit doesn't suck the rock straight back
 	input.suppress_suction = input.space;
 }
@@ -183,7 +204,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei height = std::max(1, int(camera.view_size.y * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
 	glm::vec2 const &render_view = camera.view_size;
-	glm::vec2 view_center = level1.shaken_center(camera.center, physics);
+	glm::vec2 view_center = level1 ? level1->shaken_center(camera.center, physics) : camera.center;
 	glm::vec2 half_view = 0.5f * render_view;
 	//keep horizontal shake inside the entrance and exit
 	view_center.x = camera.constrain(view_center, physics.bounds_min, physics.bounds_max).x;
@@ -192,7 +213,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 
 	water_look.view_min = view_center - half_view;
 	water_look.view_max = view_center + half_view;
-	sprites.set_jelly_light(level1.prepare_water(water_look, physics, carried_body, view_center, render_view));
+	glm::vec3 jelly_light(0.0f);
+	if (level1) {
+		jelly_light = level1->prepare_water(water_look, physics, carried_body, view_center, render_view);
+	} else {
+		level2->prepare_water(water_look);
+	}
+	sprites.set_jelly_light(jelly_light);
 	sprites.set_look(water_look);
 	water.begin(water_look);
 	glDisable(GL_DEPTH_TEST);
@@ -201,9 +228,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	background.draw(sprites, world_to_clip, view_center, render_view, physics.bounds_min, physics.bounds_max);
-	level1.draw_distant(sprites, world_to_clip, view_center);
+	if (level1) {
+		level1->draw_distant(sprites, world_to_clip, view_center);
+	}
 	water.haze();
-	level1.draw(sprites, world_to_clip, physics);
+	if (level1) {
+		level1->draw(sprites, world_to_clip, physics);
+	}
 
 	//scale artwork to the requested height without stretching it
 	auto sprite_size = [](SpriteTexture const &texture, float height) {
@@ -227,12 +258,16 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
 	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
 		glm::u8vec4(255), 0.0f, DrawSprites::Player);
-	level1.draw_foreground(sprites, world_to_clip);
+	if (level1) {
+		level1->draw_foreground(sprites, world_to_clip);
+	}
 	water.finish();
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	level1.draw_overlay(sprites, world_to_clip, physics, view_center, render_view);
+	if (level1) {
+		level1->draw_overlay(sprites, world_to_clip, physics, view_center, render_view);
+	}
 
 	glDisable(GL_BLEND);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);

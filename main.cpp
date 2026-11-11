@@ -34,6 +34,14 @@
 extern "C" { uint32_t GetACP(); }
 #endif
 int main(int argc, char **argv) {
+	PlayMode::LevelId start_level = PlayMode::LevelId::One;
+	if (argc != 1) {
+		if (argc != 3 || std::string(argv[1]) != "--level" || (std::string(argv[2]) != "1" && std::string(argv[2]) != "2")) {
+			std::cerr << "Usage: game [--level 1|2]\n";
+			return 1;
+		}
+		start_level = std::string(argv[2]) == "1" ? PlayMode::LevelId::One : PlayMode::LevelId::Two;
+	}
 #ifdef _WIN32
 	{ //when compiled on windows, check that code page is forced to utf-8 (makes file loading/saving work right):
 		//see: https://docs.microsoft.com/en-us/windows/apps/design/globalizing/use-utf8-code-page
@@ -121,7 +129,7 @@ int main(int argc, char **argv) {
 	call_load_functions();
 
 	//------------ create game mode + make current --------------
-	Mode::set_current(std::make_shared< PlayMode >());
+	Mode::set_current(std::make_shared<PlayMode>(start_level));
 
 	//------------ main loop ------------
 
