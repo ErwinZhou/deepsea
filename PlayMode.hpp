@@ -16,7 +16,7 @@ struct PlayMode : Mode {
 	enum class FishState { Normal, Kirby, Fat };
 	enum class LevelId { One = 1, Two = 2 };
 
-	explicit PlayMode(LevelId start_level = LevelId::One);
+	explicit PlayMode(LevelId start_level = LevelId::One, std::optional<Body2D> const &belly_contents = std::nullopt);
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
 	void update(float elapsed) override;

@@ -10,7 +10,7 @@
 #include <cassert>
 #include <cmath>
 
-PlayMode::PlayMode(LevelId start_level)
+PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents)
 	: level_id(start_level),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
@@ -24,7 +24,10 @@ PlayMode::PlayMode(LevelId start_level)
 	} else {
 		assert(level_id == LevelId::Two && "play mode requires a supported level");
 		level2.emplace();
-		level2->setup(physics, camera, fish_body);
+		carried_body = level2->setup(physics, camera, fish_body, belly_contents);
+		if (carried_body) {
+			state = FishState::Fat;
+		}
 	}
 }
 
@@ -63,9 +66,13 @@ void PlayMode::update(float elapsed) {
 	if (transition_time >= 0.0f) {
 		transition_time += elapsed;
 		if (transition_time >= transition_fade_time) {
+			std::optional<Body2D> belly_contents;
+			if (carried_body) {
+				belly_contents = physics.bodies[*carried_body];
+			}
 			//keep this mode alive until update returns after replacing it
 			std::shared_ptr<Mode> const keep = shared_from_this();
-			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two));
+			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, belly_contents));
 		}
 		return;
 	}
@@ -234,7 +241,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	if (level1) {
 		jelly_light = level1->prepare_water(water_look, physics, carried_body, view_center, render_view);
 	} else {
-		level2->prepare_water(water_look);
+		jelly_light = level2->prepare_water(water_look, physics, fish_body, carried_body);
 	}
 	sprites.set_jelly_light(jelly_light);
 	sprites.set_look(water_look);
@@ -251,6 +258,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	water.haze();
 	if (level1) {
 		level1->draw(sprites, world_to_clip, physics);
+	} else {
+		level2->draw(sprites, world_to_clip, physics);
 	}
 
 	//scale artwork to the requested height without stretching it
