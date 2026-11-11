@@ -68,6 +68,9 @@ private:
 	double accumulated_time = 0.0;
 	//pause simulation briefly after an impact
 	float hit_stop = 0.0f;
+	static constexpr float transition_fade_time = 1.5f;
+	//negative until the exit starts the fade to the next level
+	float transition_time = -1.0f;
 	static constexpr float listener_depth = 16.0f;
 	DrawSprites sprites;
 	Water water;

@@ -30,3 +30,11 @@ void CaveBackground::draw(DrawSprites const &sprites, glm::mat4 const &world_to_
 	draw_layer(background_texture, 0.12f, 28.0f, 0.72f, 255);
 	draw_layer(cavern_texture, 0.28f, 34.0f, 0.45f, 55);
 }
+
+void CaveBackground::draw_fade(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
+	glm::vec2 const &view_center, glm::vec2 const &view_size, float amount) const {
+	if (amount > 0.0f) {
+		const uint8_t alpha = uint8_t(255.0f * std::clamp(amount, 0.0f, 1.0f));
+		sprites.draw(background_texture, world_to_clip, view_center, view_size, 0.0f, false, glm::u8vec4(0, 0, 0, alpha));
+	}
+}

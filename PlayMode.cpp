@@ -36,6 +36,9 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
 	}
 	if (evt.type != SDL_EVENT_KEY_DOWN && evt.type != SDL_EVENT_KEY_UP) return false;
 	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.repeat) return false;
+	if (transition_time >= 0.0f && evt.key.key != SDLK_ESCAPE) {
+		return true;
+	}
 	bool pressed = evt.type == SDL_EVENT_KEY_DOWN;
 	switch (evt.key.key) {
 	case SDLK_W: input.up = pressed; break;
@@ -57,6 +60,15 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
 
 void PlayMode::update(float elapsed) {
 	if (!std::isfinite(elapsed) || elapsed <= 0.0f) return;
+	if (transition_time >= 0.0f) {
+		transition_time += elapsed;
+		if (transition_time >= transition_fade_time) {
+			//keep this mode alive until update returns after replacing it
+			std::shared_ptr<Mode> const keep = shared_from_this();
+			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two));
+		}
+		return;
+	}
 	// hit stop, based on https://uhiyama-lab.com/en/notes/unity/unity-game-feel-hit-feedback/
 	if (hit_stop > 0.0f) {
 		hit_stop -= elapsed;
@@ -112,7 +124,12 @@ void PlayMode::update(float elapsed) {
 	if (level1) {
 		level1->after_physics(physics, camera, carried_body, elapsed);
 
-		if (level1->restart_requested(physics)) {
+		if (level1->exit_reached()) {
+			transition_time = 0.0f;
+			input = {};
+			hit_stop = 0.0f;
+			level1->stop_sounds(transition_fade_time);
+		} else if (level1->restart_requested(physics)) {
 			//keep this mode alive until update returns after replacing it
 			std::shared_ptr<Mode> const keep = shared_from_this();
 			Mode::set_current(std::make_shared<PlayMode>(level_id));
@@ -268,6 +285,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	if (level1) {
 		level1->draw_overlay(sprites, world_to_clip, physics, view_center, render_view);
 	}
+	float fade = 0.0f;
+	if (transition_time >= 0.0f) {
+		fade = transition_time / transition_fade_time;
+	} else if (level2) {
+		fade = level2->fade_amount();
+	}
+	background.draw_fade(sprites, world_to_clip, view_center, render_view, fade);
 
 	glDisable(GL_BLEND);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);
