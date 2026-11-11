@@ -65,6 +65,7 @@ static constexpr glm::vec2 WallCrackHalfSize = glm::vec2(0.15f, 0.5f);
 static constexpr float WallCrackHitboxScale = 1.4f;
 static constexpr float HangingCrackHitboxScale = 1.2f;
 static constexpr float ExitShift = 2.0f;
+static constexpr float ExitWidth = 6.0f;
 //the hanging rock's png is drawn this many units square, with its top against the ceiling
 static constexpr float HangingSize = 9.0f;
 static constexpr float CoralSize = 3.5f;
@@ -181,6 +182,8 @@ void Level1::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_b
 	place_wall(first_wall, bounds_min.x + 32.0f, WallHits);
 	place_wall(last_wall, bounds_max.x - 12.0f, WallHits);
 	exit_x = bounds_max.x - 5.0f + ExitShift;
+	exit_box = StaticBox2D{glm::vec2(bounds_max.x - ExitWidth + ExitShift, bounds_min.y),
+		glm::vec2(bounds_max.x + ExitShift, bounds_max.y)};
 
 	hanging_rock = HangingRock();
 	hanging_rock.hits_left = HangingHits;
@@ -505,8 +508,7 @@ void Level1::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	float middle_y = 0.5f * (bounds_min.y + bounds_max.y);
 
 	{ //the way out, past the last wall
-		constexpr float exit_width = 6.0f;
-		sprites.draw(exit_texture, world_to_clip, glm::vec2(bounds_max.x - 0.5f * exit_width + ExitShift, middle_y), glm::vec2(exit_width, height));
+		sprites.draw(exit_texture, world_to_clip, 0.5f * (exit_box.min + exit_box.max), exit_box.max - exit_box.min);
 	}
 
 	//the wall png is wider than its art, so it is shifted to put the art on the wall's box
@@ -556,10 +558,21 @@ void Level1::draw_foreground(DrawSprites const &sprites, glm::mat4 const &world_
 }
 
 Level1::~Level1() {
-	//stop this run's sounds before restarting
-	if (ambient) ambient->stop();
-	if (presence) presence->stop();
-	stop_roars(0.0f);
+	stop_sounds(0.0f);
+}
+
+void Level1::stop_sounds(float fade) {
+	if (ambient) {
+		ambient->stop(fade);
+	}
+	if (presence) {
+		presence->stop(fade);
+	}
+	stop_roars(fade);
+	for (std::shared_ptr<Sound::PlayingSample> const &effect : effects) {
+		effect->stop(fade);
+	}
+	effects.clear();
 }
 
 void Level1::stop_roars(float fade) {
@@ -571,6 +584,10 @@ void Level1::stop_roars(float fade) {
 
 float Level1::before_physics(UnderwaterPhysics &physics, float elapsed) {
 	clock += elapsed;
+	//the mixer releases finished effects, leaving only this level's reference
+	effects.erase(std::remove_if(effects.begin(), effects.end(), [](std::shared_ptr<Sound::PlayingSample> const &effect) {
+		return effect.use_count() == 1;
+	}), effects.end());
 	float hit_stop = 0.0f;
 	rumble = std::max(0.0f, rumble - elapsed);
 	update_obstacles(physics, elapsed);
@@ -584,16 +601,32 @@ float Level1::before_physics(UnderwaterPhysics &physics, float elapsed) {
 	}
 	{ //every impact is heard from where it happened
 		glm::vec3 at = glm::vec3(events.at, 0.0f);
-		if (events.missed) Sound::play_3D(*rock_hit_sound, rock_miss_volume, at, rock_reach);
-		if (events.hit) Sound::play_3D(*rock_hit_sound, 1.0f, at, rock_reach);
-		if (events.broke || events.crashed) Sound::play_3D(*rumble_sound, 1.0f, at, rumble_reach);
-		if (events.crashed) Sound::play_3D(*rock_hit_sound, 1.0f, at, rumble_reach);
+		if (events.missed) {
+			effects.push_back(Sound::play_3D(*rock_hit_sound, rock_miss_volume, at, rock_reach));
+		}
+		if (events.hit) {
+			effects.push_back(Sound::play_3D(*rock_hit_sound, 1.0f, at, rock_reach));
+		}
+		if (events.broke || events.crashed) {
+			effects.push_back(Sound::play_3D(*rumble_sound, 1.0f, at, rumble_reach));
+		}
+		if (events.crashed) {
+			effects.push_back(Sound::play_3D(*rock_hit_sound, 1.0f, at, rumble_reach));
+		}
 	}
 
 	return hit_stop;
 }
 
 void Level1::after_physics(UnderwaterPhysics &physics, Camera2D const &camera, std::optional<size_t> carried_body, float elapsed) {
+	Body2D const &player = physics.bodies[fish_body];
+	if (player.active && last_wall.hits_left == 0) {
+		const glm::vec2 offset = player.position - glm::clamp(player.position, exit_box.min, exit_box.max);
+		if (glm::dot(offset, offset) <= player.radius * player.radius) {
+			escaped = true;
+			return;
+		}
+	}
 	const float view_left = camera.center.x - 0.5f * camera.view_size.x;
 	big_fish.prey = physics.bodies[fish_body].position;
 	big_fish.update(elapsed);
@@ -608,7 +641,7 @@ void Level1::after_physics(UnderwaterPhysics &physics, Camera2D const &camera, s
 			if (before < far_begin && warning_time >= far_begin) {
 				glm::vec3 at = glm::vec3(big_fish.far_mouth(far_hinge(camera.center)), -far_roar_depth);
 				far_roar = Sound::play_3D(*fish_roar, far_roar_volume, at, far_roar_reach);
-				Sound::play_3D(*rumble_sound, far_roar_volume, at, far_roar_reach);
+				effects.push_back(Sound::play_3D(*rumble_sound, far_roar_volume, at, far_roar_reach));
 			}
 			if (far_roar) far_roar->set_position(glm::vec3(big_fish.far_mouth(far_hinge(camera.center)), -far_roar_depth), elapsed);
 			drop_ceiling_dust(view_left, view_left + camera.view_size.x, roar_amount(physics), elapsed);
@@ -656,7 +689,9 @@ void Level1::after_physics(UnderwaterPhysics &physics, Camera2D const &camera, s
 		}
 		if (big_fish.slammed) {
 			//no bite is heard once you're out
-			if (!escaped) Sound::play_3D(*chomp_sound, 1.0f, at, roar_reach);
+			if (!escaped) {
+				effects.push_back(Sound::play_3D(*chomp_sound, 1.0f, at, roar_reach));
+			}
 			if (charge_roar) charge_roar->stop();
 			charge_roar = nullptr;
 			if (fish.active && !escaped && big_fish.in_mouth(fish.position)) {
@@ -676,8 +711,11 @@ void Level1::after_physics(UnderwaterPhysics &physics, Camera2D const &camera, s
 		if (hint_amount <= 0.0f) shown_hint = wanted;
 	}
 
-	if (physics.bodies[fish_body].active && physics.bodies[fish_body].position.x > exit_x) escaped = true;
-	if (!physics.bodies[fish_body].active || escaped) end_time += elapsed;
+	if (!physics.bodies[fish_body].active) end_time += elapsed;
+}
+
+bool Level1::exit_reached() const {
+	return escaped;
 }
 
 bool Level1::restart_requested(UnderwaterPhysics const &physics) const {
@@ -783,6 +821,9 @@ void Level1::draw_distant(DrawSprites const &sprites, glm::mat4 const &world_to_
 
 void Level1::draw_overlay(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics,
 	glm::vec2 const &view_center, glm::vec2 const &view_size) const {
+	if (escaped) {
+		return;
+	}
 	Body2D const &fish = physics.bodies[fish_body];
 	const glm::vec2 half_view = 0.5f * view_size;
 	{ //fades in from black at the start, and out to black after being eaten
@@ -811,17 +852,5 @@ void Level1::draw_overlay(DrawSprites const &sprites, glm::mat4 const &world_to_
 		float y = above + hint_height < view_center.y + half_view.y && !jelly_in_way ? above : fish.position.y - hint_above_fish;
 		float x = std::clamp(fish.position.x, view_center.x - half_view.x + view_margin, view_center.x + half_view.x - view_margin);
 		draw_centered_text(shown_hint, glm::vec2(x, y), hint_height, glm::u8vec4(0xc8, 0xd2, 0xd6, uint8_t(255.0f * hint_amount)));
-	}
-
-	if (escaped) { //fade to black, then the text
-		constexpr float fade_time = 2.0f;
-		constexpr float text_fade_time = 1.0f;
-		constexpr float text_height = 1.5f;
-		float fade = std::min(1.0f, end_time / fade_time);
-		float text_fade = std::clamp((end_time - fade_time) / text_fade_time, 0.0f, 1.0f);
-		//the cave png tinted black covers the whole view
-		sprites.draw(fade_texture, world_to_clip, view_center, view_size, 0.0f, false, glm::u8vec4(0x00, 0x00, 0x00, uint8_t(255.0f * fade)));
-
-		draw_centered_text("You Escaped", view_center, text_height, glm::u8vec4(0xff, 0xff, 0xff, uint8_t(255.0f * text_fade)));
 	}
 }

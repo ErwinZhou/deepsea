@@ -40,8 +40,9 @@ struct Level1 {
 		float shudder = 0.0f;
 	} hanging_rock;
 
-	//swimming past this x is escaping
+	//the exit light sits inside the trigger's artwork
 	float exit_x = 0.0f;
+	StaticBox2D exit_box{};
 
 	//exit and coral light sources
 	std::vector< glm::vec3 > light_spots;
@@ -96,6 +97,8 @@ struct Level1 {
 	float before_physics(UnderwaterPhysics &physics, float elapsed);
 	void after_physics(UnderwaterPhysics &physics, Camera2D const &camera, std::optional<size_t> carried_body, float elapsed);
 	bool restart_requested(UnderwaterPhysics const &physics) const;
+	bool exit_reached() const;
+	void stop_sounds(float fade);
 	glm::vec2 shaken_center(glm::vec2 const &center, UnderwaterPhysics const &physics) const;
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, std::optional<size_t> carried_body,
 		glm::vec2 const &view_center, glm::vec2 const &view_size) const;
@@ -134,7 +137,7 @@ private:
 	//the corridor scrolls vertically inside the tighter view
 	static constexpr float corridor_height = 32.0f;
 	static constexpr float camera_height = 24.0f;
-	//seconds since the small fish was eaten or escaped
+	//seconds since the small fish was eaten
 	float end_time = 0.0f;
 	bool escaped = false;
 	//rockfall shake duration and animation time
@@ -193,6 +196,7 @@ private:
 	std::shared_ptr< Sound::PlayingSample > far_roar;
 	std::shared_ptr< Sound::PlayingSample > near_roar;
 	std::shared_ptr< Sound::PlayingSample > charge_roar;
+	std::vector<std::shared_ptr<Sound::PlayingSample>> effects;
 	void stop_roars(float fade);
 	//quiet the ambience during the chase and restore it while the big fish is pinned
 	static constexpr float ambient_quiet_volume = 0.15f;

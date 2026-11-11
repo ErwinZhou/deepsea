@@ -1,5 +1,6 @@
 #include "level2.hpp"
 
+#include <algorithm>
 #include <cassert>
 
 void Level2::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body) {
@@ -27,4 +28,8 @@ void Level2::prepare_water(Water::Look &look) const {
 	look.glow_radius = glm::vec2(5.5f, 4.0f);
 	look.brightness = scene_brightness;
 	look.time = clock;
+}
+
+float Level2::fade_amount() const {
+	return std::max(0.0f, 1.0f - clock / fade_in_time);
 }
