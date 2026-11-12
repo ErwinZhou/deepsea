@@ -9,6 +9,7 @@
 #include <optional>
 
 struct Level2 {
+	Level2();
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
 	void update(float elapsed, bool player_alive);
@@ -25,6 +26,10 @@ private:
 	static constexpr float camera_height = 24.0f;
 	//distance from the cave's left end to the player's starting position
 	static constexpr float entrance_distance = 12.0f;
+	//place the tunnel's lower opening one third of the way across the cave
+	static constexpr float tunnel_entrance_fraction = 0.33f;
+	//world width of the artwork, keeping its lower opening wide enough for the fish
+	static constexpr float tunnel_width = 42.0f;
 	static constexpr float scene_brightness = 1.0f;
 	//seconds to fade in from black at the start
 	static constexpr float fade_in_time = 1.5f;
@@ -39,6 +44,10 @@ private:
 	//only present if the player carried the jellyfish through the exit
 	std::optional<size_t> jelly_body;
 	std::optional<SpriteTexture> jellyfish_texture;
+	SpriteTexture tunnel_texture;
+	glm::vec2 tunnel_center{0.0f};
+	glm::vec2 tunnel_size{0.0f};
+	void setup_tunnel(UnderwaterPhysics &physics);
 	float clock = 0.0f;
 	float death_time = 0.0f;
 };
