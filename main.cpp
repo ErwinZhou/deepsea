@@ -3,6 +3,7 @@
 
 //The 'PlayMode' mode plays the game:
 #include "PlayMode.hpp"
+#include "Checkpoint.hpp"
 
 //For asset loading:
 #include "Load.hpp"
@@ -129,7 +130,19 @@ int main(int argc, char **argv) {
 	call_load_functions();
 
 	//------------ create game mode + make current --------------
-	Mode::set_current(std::make_shared<PlayMode>(start_level));
+	std::string checkpoint_file;
+	std::optional<Body2D> belly_contents;
+	if (argc == 1) {
+		checkpoint_file = checkpoint_path();
+		if (!checkpoint_file.empty()) {
+			const std::optional<Checkpoint> saved = load_checkpoint(checkpoint_file);
+			if (saved) {
+				start_level = saved->level == 2 ? PlayMode::LevelId::Two : PlayMode::LevelId::One;
+				belly_contents = saved->belly_contents;
+			}
+		}
+	}
+	Mode::set_current(std::make_shared<PlayMode>(start_level, belly_contents, checkpoint_file));
 
 	//------------ main loop ------------
 

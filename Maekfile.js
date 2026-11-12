@@ -163,6 +163,7 @@ if (maek.OS === 'windows') {
 //returns objFile: objFileBase + a platform-dependant suffix ('.o' or '.obj')
 const game_names = [
 	maek.CPP('PlayMode.cpp'),
+	maek.CPP('Checkpoint.cpp'),
 	maek.CPP('DrawSprites.cpp'),
 	maek.CPP('UnderwaterPhysics.cpp'),
 	maek.CPP('main.cpp'),
