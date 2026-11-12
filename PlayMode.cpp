@@ -77,6 +77,7 @@ PlayMode::PlayMode()
 	physics.bodies.push_back({.position = jelly_start, .radius = jelly_radius, .drag = jelly_drag, .current_scale = 0.0f, .kind = Body2D::Jelly});
 	//start beside the jellyfish with the crack in view
 	physics.bodies[fish_body].position = jelly_start - glm::vec2(2.4f, -0.2f);
+	tentacles.setup(physics.bodies[fish_body].position, physics.bounds_min.y);
 	const glm::vec2 extra_rock_offset(-4.0f, 2.0f);
 	physics.bodies.push_back({.position = physics.bodies[fish_body].position + extra_rock_offset, .radius = 0.35f});
 	camera.center = camera.constrain(physics.bodies[fish_body].position, physics.bounds_min, physics.bounds_max);
@@ -190,6 +191,7 @@ void PlayMode::update(float elapsed) {
 	}
 
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
+	tentacles.update(elapsed, physics.bodies[fish_body].position, physics.bodies[fish_body].active && !escaped);
 	float view_left = camera.center.x - 0.5f * camera.view_size.x;
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
@@ -498,6 +500,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		return glm::vec2(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
 	};
 	cave.draw(sprites, world_to_clip);
+	tentacles.draw(world_to_clip, clock);
 
 	// the rock art fills about 83 percent of its png, so this makes the drawn rock match its radius
 	constexpr float RockArtFill = 0.83f;

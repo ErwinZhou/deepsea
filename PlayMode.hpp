@@ -8,6 +8,7 @@
 #include "Cave.hpp"
 #include "Water.hpp"
 #include "Sound.hpp"
+#include "Tentacles.hpp"
 
 #include <cstddef>
 #include <optional>
@@ -52,6 +53,7 @@ struct PlayMode : Mode {
 	Cave cave;
 
 private:
+	Tentacles tentacles;
 	void update_interaction();
 	void spit();
 

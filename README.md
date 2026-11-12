@@ -21,3 +21,5 @@ Built on the course's base code. See [LICENSE](LICENSE).
 
 Credits: the fish, jaw, rock, wall, cavern background, jellyfish, coral and seaweed art in `assets/` was drawn by Sarah Garland for this game.
 `cavern_rock.png` is a softened version of Sarah's cavern background. The roar, rumble, chomp and rock hit sounds in `assets/sound/` were provided by Sarah Garland, and the `modified_` files are edited versions of them.
+
+Tentacle motion reference: [Argonaut's procedural animation demo](https://www.youtube.com/watch?v=qlfh_rv6khY) and [animal-proc-anim](https://github.com/argonautcode/animal-proc-anim).
