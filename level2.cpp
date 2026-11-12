@@ -9,12 +9,13 @@
 #include <stdexcept>
 #include <vector>
 
-//the lower opening's center, measured in the 1180 by 820 artwork from its upper-left corner
+//opening centers measured in the 1180 by 820 artwork from its upper-left corner
 static constexpr glm::vec2 TunnelEntranceUV(618.0f / 1180.0f, 558.0f / 820.0f);
+static constexpr glm::vec2 TunnelEndUV(991.0f / 1180.0f, 0.0f);
 //four-pixel cells keep collisions close to the silhouette without closing the narrow opening
 static constexpr unsigned TunnelCollisionPixels = 4;
 
-Level2::Level2() : tunnel_texture(data_path("level2/tunnel.png")) {
+Level2::Level2() : tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")) {
 }
 
 void Level2::setup_tunnel(UnderwaterPhysics &physics) {
@@ -22,6 +23,8 @@ void Level2::setup_tunnel(UnderwaterPhysics &physics) {
 	const float entrance_x = physics.bounds_min.x + tunnel_entrance_fraction * (physics.bounds_max.x - physics.bounds_min.x);
 	tunnel_center = glm::vec2(entrance_x - (TunnelEntranceUV.x - 0.5f) * tunnel_size.x,
 		physics.bounds_max.y - 0.5f * tunnel_size.y);
+	key_position = tunnel_center + glm::vec2((TunnelEndUV.x - 0.5f) * tunnel_size.x,
+		(0.5f - TunnelEndUV.y) * tunnel_size.y - key_end_inset);
 
 	glm::uvec2 size(0);
 	std::vector<glm::u8vec4> pixels;
@@ -129,6 +132,8 @@ glm::vec2 Level2::jelly_position(Body2D const &jelly) const {
 
 void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size);
+	const glm::vec2 key_size(key_height * float(key_texture.pixel_size.x) / float(key_texture.pixel_size.y), key_height);
+	sprites.draw(key_texture, world_to_clip, key_position, key_size);
 	if (jelly_body && physics.bodies[*jelly_body].active) {
 		assert(jellyfish_texture && "a level 2 jellyfish requires its texture");
 		const float pulse = 1.0f + 0.035f * std::sin(clock * 1.3f);

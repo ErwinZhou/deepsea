@@ -30,6 +30,9 @@ private:
 	static constexpr float tunnel_entrance_fraction = 0.33f;
 	//world width of the artwork, keeping its lower opening wide enough for the fish
 	static constexpr float tunnel_width = 42.0f;
+	//drawn key height and its distance below the tunnel's upper opening
+	static constexpr float key_height = 1.6f;
+	static constexpr float key_end_inset = 1.5f;
 	static constexpr float scene_brightness = 1.0f;
 	//seconds to fade in from black at the start
 	static constexpr float fade_in_time = 1.5f;
@@ -45,6 +48,8 @@ private:
 	std::optional<size_t> jelly_body;
 	std::optional<SpriteTexture> jellyfish_texture;
 	SpriteTexture tunnel_texture;
+	SpriteTexture key_texture;
+	glm::vec2 key_position{0.0f};
 	glm::vec2 tunnel_center{0.0f};
 	glm::vec2 tunnel_size{0.0f};
 	void setup_tunnel(UnderwaterPhysics &physics);
