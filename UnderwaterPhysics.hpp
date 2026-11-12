@@ -15,7 +15,7 @@ struct Body2D {
 	float current_scale = 1.0f;
 	bool active = true;
 	//identify the player and collectible bodies
-	enum Kind { Fish, Rock, Jelly } kind = Rock;
+	enum Kind { Fish, Rock, Jelly, Keycard } kind = Rock;
 	// only a fresh player spit can damage cave targets, falling rocks start harmless
 	bool player_spat = false;
 

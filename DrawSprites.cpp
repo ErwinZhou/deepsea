@@ -14,11 +14,19 @@
 SpriteTexture::SpriteTexture(std::string const &filename) {
 	std::vector<glm::u8vec4> pixels;
 	load_png(filename, &pixel_size, &pixels, LowerLeftOrigin);
+	upload(pixels.data());
+}
+
+SpriteTexture::SpriteTexture(glm::u8vec4 const &color) : pixel_size(1) {
+	upload(&color);
+}
+
+void SpriteTexture::upload(glm::u8vec4 const *pixels) {
 	glGenTextures(1, &texture);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, pixel_size.x, pixel_size.y,
-		0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	//based on https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGenerateMipmap.xhtml
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);

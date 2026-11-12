@@ -95,6 +95,7 @@ struct Level1 {
 	void setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body);
 	//obstacle hits must be checked before physics resolves their contacts
 	float before_physics(UnderwaterPhysics &physics, float elapsed);
+	void check_keycard(UnderwaterPhysics &physics);
 	void after_physics(UnderwaterPhysics &physics, Camera2D const &camera, std::optional<size_t> carried_body, float elapsed);
 	bool restart_requested(UnderwaterPhysics const &physics) const;
 	bool exit_reached() const;
@@ -133,6 +134,10 @@ struct Level1 {
 private:
 	void update_obstacles(UnderwaterPhysics &physics, float elapsed);
 	size_t fish_body = 0;
+	size_t keycard_body = 0;
+	StaticBox2D machine;
+	bool machine_on = false;
+	SpriteTexture square{glm::u8vec4(255)};
 	static constexpr float level_length = 170.0f;
 	//the corridor scrolls vertically inside the tighter view
 	static constexpr float corridor_height = 32.0f;

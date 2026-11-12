@@ -8,12 +8,16 @@
 
 struct SpriteTexture {
 	explicit SpriteTexture(std::string const &filename);
+	explicit SpriteTexture(glm::u8vec4 const &color);
 	~SpriteTexture();
 	SpriteTexture(SpriteTexture const &) = delete;
 	SpriteTexture &operator=(SpriteTexture const &) = delete;
 
 	GLuint texture = 0;
 	glm::uvec2 pixel_size = glm::uvec2(0);
+
+private:
+	void upload(glm::u8vec4 const *pixels);
 };
 
 // every sprite is the same square, stretched and turned

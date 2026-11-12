@@ -35,7 +35,7 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 }
 
 std::optional<Body2D> PlayMode::carried_contents() const {
-	if (carried_body) {
+	if (carried_body && physics.bodies[*carried_body].kind != Body2D::Keycard) {
 		return physics.bodies[*carried_body];
 	}
 	return std::nullopt;
@@ -125,6 +125,7 @@ void PlayMode::update(float elapsed) {
 			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
 		}
 		fish.add_force(swim_thrust);
+		if (level1) level1->check_keycard(physics);
 		physics.step();
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
@@ -219,9 +220,9 @@ void PlayMode::spit() {
 	body.velocity = body.kind == Body2D::Jelly ? glm::vec2(0.0f) : fish.velocity;
 	body.force = glm::vec2(0.0f);
 	body.active = true;
-	body.player_spat = body.kind == Body2D::Rock;
+	body.player_spat = body.kind == Body2D::Rock || body.kind == Body2D::Keycard;
 	// the jellyfish floats where it is released
-	if (body.kind == Body2D::Rock) body.apply_impulse(facing * spit_impulse);
+	if (body.player_spat) body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
 	if (level1) {

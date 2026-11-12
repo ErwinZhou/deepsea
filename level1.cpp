@@ -66,6 +66,8 @@ static constexpr float WallCrackHitboxScale = 1.4f;
 static constexpr float HangingCrackHitboxScale = 1.2f;
 static constexpr float ExitShift = 2.0f;
 static constexpr float ExitWidth = 6.0f;
+static constexpr float MachineSize = 3.0f;
+static constexpr float KeycardSize = 0.85f;
 //the hanging rock's png is drawn this many units square, with its top against the ceiling
 static constexpr float HangingSize = 9.0f;
 static constexpr float CoralSize = 3.5f;
@@ -209,6 +211,17 @@ void Level1::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_b
 	physics.bodies[fish_body].position = jelly_start - glm::vec2(2.4f, -0.2f);
 	const glm::vec2 extra_rock_offset(-4.0f, 2.0f);
 	physics.bodies.push_back({.position = physics.bodies[fish_body].position + extra_rock_offset, .radius = 0.35f});
+
+	machine.min = glm::vec2(first_wall.box.min.x - 5.0f, bounds_min.y);
+	machine.max = machine.min + glm::vec2(MachineSize);
+	machine_on = false;
+	physics.obstacles.push_back(machine);
+	keycard_body = physics.bodies.size();
+	physics.bodies.push_back({
+		.position = glm::vec2(machine.min.x - 5.0f, bounds_min.y + 5.0f),
+		.radius = 0.6f, .current_scale = 0.0f, .kind = Body2D::Keycard
+	});
+
 	camera.center = camera.constrain(physics.bodies[fish_body].position, physics.bounds_min, physics.bounds_max);
 	big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 	//starts silent and fades in with the picture
@@ -251,6 +264,19 @@ static float hit_time(Body2D const &rock, StaticBox2D const &box, float elapsed,
 		*contact = glm::clamp(rock.position + rock.velocity * first, box.min, box.max);
 	}
 	return first;
+}
+
+void Level1::check_keycard(UnderwaterPhysics &physics) {
+	Body2D &keycard = physics.bodies[keycard_body];
+	if (machine_on || !keycard.active || !keycard.player_spat) return;
+	glm::vec2 contact;
+	glm::vec2 offset = keycard.position - glm::clamp(keycard.position, machine.min, machine.max);
+	if (glm::dot(offset, offset) <= keycard.radius * keycard.radius
+		|| std::isfinite(hit_time(keycard, machine, float(UnderwaterPhysics::fixed_step), &contact))) {
+		keycard.active = false;
+		keycard.player_spat = false;
+		machine_on = true;
+	}
 }
 
 static glm::vec2 world_point(glm::vec2 const &point, glm::vec2 const &center, glm::vec2 const &size, float angle) {
@@ -424,6 +450,7 @@ void Level1::update_obstacles(UnderwaterPhysics &physics, float elapsed) {
 	}
 
 	physics.obstacles.clear();
+	physics.obstacles.push_back(machine);
 	light_blockers.clear();
 	auto add_target = [&](Target const &target, glm::vec2 const &center, glm::vec2 const &size, float angle, size_t shadow_parts) {
 		for (size_t group = 0; group < shadow_parts; ++group) {
@@ -499,6 +526,15 @@ glm::vec2 Level1::shake() const {
 }
 
 void Level1::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
+	uint8_t shade = machine_on ? 255 : 48;
+	glm::u8vec4 machine_color(shade, shade, shade, 255);
+	sprites.draw(square, world_to_clip, 0.5f * (machine.min + machine.max), machine.max - machine.min,
+		0.0f, false, machine_color, 0.0f, DrawSprites::Emissive);
+	Body2D const &keycard = physics.bodies[keycard_body];
+	if (keycard.active) {
+		sprites.draw(square, world_to_clip, keycard.position, glm::vec2(KeycardSize),
+			0.0f, false, glm::u8vec4(150, 150, 150, 255), 0.0f, DrawSprites::Emissive);
+	}
 	if (physics.bodies[jelly_body].active) {
 		const float pulse = 1.0f + 0.035f * std::sin(clock * 1.3f);
 		sprites.draw(jellyfish_texture, world_to_clip, jelly_position(physics), glm::vec2(1.8f * pulse, 2.15f / pulse),
