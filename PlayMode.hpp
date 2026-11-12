@@ -11,12 +11,14 @@
 
 #include <cstddef>
 #include <optional>
+#include <string>
 
 struct PlayMode : Mode {
 	enum class FishState { Normal, Kirby, Fat };
 	enum class LevelId { One = 1, Two = 2 };
 
-	explicit PlayMode(LevelId start_level = LevelId::One, std::optional<Body2D> const &belly_contents = std::nullopt);
+	explicit PlayMode(LevelId start_level = LevelId::One, std::optional<Body2D> const &belly_contents = std::nullopt,
+		std::string const &checkpoint_file = "");
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
 	void update(float elapsed) override;
@@ -52,6 +54,11 @@ struct PlayMode : Mode {
 private:
 	void update_interaction();
 	void spit();
+	std::optional<Body2D> carried_contents() const;
+	//empty for explicit level previews so they cannot overwrite normal progress
+	std::string checkpoint_file;
+	//retry restores the entrance checkpoint rather than the player's later inventory
+	std::optional<Body2D> entry_belly_contents;
 
 	struct {
 		bool up = false;

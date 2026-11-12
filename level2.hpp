@@ -11,7 +11,8 @@
 struct Level2 {
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
-	void update(float elapsed);
+	void update(float elapsed, bool player_alive);
+	bool restart_requested() const;
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 		std::optional<size_t> carried_body) const;
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
@@ -27,6 +28,9 @@ private:
 	static constexpr float scene_brightness = 1.0f;
 	//seconds to fade in from black at the start
 	static constexpr float fade_in_time = 1.5f;
+	//seconds to fade to black and retry after the player dies
+	static constexpr float death_fade_time = 1.5f;
+	static constexpr float restart_delay = 3.0f;
 	//base light strength and how far it rises and falls during the slow pulse
 	static constexpr float jelly_glow = 1.2f;
 	static constexpr float jelly_glow_pulse = 0.12f;
@@ -36,4 +40,5 @@ private:
 	std::optional<size_t> jelly_body;
 	std::optional<SpriteTexture> jellyfish_texture;
 	float clock = 0.0f;
+	float death_time = 0.0f;
 };

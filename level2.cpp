@@ -39,8 +39,15 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	return carried_body;
 }
 
-void Level2::update(float elapsed) {
+void Level2::update(float elapsed, bool player_alive) {
 	clock += elapsed;
+	if (!player_alive) {
+		death_time += elapsed;
+	}
+}
+
+bool Level2::restart_requested() const {
+	return death_time > restart_delay;
 }
 
 glm::vec3 Level2::prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
@@ -80,5 +87,5 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 }
 
 float Level2::fade_amount() const {
-	return std::max(0.0f, 1.0f - clock / fade_in_time);
+	return std::max(std::max(0.0f, 1.0f - clock / fade_in_time), std::min(1.0f, death_time / death_fade_time));
 }

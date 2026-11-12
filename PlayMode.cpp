@@ -3,6 +3,7 @@
 #include "data_path.hpp"
 #include "gl_errors.hpp"
 #include "Sound.hpp"
+#include "Checkpoint.hpp"
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -10,8 +11,10 @@
 #include <cassert>
 #include <cmath>
 
-PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents)
+PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents, std::string const &checkpoint_file)
 	: level_id(start_level),
+	  checkpoint_file(checkpoint_file),
+	  entry_belly_contents(belly_contents),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
@@ -29,6 +32,13 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 			state = FishState::Fat;
 		}
 	}
+}
+
+std::optional<Body2D> PlayMode::carried_contents() const {
+	if (carried_body) {
+		return physics.bodies[*carried_body];
+	}
+	return std::nullopt;
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
@@ -66,13 +76,9 @@ void PlayMode::update(float elapsed) {
 	if (transition_time >= 0.0f) {
 		transition_time += elapsed;
 		if (transition_time >= transition_fade_time) {
-			std::optional<Body2D> belly_contents;
-			if (carried_body) {
-				belly_contents = physics.bodies[*carried_body];
-			}
 			//keep this mode alive until update returns after replacing it
 			std::shared_ptr<Mode> const keep = shared_from_this();
-			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, belly_contents));
+			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, carried_contents(), checkpoint_file));
 		}
 		return;
 	}
@@ -103,7 +109,7 @@ void PlayMode::update(float elapsed) {
 	if (level1) {
 		hit_stop = level1->before_physics(physics, elapsed);
 	} else {
-		level2->update(elapsed);
+		level2->update(elapsed, physics.bodies[fish_body].active);
 	}
 
 	// step physics at a fixed rate so it plays the same at any frame rate
@@ -128,6 +134,7 @@ void PlayMode::update(float elapsed) {
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
+	bool restart = false;
 	if (level1) {
 		level1->after_physics(physics, camera, carried_body, elapsed);
 
@@ -136,11 +143,19 @@ void PlayMode::update(float elapsed) {
 			input = {};
 			hit_stop = 0.0f;
 			level1->stop_sounds(transition_fade_time);
-		} else if (level1->restart_requested(physics)) {
-			//keep this mode alive until update returns after replacing it
-			std::shared_ptr<Mode> const keep = shared_from_this();
-			Mode::set_current(std::make_shared<PlayMode>(level_id));
+			if (!checkpoint_file.empty()) {
+				save_checkpoint(checkpoint_file, Checkpoint{.level = 2, .checkpoint = 0, .belly_contents = carried_contents()});
+			}
+		} else {
+			restart = level1->restart_requested(physics);
 		}
+	} else {
+		restart = level2->restart_requested();
+	}
+	if (restart) {
+		//keep this mode alive until update returns after replacing it
+		std::shared_ptr<Mode> const keep = shared_from_this();
+		Mode::set_current(std::make_shared<PlayMode>(level_id, entry_belly_contents, checkpoint_file));
 	}
 }
 
