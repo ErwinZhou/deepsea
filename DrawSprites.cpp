@@ -42,6 +42,7 @@ DrawSprites::DrawSprites() {
 		"#define PLAYER " + std::to_string(Player) + "\n" +
 		"#define CRACKED " + std::to_string(Cracked) + "\n" +
 		"#define PILLAR " + std::to_string(Pillar) + "\n" +
+		"#define LIGHT_ONLY " + std::to_string(LightOnly) + "\n" +
 		"#define FAR_TAIL " + std::to_string(FarTail) + "\n";
 
 	program = gl_compile_program(
@@ -84,7 +85,7 @@ DrawSprites::DrawSprites() {
 		"	}\n"
 		"	if (color.a < 0.0039 && eye_halo < 0.01) discard;\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, 0.5 * clip + 0.5);\n"
-		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR;\n"
+		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR || MATERIAL == LIGHT_ONLY;\n"
 		"	float lit = MATERIAL != EMISSIVE ? light(world, surface) : 1.0;\n"
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
 		//adjust brightness for each kind of sprite
@@ -118,6 +119,11 @@ DrawSprites::DrawSprites() {
 		"		wet_shine = 0.5 * shine * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
 		"	}\n"
 		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
+		//keep light-dependent objects hidden without a nearby, unblocked source
+		"	if (MATERIAL == LIGHT_ONLY) {\n"
+		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
+		"		if (shade == 0.0) discard;\n"
+		"	}\n"
 		//wall cracks need the jellyfish nearby
 		"	if (MATERIAL == CRACKED) {\n"
 		"		vec2 from_jelly = (world - JELLY_LIGHT.xy) / GLOW_RADIUS;\n"

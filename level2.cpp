@@ -133,7 +133,7 @@ glm::vec2 Level2::jelly_position(Body2D const &jelly) const {
 void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size);
 	const glm::vec2 key_size(key_height * float(key_texture.pixel_size.x) / float(key_texture.pixel_size.y), key_height);
-	sprites.draw(key_texture, world_to_clip, key_position, key_size);
+	sprites.draw(key_texture, world_to_clip, key_position, key_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
 	if (jelly_body && physics.bodies[*jelly_body].active) {
 		assert(jellyfish_texture && "a level 2 jellyfish requires its texture");
 		const float pulse = 1.0f + 0.035f * std::sin(clock * 1.3f);
