@@ -297,8 +297,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	SpriteTexture const &current_fish_texture = (carried_body && physics.bodies[*carried_body].kind == Body2D::Jelly) ? fat_glow_texture : state == FishState::Fat ? fat_texture
 		: state == FishState::Kirby ? kirby_texture : fish_texture;
 	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
-	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
-		glm::u8vec4(255), 0.0f, DrawSprites::Player);
+	if (fish.active) {
+		if (level2) {
+			level2->draw_fish_mimic(sprites, world_to_clip, current_fish_texture, fish.position, fish_size, angle, flip_x);
+		}
+		sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
+			glm::u8vec4(255), 0.0f, DrawSprites::Player);
+	}
 	if (level1) {
 		level1->draw_foreground(sprites, world_to_clip);
 	}

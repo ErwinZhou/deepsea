@@ -86,6 +86,12 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	}
 }
 
+void Level2::draw_fish_mimic(DrawSprites const &sprites, glm::mat4 const &world_to_clip, SpriteTexture const &texture,
+	glm::vec2 const &player_position, glm::vec2 const &size, float angle, bool flip_x) const {
+	sprites.draw(texture, world_to_clip, player_position + mimic_offset, size, angle, flip_x,
+		glm::u8vec4(255), 0.0f, DrawSprites::Player);
+}
+
 float Level2::fade_amount() const {
 	return std::max(std::max(0.0f, 1.0f - clock / fade_in_time), std::min(1.0f, death_time / death_fade_time));
 }

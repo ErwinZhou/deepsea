@@ -18,6 +18,10 @@ struct Level2 {
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
 
+	//small scary fish features
+	void draw_fish_mimic(DrawSprites const &sprites, glm::mat4 const &world_to_clip, SpriteTexture const &texture,
+		glm::vec2 const &player_position, glm::vec2 const &size, float angle, bool flip_x) const;
+
 private:
 	static constexpr float level_length = 170.0f;
 	//the corridor scrolls vertically inside the tighter view
@@ -41,4 +45,7 @@ private:
 	std::optional<SpriteTexture> jellyfish_texture;
 	float clock = 0.0f;
 	float death_time = 0.0f;
+
+	//small scary fish constants
+	static constexpr glm::vec2 mimic_offset{-4.0f, 0.0f}; // default to be 4 world units behind the player
 };
