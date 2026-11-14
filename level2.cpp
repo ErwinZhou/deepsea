@@ -9,8 +9,7 @@
 #include <stdexcept>
 #include <vector>
 
-//opening centers measured in the 1180 by 820 artwork from its upper-left corner
-static constexpr glm::vec2 TunnelEntranceUV(618.0f / 1180.0f, 558.0f / 820.0f);
+//upper opening center measured in the 1180 by 820 artwork from its upper-left corner
 static constexpr glm::vec2 TunnelEndUV(991.0f / 1180.0f, 0.0f);
 //four-pixel cells keep collisions close to the silhouette without closing the narrow opening
 static constexpr unsigned TunnelCollisionPixels = 4;
@@ -20,8 +19,8 @@ Level2::Level2() : tunnel_texture(data_path("level2/tunnel.png")), key_texture(d
 
 void Level2::setup_tunnel(UnderwaterPhysics &physics) {
 	tunnel_size = tunnel_width * glm::vec2(1.0f, float(tunnel_texture.pixel_size.y) / float(tunnel_texture.pixel_size.x));
-	const float entrance_x = physics.bounds_min.x + tunnel_entrance_fraction * (physics.bounds_max.x - physics.bounds_min.x);
-	tunnel_center = glm::vec2(entrance_x - (TunnelEntranceUV.x - 0.5f) * tunnel_size.x,
+	const float tunnel_left = physics.bounds_min.x + tunnel_start_fraction * (physics.bounds_max.x - physics.bounds_min.x);
+	tunnel_center = glm::vec2(tunnel_left + 0.5f * tunnel_size.x,
 		physics.bounds_max.y - 0.5f * tunnel_size.y);
 	key_position = tunnel_center + glm::vec2((TunnelEndUV.x - 0.5f) * tunnel_size.x,
 		(0.5f - TunnelEndUV.y) * tunnel_size.y - key_end_inset);

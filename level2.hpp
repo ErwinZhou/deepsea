@@ -22,14 +22,14 @@ struct Level2 {
 private:
 	static constexpr float level_length = 170.0f;
 	//the corridor scrolls vertically inside the tighter view
-	static constexpr float corridor_height = 32.0f;
+	static constexpr float corridor_height = 80.0f;
 	static constexpr float camera_height = 24.0f;
 	//distance from the cave's left end to the player's starting position
 	static constexpr float entrance_distance = 12.0f;
-	//place the tunnel's lower opening one third of the way across the cave
-	static constexpr float tunnel_entrance_fraction = 0.33f;
-	//world width of the artwork, keeping its lower opening wide enough for the fish
-	static constexpr float tunnel_width = 42.0f;
+	//place the tunnel's left edge one third of the way across the cave
+	static constexpr float tunnel_start_fraction = 1.0f / 3.0f;
+	//world width gives the fish clearance through the artwork's narrow inner turns
+	static constexpr float tunnel_width = 127.0f;
 	//drawn key height and its distance below the tunnel's upper opening
 	static constexpr float key_height = 1.6f;
 	static constexpr float key_end_inset = 1.5f;
