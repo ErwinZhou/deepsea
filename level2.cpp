@@ -57,8 +57,13 @@ void Level2::update(float elapsed, UnderwaterPhysics const &physics, Camera2D co
 	previous_player_position = player.position;
 	if (!player.active) {
 		death_time += elapsed;
-		small_fish.velocity = glm::vec2(0.0f);
-		return;
+		if (small_fish.state == SmallScaryFish::State::Arriving || small_fish.state == SmallScaryFish::State::Mimicking) {
+			small_fish.state = SmallScaryFish::State::Fleeing;
+			small_fish.velocity = glm::vec2(0.0f);
+		}
+		if (small_fish.state != SmallScaryFish::State::Fleeing) {
+			return;
+		}
 	}
 	update_small_fish(std::min(elapsed, 0.1f), physics, camera, player, player_step, player_movement, player_angle);
 }
