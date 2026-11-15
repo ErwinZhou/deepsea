@@ -8,19 +8,29 @@
 #include <cstddef>
 #include <optional>
 
+struct SmallScaryFish {
+	enum class State { Waiting, Arriving, Mimicking, Fleeing, Gone };
+	State state = State::Waiting;
+	glm::vec2 position{0.0f};
+	glm::vec2 velocity{0.0f};
+	glm::vec2 arrival_offset{0.0f};
+	float angle = 0.0f;
+	float radius = 0.0f;
+};
+
 struct Level2 {
+	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
-	void update(float elapsed, bool player_alive);
+	void update(float elapsed, UnderwaterPhysics const &physics, Camera2D const &camera, size_t player_body,
+		glm::vec2 const &player_movement, float player_angle);
 	bool restart_requested() const;
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 		std::optional<size_t> carried_body) const;
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
 
-	//small scary fish features
-	void draw_fish_mimic(DrawSprites const &sprites, glm::mat4 const &world_to_clip, SpriteTexture const &texture,
-		glm::vec2 const &player_position, glm::vec2 const &size, float angle, bool flip_x) const;
+	void react_to_suction(glm::vec2 const &mouth, glm::vec2 const &facing, float range, float cone_cos, float any_side);
 
 private:
 	static constexpr float level_length = 170.0f;
@@ -46,6 +56,18 @@ private:
 	float clock = 0.0f;
 	float death_time = 0.0f;
 
-	//small scary fish constants
-	static constexpr glm::vec2 mimic_offset{-4.0f, 0.0f}; // default to be 4 world units behind the player
+	static constexpr float mimic_start_delay = 3.0f;
+	static constexpr float mimic_screen_fraction = 1.0f / 3.0f;
+	static constexpr float mimic_speed_multiplier = 3.0f;
+	static constexpr float mimic_approach_distance = 4.0f;
+	static constexpr float mimic_approach_cos = 0.6f;
+	static constexpr float mimic_offscreen_margin = 1.0f;
+	SpriteTexture const &small_fish_texture;
+	const float small_fish_height;
+	const float small_fish_fast_speed;
+	SmallScaryFish small_fish;
+	glm::vec2 previous_player_position{0.0f};
+	bool small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to, UnderwaterPhysics const &physics) const;
+	void update_small_fish(float elapsed, UnderwaterPhysics const &physics, Camera2D const &camera,
+		Body2D const &player, glm::vec2 const &player_step, glm::vec2 const &player_movement, float player_angle);
 };

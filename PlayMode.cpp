@@ -26,7 +26,7 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 		level1->setup(physics, camera, fish_body);
 	} else {
 		assert(level_id == LevelId::Two && "play mode requires a supported level");
-		level2.emplace();
+		level2.emplace(fish_texture, fish_height, max_swim_speed);
 		carried_body = level2->setup(physics, camera, fish_body, belly_contents);
 		if (carried_body) {
 			state = FishState::Fat;
@@ -108,8 +108,6 @@ void PlayMode::update(float elapsed) {
 	}
 	if (level1) {
 		hit_stop = level1->before_physics(physics, elapsed);
-	} else {
-		level2->update(elapsed, physics.bodies[fish_body].active);
 	}
 
 	// step physics at a fixed rate so it plays the same at any frame rate
@@ -132,6 +130,9 @@ void PlayMode::update(float elapsed) {
 	}
 
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
+	if (level2) {
+		level2->update(elapsed, physics, camera, fish_body, move, fish_visual_angle);
+	}
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
 	bool restart = false;
@@ -176,6 +177,9 @@ void PlayMode::update_interaction() {
 
 	glm::vec2 mouth = fish.position + facing * mouth_offset;
 	float cone_cos = std::cos(glm::radians(suction_half_angle));
+	if (level2) {
+		level2->react_to_suction(mouth, facing, suction_range, cone_cos, suction_any_side);
+	}
 	float nearest_distance = suction_range;
 	std::optional<size_t> target;
 	// find the closest movable body in the cone in front of the mouth
@@ -298,9 +302,6 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		: state == FishState::Kirby ? kirby_texture : fish_texture;
 	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
 	if (fish.active) {
-		if (level2) {
-			level2->draw_fish_mimic(sprites, world_to_clip, current_fish_texture, fish.position, fish_size, angle, flip_x);
-		}
 		sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
 			glm::u8vec4(255), 0.0f, DrawSprites::Player);
 	}
