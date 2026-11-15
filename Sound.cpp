@@ -89,6 +89,12 @@ void Sound::init() {
 }
 
 
+void Sound::set_paused(bool paused) {
+	if (stream == nullptr) return;
+	if (paused) SDL_PauseAudioStreamDevice(stream);
+	else SDL_ResumeAudioStreamDevice(stream);
+}
+
 void Sound::shutdown() {
 	if (stream != nullptr) {
 		//stop audio playback:

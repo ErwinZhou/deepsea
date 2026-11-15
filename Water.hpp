@@ -46,7 +46,7 @@ struct Water {
 	void begin(Look const &look);
 	void haze();
 	// draw the scene to the window
-	void finish();
+	void finish(float display_gain = 1.0f, bool grain = true);
 
 	// shader functions used by both water and sprites
 	static std::string const glsl;
@@ -61,6 +61,8 @@ private:
 	GLuint haze_program = 0;
 	GLuint finish_program = 0;
 	GLint frame_uniform = -1;
+	GLint display_gain_uniform = -1;
+	GLint grain_uniform = -1;
 	Uniforms haze_uniforms;
 	// haze and the final pass use the same fullscreen triangle
 	GLuint empty_vertex_array = 0;

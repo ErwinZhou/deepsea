@@ -11,8 +11,10 @@
 #include <cassert>
 #include <cmath>
 
-PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents, std::string const &checkpoint_file)
+PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents, std::string const &checkpoint_file,
+	float display_gain)
 	: level_id(start_level),
+	  display_gain(display_gain),
 	  checkpoint_file(checkpoint_file),
 	  entry_belly_contents(belly_contents),
 	  fish_texture(data_path("normal.png")),
@@ -41,10 +43,14 @@ std::optional<Body2D> PlayMode::carried_contents() const {
 	return std::nullopt;
 }
 
+void PlayMode::clear_input() {
+	input = {};
+	if (state == FishState::Kirby) state = FishState::Normal;
+}
+
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
 	if (evt.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
-		input = {};
-		if (state == FishState::Kirby) state = FishState::Normal;
+		clear_input();
 		return true;
 	}
 	if (evt.type != SDL_EVENT_KEY_DOWN && evt.type != SDL_EVENT_KEY_UP) return false;
@@ -78,7 +84,7 @@ void PlayMode::update(float elapsed) {
 		if (transition_time >= transition_fade_time) {
 			//keep this mode alive until update returns after replacing it
 			std::shared_ptr<Mode> const keep = shared_from_this();
-			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, carried_contents(), checkpoint_file));
+			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, carried_contents(), checkpoint_file, display_gain));
 		}
 		return;
 	}
@@ -155,7 +161,7 @@ void PlayMode::update(float elapsed) {
 	if (restart) {
 		//keep this mode alive until update returns after replacing it
 		std::shared_ptr<Mode> const keep = shared_from_this();
-		Mode::set_current(std::make_shared<PlayMode>(level_id, entry_belly_contents, checkpoint_file));
+		Mode::set_current(std::make_shared<PlayMode>(level_id, entry_belly_contents, checkpoint_file, display_gain));
 	}
 }
 
@@ -302,7 +308,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	if (level1) {
 		level1->draw_foreground(sprites, world_to_clip);
 	}
-	water.finish();
+	water.finish(display_gain);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 

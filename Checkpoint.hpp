@@ -13,6 +13,6 @@ struct Checkpoint {
 	std::optional<Body2D> belly_contents;
 };
 
-std::string checkpoint_path();
+std::string preference_path(std::string const &filename);
 std::optional<Checkpoint> load_checkpoint(std::string const &filename);
 bool save_checkpoint(std::string const &filename, Checkpoint const &checkpoint);

@@ -18,7 +18,8 @@ struct PlayMode : Mode {
 	enum class LevelId { One = 1, Two = 2 };
 
 	explicit PlayMode(LevelId start_level = LevelId::One, std::optional<Body2D> const &belly_contents = std::nullopt,
-		std::string const &checkpoint_file = "");
+		std::string const &checkpoint_file = "", float display_gain = 1.0f);
+	void clear_input();
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
 	void update(float elapsed) override;
@@ -50,6 +51,7 @@ struct PlayMode : Mode {
 	LevelId const level_id;
 	std::optional<Level1> level1;
 	std::optional<Level2> level2;
+	float display_gain;
 
 private:
 	void update_interaction();

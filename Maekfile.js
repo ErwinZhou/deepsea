@@ -121,6 +121,7 @@ let copies = [
 	maek.COPY(`${NEST_LIBS}/opusfile/dist/README-opusfile.txt`, `dist/README-opusfile.txt`),
 	maek.COPY(`${NEST_LIBS}/libogg/dist/README-libogg.txt`, `dist/README-libogg.txt`),
 	maek.COPY('assets/cavern_background.png', 'dist/cavern_background.png'),
+	maek.COPY('assets/brightness.png', 'dist/brightness.png'),
 	maek.COPY('assets/normal.png', 'dist/normal.png'),
 	maek.COPY('assets/kirby.png', 'dist/kirby.png'),
 	maek.COPY('assets/fat.png', 'dist/fat.png'),
@@ -163,6 +164,7 @@ if (maek.OS === 'windows') {
 //returns objFile: objFileBase + a platform-dependant suffix ('.o' or '.obj')
 const game_names = [
 	maek.CPP('PlayMode.cpp'),
+	maek.CPP('BrightnessMode.cpp'),
 	maek.CPP('Checkpoint.cpp'),
 	maek.CPP('DrawSprites.cpp'),
 	maek.CPP('UnderwaterPhysics.cpp'),
