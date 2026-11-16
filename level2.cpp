@@ -11,6 +11,8 @@
 //based on https://en.cppreference.com/w/cpp/numeric/random/uniform_real_distribution,
 //used for:
 //(1) small scary fish random appear seconds interval generation
+//(2) small scary fish group sizes random generation
+//(3) small scary fish group initial positioning
 static std::mt19937 mimic_rng{std::random_device{}()};
 
 static float mimic_random_between(float low, float high) {
@@ -50,18 +52,45 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 		physics.bounds_min.x + mimic_end_fraction * (physics.bounds_max.x - physics.bounds_min.x),
 		physics.bounds_max.y - fish_group_depth_fraction * (physics.bounds_max.y - physics.bounds_min.y));
 
-	//arrange fish in rows of two, three, and two
+	//spaced starting points prevent overlap after random shifts
 	const std::array<glm::vec2, fish_group_count> group_offsets{
-		glm::vec2(-2.0f, 1.5f), glm::vec2(2.0f, 1.5f),
-		glm::vec2(-3.0f, 0.0f), glm::vec2(0.0f, 0.0f), glm::vec2(3.0f, 0.0f),
-		glm::vec2(-2.0f, -1.5f), glm::vec2(2.0f, -1.5f)};
+		glm::vec2(-3.5f, 3.5f), glm::vec2(3.5f, 3.5f),
+		glm::vec2(-7.0f, 0.0f), glm::vec2(0.0f, 0.0f), glm::vec2(7.0f, 0.0f),
+		glm::vec2(-3.5f, -3.5f), glm::vec2(3.5f, -3.5f)};
+
+	//give each fish a different size range
+	std::array<float, fish_group_count> group_scales{};
+	const float scale_step = (fish_group_scale_range.y - fish_group_scale_range.x) / float(fish_group_count);
+	for (size_t i = 0; i < group_scales.size(); ++i) {
+		const float low = fish_group_scale_range.x + float(i) * scale_step;
+		const float high = std::min(fish_group_scale_range.y, low + scale_step);
+		group_scales[i] = mimic_random_between(low, high);
+	}
+
+	//randomize which positions get the larger fish
+	std::shuffle(group_scales.begin(), group_scales.end(), mimic_rng);
 
 	//start every fish still and facing right
+	glm::vec2 group_average(0.0f);
 	for (size_t i = 0; i < fish_group.size(); ++i) {
 		fish_group[i] = SmallScaryFish{};
 		fish_group[i].state = SmallScaryFish::State::Dormant;
-		fish_group[i].position = group_center + group_offsets[i];
-		fish_group[i].radius = physics.bodies[player_body].radius;
+		fish_group[i].scale = group_scales[i];
+
+		//grow the collision body with the drawn fish
+		fish_group[i].radius = physics.bodies[player_body].radius * group_scales[i];
+
+		//shift each fish randomly around its starting point
+		fish_group[i].position = group_center + group_offsets[i] + glm::vec2(
+			mimic_random_between(-fish_group_position_offset, fish_group_position_offset),
+			mimic_random_between(-fish_group_position_offset, fish_group_position_offset));
+		group_average += fish_group[i].position;
+	}
+
+	//keep the group centered at its original position
+	group_average /= float(fish_group.size());
+	for (SmallScaryFish &fish : fish_group) {
+		fish.position += group_center - group_average;
 	}
 
 	fish_group_triggered = false;
@@ -145,10 +174,11 @@ void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &c
 	update_small_fish(std::min(elapsed, 0.1f), physics, camera, player, player_step, player_movement, player_angle);
 }
 
-bool Level2::small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to, UnderwaterPhysics const &physics) const {
+bool Level2::small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to,
+	UnderwaterPhysics const &physics, float radius) const {
 	//leave room for the fish body at both ends of the path
-	const glm::vec2 low = physics.bounds_min + small_fish.radius;
-	const glm::vec2 high = physics.bounds_max - small_fish.radius;
+	const glm::vec2 low = physics.bounds_min + radius;
+	const glm::vec2 high = physics.bounds_max - radius;
 	for (unsigned axis = 0; axis < 2; ++axis) {
 		if (from[axis] < low[axis] || from[axis] > high[axis] || to[axis] < low[axis] || to[axis] > high[axis]) {
 			return false;
@@ -158,8 +188,8 @@ bool Level2::small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to, U
 	const glm::vec2 delta = to - from;
 	for (StaticBox2D const &box : physics.obstacles) {
 		//enlarge walls by the fish radius before checking its path
-		const glm::vec2 box_min = box.min - small_fish.radius;
-		const glm::vec2 box_max = box.max + small_fish.radius;
+		const glm::vec2 box_min = box.min - radius;
+		const glm::vec2 box_max = box.max + radius;
 
 		float enter = 0.0f;
 		float leave = 1.0f;
@@ -265,7 +295,7 @@ void Level2::update_small_fish(float elapsed, UnderwaterPhysics const &physics, 
 		//wait until the fish fits onscreen and its arrival path is clear
 		if (target.x - sprite_radius < view_min.x || target.x + sprite_radius > view_max.x
 			|| target.y - sprite_radius < view_min.y || target.y + sprite_radius > view_max.y
-			|| !small_fish_path_clear(start, target, physics)) {
+			|| !small_fish_path_clear(start, target, physics, small_fish.radius)) {
 			return;
 		}
 
@@ -309,7 +339,7 @@ void Level2::update_small_fish(float elapsed, UnderwaterPhysics const &physics, 
 			}
 
 			//move only if the path stays inside the cave and avoids walls
-			if (small_fish_path_clear(small_fish.position, next, physics)) {
+			if (small_fish_path_clear(small_fish.position, next, physics, small_fish.radius)) {
 				small_fish.velocity = (next - small_fish.position) / elapsed;
 				small_fish.position = next;
 				small_fish.angle = player_angle;
@@ -338,7 +368,7 @@ void Level2::update_small_fish(float elapsed, UnderwaterPhysics const &physics, 
 		//check an exit direction and set escape velocity if the path is clear
 		const auto try_direction = [&](glm::vec2 const &direction) {
 			const glm::vec2 exit = small_fish.position + direction * distance_to_edge(small_fish.position, direction);
-			if (!small_fish_path_clear(small_fish.position, exit, physics)) {
+			if (!small_fish_path_clear(small_fish.position, exit, physics, small_fish.radius)) {
 				return false;
 			}
 
@@ -447,8 +477,12 @@ void Level2::update_fish_group(float elapsed, UnderwaterPhysics &physics, size_t
 
 			const glm::vec2 away = previous_fish[i].position - previous_fish[j].position;
 			const float distance = glm::length(away);
-			if (distance > 0.00001f && distance < fish_group_separation_distance) {
-				direction += away / distance * (1.0f - distance / fish_group_separation_distance) * fish_group_separation_weight;
+
+			//larger fish need more space
+			const float separation_distance = fish_group_separation_distance
+				* (previous_fish[i].scale + previous_fish[j].scale) * 0.5f;
+			if (distance > 0.00001f && distance < separation_distance) {
+				direction += away / distance * (1.0f - distance / separation_distance) * fish_group_separation_weight;
 			}
 		}
 
@@ -460,11 +494,11 @@ void Level2::update_fish_group(float elapsed, UnderwaterPhysics &physics, size_t
 			physics.bounds_min + fish.radius, physics.bounds_max - fish.radius);
 
 		//slide along a wall when direct movement fails
-		if (small_fish_path_clear(fish.position, next, physics)) {
+		if (small_fish_path_clear(fish.position, next, physics, fish.radius)) {
 			fish.position = next;
-		} else if (small_fish_path_clear(fish.position, glm::vec2(next.x, fish.position.y), physics)) {
+		} else if (small_fish_path_clear(fish.position, glm::vec2(next.x, fish.position.y), physics, fish.radius)) {
 			fish.position.x = next.x;
-		} else if (small_fish_path_clear(fish.position, glm::vec2(fish.position.x, next.y), physics)) {
+		} else if (small_fish_path_clear(fish.position, glm::vec2(fish.position.x, next.y), physics, fish.radius)) {
 			fish.position.y = next.y;
 		}
 
@@ -558,7 +592,9 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 
 void Level2::draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
 	SmallScaryFish const &fish, SpriteTexture const &texture) const {
-	const glm::vec2 size(small_fish_height * float(texture.pixel_size.x) / float(texture.pixel_size.y), small_fish_height);
+	//apply each fish's saved size
+	const float height = small_fish_height * fish.scale;
+	const glm::vec2 size(height * float(texture.pixel_size.x) / float(texture.pixel_size.y), height);
 
 	//flip leftward fish to keep them upright
 	const bool flip_x = std::abs(fish.angle) > glm::radians(90.0f);

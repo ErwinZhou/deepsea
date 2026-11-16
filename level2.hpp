@@ -18,6 +18,7 @@ struct SmallScaryFish {
 	glm::vec2 arrival_offset{0.0f};
 	float angle = 0.0f;
 	float radius = 0.0f;
+	float scale = 1.0f; //size relative to the player
 };
 
 struct Level2 {
@@ -75,7 +76,8 @@ private:
 	float next_mimic_time = 0.0f; //level time when the next fish may appear
 	bool mimic_encounters_finished = false; //stop single fish for this run after nearing the seven fish
 	glm::vec2 previous_player_position{0.0f};
-	bool small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to, UnderwaterPhysics const &physics) const;
+	bool small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to,
+		UnderwaterPhysics const &physics, float radius) const;
 	void update_small_fish(float elapsed, UnderwaterPhysics const &physics, Camera2D const &camera,
 		Body2D const &player, glm::vec2 const &player_step, glm::vec2 const &player_movement, float player_angle);
 	
@@ -87,6 +89,8 @@ private:
 	static constexpr float fish_group_speed_multiplier = 0.7f; // default to be 0.7 of the player speed
 	static constexpr float fish_group_separation_distance = 1.4f; // if two fish <1.4 unit, seperate each other
 	static constexpr float fish_group_separation_weight = 1.5f; // the force to control seperatance
+	static constexpr glm::vec2 fish_group_scale_range{1.2f, 2.0f}; //min and max size relative to the player
+	static constexpr float fish_group_position_offset = 0.9f; //max random shift on each axis, in units, position them randomly
 	std::array<SmallScaryFish, fish_group_count> fish_group{};
 	SpriteTexture fish_eyes_texture;
 	const float fish_group_speed;
