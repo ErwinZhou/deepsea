@@ -19,7 +19,9 @@ static float mimic_random_between(float low, float high) {
 
 Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed)
 	: small_fish_texture(normal_texture), small_fish_height(fish_height),
-	  small_fish_fast_speed(mimic_speed_multiplier * max_swim_speed) {
+	  small_fish_fast_speed(mimic_speed_multiplier * max_swim_speed),
+	  fish_eyes_texture(data_path("level2/small_fish_eyes.png")),
+	  fish_group_speed(fish_group_speed_multiplier * max_swim_speed) {
 	assert(fish_height > 0.0f && max_swim_speed > 0.0f && "small scary fish require a positive size and swim speed");
 }
 
@@ -42,6 +44,28 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	//draw one deadline in level seconds, making sure a safe arrival path
 	next_mimic_time = mimic_random_between(mimic_first_delay.x, mimic_first_delay.y);
 	mimic_encounters_finished = false;
+
+	//place seven fish at the shared encounter position
+	const glm::vec2 group_center(
+		physics.bounds_min.x + mimic_end_fraction * (physics.bounds_max.x - physics.bounds_min.x),
+		physics.bounds_max.y - fish_group_depth_fraction * (physics.bounds_max.y - physics.bounds_min.y));
+
+	//arrange fish in rows of two, three, and two
+	const std::array<glm::vec2, fish_group_count> group_offsets{
+		glm::vec2(-2.0f, 1.5f), glm::vec2(2.0f, 1.5f),
+		glm::vec2(-3.0f, 0.0f), glm::vec2(0.0f, 0.0f), glm::vec2(3.0f, 0.0f),
+		glm::vec2(-2.0f, -1.5f), glm::vec2(2.0f, -1.5f)};
+
+	//start every fish still and facing right
+	for (size_t i = 0; i < fish_group.size(); ++i) {
+		fish_group[i] = SmallScaryFish{};
+		fish_group[i].state = SmallScaryFish::State::Dormant;
+		fish_group[i].position = group_center + group_offsets[i];
+		fish_group[i].radius = physics.bodies[player_body].radius;
+	}
+
+	fish_group_triggered = false;
+	fish_group_turn_remaining = 0.0f;
 
 	// camera logic
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height); // reference view in world units 16:9
@@ -75,7 +99,7 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	return carried_body;
 }
 
-void Level2::update(float elapsed, UnderwaterPhysics const &physics, Camera2D const &camera, size_t player_body,
+void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &camera, size_t player_body,
 	glm::vec2 const &player_movement, float player_angle) {
 	clock += elapsed;
 	Body2D const &player = physics.bodies[player_body];
@@ -101,6 +125,8 @@ void Level2::update(float elapsed, UnderwaterPhysics const &physics, Camera2D co
 			small_fish.velocity = glm::vec2(0.0f);
 		}
 	}
+
+	update_fish_group(std::min(elapsed, 0.1f), physics, player_body, player_step);
 
 	if (!player.active) {
 		death_time += elapsed;
@@ -344,6 +370,134 @@ void Level2::update_small_fish(float elapsed, UnderwaterPhysics const &physics, 
 	}
 }
 
+void Level2::update_fish_group(float elapsed, UnderwaterPhysics &physics, size_t player_body,
+	glm::vec2 const &player_step) {
+	Body2D &player = physics.bodies[player_body];
+
+	//stop the group when the player dies
+	if (!player.active) {
+		for (SmallScaryFish &fish : fish_group) {
+			fish.velocity = glm::vec2(0.0f);
+		}
+		return;
+	}
+
+	//approaching any fish activates the entire group
+	if (!fish_group_triggered) {
+		for (SmallScaryFish const &fish : fish_group) {
+			if (glm::distance(player.position, fish.position) <= fish_group_trigger_distance) {
+				fish_group_triggered = true;
+				fish_group_turn_remaining = fish_group_turn_time;
+				mimic_encounters_finished = true;
+				break;
+			}
+		}
+
+		if (!fish_group_triggered) {
+			return;
+		}
+
+		for (SmallScaryFish &fish : fish_group) {
+			fish.state = SmallScaryFish::State::Turning;
+		}
+	}
+
+	//turn before moving or changing appearance
+	if (fish_group_turn_remaining > 0.0f) {
+		const float turn_step = std::min(elapsed, fish_group_turn_remaining);
+		const float turn_fraction = turn_step / fish_group_turn_remaining;
+		const float full_turn = glm::radians(360.0f);
+
+		//take the shorter turn toward the player
+		for (SmallScaryFish &fish : fish_group) {
+			const glm::vec2 delta = player.position - fish.position;
+			const float target = glm::length(delta) > 0.00001f ? std::atan2(delta.y, delta.x) : fish.angle;
+			fish.angle = std::remainder(fish.angle + std::remainder(target - fish.angle, full_turn) * turn_fraction, full_turn);
+		}
+
+		//use remaining frame time for chasing
+		fish_group_turn_remaining = std::max(0.0f, fish_group_turn_remaining - turn_step);
+		elapsed -= turn_step;
+
+		if (fish_group_turn_remaining > 0.0f) {
+			return;
+		}
+
+		for (SmallScaryFish &fish : fish_group) {
+			fish.state = SmallScaryFish::State::Chasing;
+		}
+	}
+
+	//use the same starting positions for all fish
+	const std::array<SmallScaryFish, fish_group_count> previous_fish = fish_group;
+	const glm::vec2 previous_player = player.position - player_step;
+
+	for (size_t i = 0; i < fish_group.size(); ++i) {
+		SmallScaryFish &fish = fish_group[i];
+
+		//aim toward the player
+		const glm::vec2 to_player = player.position - previous_fish[i].position;
+		glm::vec2 direction = glm::length(to_player) > 0.00001f ? glm::normalize(to_player) : glm::vec2(0.0f);
+
+		//steer away from nearby fish
+		for (size_t j = 0; j < previous_fish.size(); ++j) {
+			if (j == i) {
+				continue;
+			}
+
+			const glm::vec2 away = previous_fish[i].position - previous_fish[j].position;
+			const float distance = glm::length(away);
+			if (distance > 0.00001f && distance < fish_group_separation_distance) {
+				direction += away / distance * (1.0f - distance / fish_group_separation_distance) * fish_group_separation_weight;
+			}
+		}
+
+		//keep speed fixed while changing direction
+		fish.velocity = glm::length(direction) > 0.00001f ? glm::normalize(direction) * fish_group_speed : glm::vec2(0.0f);
+
+		//keep the whole body inside the cave
+		const glm::vec2 next = glm::clamp(fish.position + fish.velocity * elapsed,
+			physics.bounds_min + fish.radius, physics.bounds_max - fish.radius);
+
+		//slide along a wall when direct movement fails
+		if (small_fish_path_clear(fish.position, next, physics)) {
+			fish.position = next;
+		} else if (small_fish_path_clear(fish.position, glm::vec2(next.x, fish.position.y), physics)) {
+			fish.position.x = next.x;
+		} else if (small_fish_path_clear(fish.position, glm::vec2(fish.position.x, next.y), physics)) {
+			fish.position.y = next.y;
+		}
+
+		//face the direction actually traveled
+		fish.velocity = elapsed > 0.0f ? (fish.position - previous_fish[i].position) / elapsed : glm::vec2(0.0f);
+		if (glm::length(fish.velocity) > 0.00001f) {
+			fish.angle = std::atan2(fish.velocity.y, fish.velocity.x);
+		}
+
+		//find closest distance during both player and fish movement
+		const glm::vec2 relative_start = previous_fish[i].position - previous_player;
+		const glm::vec2 relative_step = fish.position - player.position - relative_start;
+		const float length_squared = glm::dot(relative_step, relative_step);
+		const float contact_time = length_squared > 0.00000001f
+			? glm::clamp(-glm::dot(relative_start, relative_step) / length_squared, 0.0f, 1.0f) : 0.0f;
+		const glm::vec2 closest = relative_start + contact_time * relative_step;
+		const float contact_radius = fish.radius + player.radius;
+
+		//any fish touching the player causes death
+		if (glm::dot(closest, closest) <= contact_radius * contact_radius) {
+			player.active = false;
+			player.velocity = glm::vec2(0.0f);
+			player.force = glm::vec2(0.0f);
+
+			//stop the remaining fish immediately
+			for (SmallScaryFish &member : fish_group) {
+				member.velocity = glm::vec2(0.0f);
+			}
+			return;
+		}
+	}
+}
+
 bool Level2::restart_requested() const {
 	//restart after the death fade and a short wait
 	return death_time > restart_delay;
@@ -386,13 +540,13 @@ glm::vec2 Level2::jelly_position(Body2D const &jelly) const {
 void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
 	//keep drawing a fleeing fish even after the player dies
 	if (small_fish.state != SmallScaryFish::State::Waiting && small_fish.state != SmallScaryFish::State::Gone) {
-		const glm::vec2 size(small_fish_height * float(small_fish_texture.pixel_size.x) / float(small_fish_texture.pixel_size.y),
-			small_fish_height);
-		//flip when facing left to keep the fish upright
-		const bool flip_x = std::abs(small_fish.angle) > glm::radians(90.0f);
-		const float angle = flip_x ? small_fish.angle - std::copysign(glm::radians(180.0f), small_fish.angle) : small_fish.angle;
-		sprites.draw(small_fish_texture, world_to_clip, small_fish.position, size, angle, flip_x,
-			glm::u8vec4(255), 0.0f, DrawSprites::Player);
+		draw_fish(sprites, world_to_clip, small_fish, small_fish_texture);
+	}
+
+	//use eyes artwork once chasing starts
+	for (SmallScaryFish const &fish : fish_group) {
+		draw_fish(sprites, world_to_clip, fish,
+			fish.state == SmallScaryFish::State::Chasing ? fish_eyes_texture : small_fish_texture);
 	}
 
 	if (jelly_body && physics.bodies[*jelly_body].active) {
@@ -400,6 +554,18 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 		sprites.draw(*jellyfish_texture, world_to_clip, jelly_position(physics.bodies[*jelly_body]), glm::vec2(1.8f * pulse, 2.15f / pulse),
 			0.04f * std::sin(clock * 0.4f), false, glm::u8vec4(175, 185, 190, 165), 0.0f, DrawSprites::Emissive);
 	}
+}
+
+void Level2::draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
+	SmallScaryFish const &fish, SpriteTexture const &texture) const {
+	const glm::vec2 size(small_fish_height * float(texture.pixel_size.x) / float(texture.pixel_size.y), small_fish_height);
+
+	//flip leftward fish to keep them upright
+	const bool flip_x = std::abs(fish.angle) > glm::radians(90.0f);
+	const float angle = flip_x ? fish.angle - std::copysign(glm::radians(180.0f), fish.angle) : fish.angle;
+
+	sprites.draw(texture, world_to_clip, fish.position, size, angle, flip_x,
+		glm::u8vec4(255), 0.0f, DrawSprites::Player);
 }
 
 float Level2::fade_amount() const {

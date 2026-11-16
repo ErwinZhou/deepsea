@@ -6,11 +6,12 @@
 #include "Water.hpp"
 
 #include <cstddef>
+#include <array>
 #include <optional>
 
 // small scary fish random appearing effects
 struct SmallScaryFish {
-	enum class State { Waiting, Arriving, Mimicking, Fleeing, Gone };
+	enum class State { Waiting, Arriving, Mimicking, Fleeing, Gone, Dormant, Turning, Chasing };
 	State state = State::Waiting; // default to wait there first
 	glm::vec2 position{0.0f};
 	glm::vec2 velocity{0.0f};
@@ -23,7 +24,7 @@ struct Level2 {
 	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
-	void update(float elapsed, UnderwaterPhysics const &physics, Camera2D const &camera, size_t player_body,
+	void update(float elapsed, UnderwaterPhysics &physics, Camera2D const &camera, size_t player_body,
 		glm::vec2 const &player_movement, float player_angle);
 	bool restart_requested() const;
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
@@ -57,7 +58,7 @@ private:
 	float clock = 0.0f; //seconds since entering level 2
 	float death_time = 0.0f; //seconds since the player died
 
-	// small scary fish revant constants
+	// small scary fish relevant constants
 	static constexpr glm::vec2 mimic_first_delay{5.0f, 10.0f}; // first encounter appears in 5-10 seconds
 	static constexpr glm::vec2 mimic_repeat_delay{15.0f, 30.0f}; // second and all following will be in 15-30
 	static constexpr float mimic_end_fraction = 4.0f / 5.0f; // because those small fish group will start chasing, no need for small fishs
@@ -77,4 +78,22 @@ private:
 	bool small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to, UnderwaterPhysics const &physics) const;
 	void update_small_fish(float elapsed, UnderwaterPhysics const &physics, Camera2D const &camera,
 		Body2D const &player, glm::vec2 const &player_step, glm::vec2 const &player_movement, float player_angle);
+	
+	// small scary fish group (with eyes)
+	static constexpr size_t fish_group_count = 7; // small fish appears in group of 7 because the octopus has 8 hands
+	static constexpr float fish_group_depth_fraction = 0.25f; // the group appear in about 25% below the cave top
+	static constexpr float fish_group_trigger_distance = 4.0f; // once the player appears near 4 units to any of the small fish, trigger turn around and chasing
+	static constexpr float fish_group_turn_time = 0.15f; // turn time and transformation
+	static constexpr float fish_group_speed_multiplier = 0.7f; // default to be 0.7 of the player speed
+	static constexpr float fish_group_separation_distance = 1.4f; // if two fish <1.4 unit, seperate each other
+	static constexpr float fish_group_separation_weight = 1.5f; // the force to control seperatance
+	std::array<SmallScaryFish, fish_group_count> fish_group{};
+	SpriteTexture fish_eyes_texture;
+	const float fish_group_speed;
+	bool fish_group_triggered = false;
+	float fish_group_turn_remaining = 0.0f;
+
+	void update_fish_group(float elapsed, UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &player_step);
+	void draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
+		SmallScaryFish const &fish, SpriteTexture const &texture) const;
 };
