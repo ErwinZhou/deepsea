@@ -8,9 +8,10 @@
 #include <cstddef>
 #include <optional>
 
+// small scary fish random appearing effects
 struct SmallScaryFish {
 	enum class State { Waiting, Arriving, Mimicking, Fleeing, Gone };
-	State state = State::Waiting;
+	State state = State::Waiting; // default to wait there first
 	glm::vec2 position{0.0f};
 	glm::vec2 velocity{0.0f};
 	glm::vec2 arrival_offset{0.0f};
@@ -53,19 +54,25 @@ private:
 	//only present if the player carried the jellyfish through the exit
 	std::optional<size_t> jelly_body;
 	std::optional<SpriteTexture> jellyfish_texture;
-	float clock = 0.0f;
-	float death_time = 0.0f;
+	float clock = 0.0f; //seconds since entering level 2
+	float death_time = 0.0f; //seconds since the player died
 
-	static constexpr float mimic_start_delay = 3.0f;
+	// small scary fish revant constants
+	static constexpr glm::vec2 mimic_first_delay{5.0f, 10.0f}; // first encounter appears in 5-10 seconds
+	static constexpr glm::vec2 mimic_repeat_delay{15.0f, 30.0f}; // second and all following will be in 15-30
+	static constexpr float mimic_end_fraction = 4.0f / 5.0f; // because those small fish group will start chasing, no need for small fishs
+	static constexpr float mimic_quiet_screen_fraction = 0.5f; //stop single fish half a screen before the seven-fish position
 	static constexpr float mimic_screen_fraction = 1.0f / 3.0f;
-	static constexpr float mimic_speed_multiplier = 3.0f;
-	static constexpr float mimic_approach_distance = 4.0f;
-	static constexpr float mimic_approach_cos = 0.6f;
+	static constexpr float mimic_speed_multiplier = 3.0f; // appearing in 3x speed than the player
+	static constexpr float mimic_approach_distance = 4.0f; // flee when the player is within 4 world units
+	static constexpr float mimic_approach_cos = 0.6f; // movement input must point within about 53 degrees of the fish
 	static constexpr float mimic_offscreen_margin = 1.0f;
 	SpriteTexture const &small_fish_texture;
 	const float small_fish_height;
 	const float small_fish_fast_speed;
 	SmallScaryFish small_fish;
+	float next_mimic_time = 0.0f; //level time when the next fish may appear
+	bool mimic_encounters_finished = false; //stop single fish for this run after nearing the seven fish
 	glm::vec2 previous_player_position{0.0f};
 	bool small_fish_path_clear(glm::vec2 const &from, glm::vec2 const &to, UnderwaterPhysics const &physics) const;
 	void update_small_fish(float elapsed, UnderwaterPhysics const &physics, Camera2D const &camera,
