@@ -13,6 +13,8 @@
 static constexpr glm::vec2 TunnelEndUV(991.0f / 1180.0f, 0.0f);
 //entrance coordinates from the asset
 static constexpr glm::vec2 TunnelEntranceUV(637.0f / 1180.0f, 541.0f / 820.0f);
+//inside lamp rests on this ledge
+static constexpr glm::vec2 InsideFlashlightUV(828.0f / 1180.0f, 292.0f / 820.0f);
 //lens and pivot heights for flashlight
 static constexpr float FlashlightLensUV = 100.0f / 682.0f;
 static constexpr float FlashlightPivotUV = 545.0f / 682.0f;
@@ -23,6 +25,31 @@ static constexpr StaticBox2D FlashlightParts[] = {
 };
 //4px cells keep collisions close to the silhouette without closing the narrow opening
 static constexpr unsigned TunnelCollisionPixels = 4;
+
+struct FlashlightContact {
+	glm::vec2 point{0.0f};
+	glm::vec2 normal{0.0f};
+	float depth = 0.0f;
+};
+
+static FlashlightContact flashlight_contact(glm::vec2 const &position, float radius, StaticBox2D const &part) {
+	const glm::vec2 closest = glm::clamp(position, part.min, part.max);
+	const glm::vec2 delta = position - closest;
+	const float distance = glm::length(delta);
+	if (distance >= radius) {
+		return {};
+	}
+	if (distance > 0.00001f) {
+		return {closest, delta / distance, radius - distance};
+	}
+
+	//an overlapping center leaves through the nearest side
+	const glm::vec2 gaps = glm::min(position - part.min, part.max - position);
+	const unsigned axis = gaps.x < gaps.y ? 0 : 1;
+	glm::vec2 normal(0.0f);
+	normal[axis] = position[axis] - part.min[axis] < part.max[axis] - position[axis] ? -1.0f : 1.0f;
+	return {closest + normal * gaps[axis], normal, radius + gaps[axis]};
+}
 
 Level2::Level2() : tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")),
 	flashlight_texture(data_path("level2/flashlight.png")), flashlight_base_texture(data_path("small_rock.png")) {
@@ -73,38 +100,44 @@ void Level2::setup_tunnel(UnderwaterPhysics &physics) {
 }
 
 void Level2::setup_flashlight(UnderwaterPhysics &physics) {
+	flashlights = {};
 	const float entrance_x = tunnel_center.x + (TunnelEntranceUV.x - 0.5f) * tunnel_size.x;
-	flashlight_anchor = glm::vec2(entrance_x + flashlight_entrance_offset, physics.bounds_min.y - flashlight_burial_depth);
-	flashlight_tilt = flashlight_initial_tilt;
-	flashlight_turned = false;
+	flashlights[0].anchor = glm::vec2(entrance_x + flashlight_entrance_offset, physics.bounds_min.y - flashlight_burial_depth);
+	flashlights[1].anchor = tunnel_center + (glm::vec2(InsideFlashlightUV.x, 1.0f - InsideFlashlightUV.y) - 0.5f) * tunnel_size;
+	flashlights[1].height = inside_flashlight_height;
+	flashlights[1].range = inside_flashlight_range;
+
 	//static base blocks swimming and cannot be swallowed
 	physics.obstacles.push_back(StaticBox2D{
-		glm::vec2(flashlight_anchor.x - 0.5f * flashlight_base_collision_size.x, physics.bounds_min.y - flashlight_base_size.y),
-		glm::vec2(flashlight_anchor.x + 0.5f * flashlight_base_collision_size.x, physics.bounds_min.y + flashlight_base_collision_size.y)});
-	aim_flashlight(physics);
+		glm::vec2(flashlights[0].anchor.x - 0.5f * flashlight_base_collision_size.x, physics.bounds_min.y - flashlight_base_size.y),
+		glm::vec2(flashlights[0].anchor.x + 0.5f * flashlight_base_collision_size.x, physics.bounds_min.y + flashlight_base_collision_size.y)});
+	for (Flashlight &flashlight : flashlights) {
+		aim_flashlight(flashlight, physics);
+	}
 }
 
-void Level2::aim_flashlight(UnderwaterPhysics const &physics) {
-	const float angle = glm::radians(flashlight_tilt);
+void Level2::aim_flashlight(Flashlight &flashlight, UnderwaterPhysics const &physics) {
+	const float angle = glm::radians(flashlight.tilt);
 	const glm::vec2 direction(-std::sin(angle), std::cos(angle));
-	flashlight_center = flashlight_anchor + direction * ((FlashlightPivotUV - 0.5f) * flashlight_height);
-	flashlight_light.origin = flashlight_anchor + direction * ((FlashlightPivotUV - FlashlightLensUV) * flashlight_height);
-	flashlight_light.direction = direction;
-	flashlight_light.half_width = flashlight_beam_half_width;
-	flashlight_light.spill_radius = flashlight_spill_radius;
-	flashlight_light.range = flashlight_beam_range;
-	flashlight_light.strength = flashlight_beam_strength;
+	flashlight.center = flashlight.anchor + direction * ((FlashlightPivotUV - 0.5f) * flashlight.height);
+	flashlight.light.origin = flashlight.anchor + direction * ((FlashlightPivotUV - FlashlightLensUV) * flashlight.height);
+	flashlight.light.direction = direction;
+	const float scale = flashlight.height / flashlight_height;
+	flashlight.light.half_width = flashlight_beam_half_width * scale;
+	flashlight.light.spill_radius = flashlight_spill_radius * scale;
+	flashlight.light.range = flashlight.range;
+	flashlight.light.strength = flashlight_beam_strength;
 
 	const glm::vec2 sideways(direction.y, -direction.x);
-	const float light_half_width = flashlight_beam_half_width + flashlight_spill_radius;
+	const float light_half_width = flashlight.light.half_width + flashlight.light.spill_radius;
 	const glm::vec2 tunnel_min = tunnel_center - 0.5f * tunnel_size;
 	const glm::vec2 pixel_size = tunnel_size / glm::vec2(tunnel_texture.pixel_size);
 	//0.5px steps avoid skipping thin parts of the silhouette
 	const float light_step = 0.5f * std::min(pixel_size.x, pixel_size.y);
 	for (size_t i = 0; i < Water::beam_samples; ++i) {
 		const float across = (2.0f * float(i) / float(Water::beam_samples - 1) - 1.0f) * light_half_width;
-		const glm::vec2 origin = flashlight_light.origin + sideways * across;
-		float reach = flashlight_beam_range;
+		const glm::vec2 origin = flashlight.light.origin + sideways * across;
+		float reach = flashlight.range;
 		for (unsigned axis = 0; axis < 2; ++axis) {
 			if (std::abs(direction[axis]) > 0.00001f) {
 				const float edge = direction[axis] > 0.0f ? physics.bounds_max[axis] : physics.bounds_min[axis];
@@ -125,7 +158,7 @@ void Level2::aim_flashlight(UnderwaterPhysics const &physics) {
 				break;
 			}
 		}
-		flashlight_light.reaches[i] = std::max(0.0f, reach);
+		flashlight.light.reaches[i] = std::max(0.0f, reach);
 	}
 }
 
@@ -135,71 +168,46 @@ void Level2::push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm
 	if (!player.active) {
 		return;
 	}
+	for (Flashlight &flashlight : flashlights) {
+		push_flashlight(flashlight, physics, player, movement, elapsed);
+	}
+}
+
+void Level2::push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics, Body2D &player,
+	glm::vec2 const &movement, float elapsed) {
 	//resolve contact again after turning
 	for (unsigned pass = 0; pass < 3; ++pass) {
-		const float angle = glm::radians(flashlight_tilt);
+		const float angle = glm::radians(flashlight.tilt);
 		const glm::vec2 sideways(std::cos(angle), std::sin(angle));
 		const glm::vec2 upward(-sideways.y, sideways.x);
-		const glm::vec2 offset = player.position - flashlight_anchor;
+		const glm::vec2 offset = player.position - flashlight.anchor;
 		const glm::vec2 position(glm::dot(offset, sideways), glm::dot(offset, upward));
-		glm::vec2 normal(0.0f);
-		glm::vec2 contact(0.0f);
-		float penetration = 0.0f;
+		FlashlightContact contact;
 
 		for (StaticBox2D const &part : FlashlightParts) {
-			const glm::vec2 low = part.min * flashlight_height;
-			const glm::vec2 high = part.max * flashlight_height;
-			glm::vec2 closest = glm::clamp(position, low, high);
-			const glm::vec2 delta = position - closest;
-			const float distance = glm::length(delta);
-			if (distance >= player.radius) {
-				continue;
-			}
-			glm::vec2 part_normal(0.0f);
-			float depth = player.radius - distance;
-			if (distance > 0.00001f) {
-				part_normal = delta / distance;
-			} else {
-				float nearest = flashlight_height;
-				//an overlapping center leaves through the nearest side
-				for (unsigned axis = 0; axis < 2; ++axis) {
-					for (float sign : {-1.0f, 1.0f}) {
-						const float gap = sign < 0.0f ? position[axis] - low[axis] : high[axis] - position[axis];
-						if (gap < nearest) {
-							nearest = gap;
-							part_normal = glm::vec2(0.0f);
-							part_normal[axis] = sign;
-						}
-					}
-				}
-				closest += part_normal * nearest;
-				depth += nearest;
-			}
-			if (depth > penetration) {
-				penetration = depth;
-				normal = part_normal;
-				contact = closest;
+			const StaticBox2D bounds{part.min * flashlight.height, part.max * flashlight.height};
+			const FlashlightContact candidate = flashlight_contact(position, player.radius, bounds);
+			if (candidate.depth > contact.depth) {
+				contact = candidate;
 			}
 		}
-		if (penetration <= 0.0f) {
-			break;
+		if (contact.depth <= 0.0f) {
+			return;
 		}
-		const glm::vec2 outward = sideways * normal.x + upward * normal.y;
-		if (pass == 0) {
-			//pushing farther from the base turns it faster
-			const float pressure = std::max(0.0f, -glm::dot(movement, outward));
-			const float lever = contact.y * normal.x - contact.x * normal.y;
-			const float lens_distance = (FlashlightPivotUV - FlashlightLensUV) * flashlight_height;
-			const float turn = pressure * glm::clamp(lever / lens_distance, -1.0f, 1.0f);
-			const float tilt = glm::clamp(flashlight_tilt + turn * flashlight_turn_speed * elapsed,
-				flashlight_tilt_limits.x, flashlight_tilt_limits.y);
-			if (tilt != flashlight_tilt) {
-				flashlight_tilt = tilt;
-				flashlight_turned = true;
-				continue;
-			}
+		const glm::vec2 outward = sideways * contact.normal.x + upward * contact.normal.y;
+		//pushing farther from the base turns it faster
+		const float pressure = pass == 0 ? std::max(0.0f, -glm::dot(movement, outward)) : 0.0f;
+		const float lever = contact.point.y * contact.normal.x - contact.point.x * contact.normal.y;
+		const float lens_distance = (FlashlightPivotUV - FlashlightLensUV) * flashlight.height;
+		const float turn = pressure * glm::clamp(lever / lens_distance, -1.0f, 1.0f);
+		const float tilt = glm::clamp(flashlight.tilt + turn * flashlight_turn_speed * elapsed,
+			flashlight_tilt_limits.x, flashlight_tilt_limits.y);
+		if (tilt != flashlight.tilt) {
+			flashlight.tilt = tilt;
+			flashlight.turned = true;
+			continue;
 		}
-		player.position += outward * penetration;
+		player.position += outward * contact.depth;
 		player.position = glm::clamp(player.position, physics.bounds_min + player.radius, physics.bounds_max - player.radius);
 		//stop inward motion but allow sliding
 		const float closing_speed = glm::dot(player.velocity, outward);
@@ -246,9 +254,12 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 
 void Level2::update(float elapsed, UnderwaterPhysics const &physics, size_t player_body) {
 	clock += elapsed;
-	if (flashlight_turned) {
-		aim_flashlight(physics);
-		flashlight_turned = false;
+	for (Flashlight &flashlight : flashlights) {
+		if (!flashlight.turned) {
+			continue;
+		}
+		aim_flashlight(flashlight, physics);
+		flashlight.turned = false;
 	}
 	if (!physics.bodies[player_body].active) {
 		death_time += elapsed;
@@ -263,7 +274,10 @@ glm::vec3 Level2::prepare_water(Water::Look &look, UnderwaterPhysics const &phys
 	std::optional<size_t> carried_body) const {
 	look.glows.clear();
 	//share sprite and haze lighting with jellyfish and coral
-	look.beams = {flashlight_light};
+	look.beams.clear();
+	for (Flashlight const &flashlight : flashlights) {
+		look.beams.push_back(flashlight.light);
+	}
 	look.blockers.clear();
 	look.bubble_columns.clear();
 	look.glow_radius = glm::vec2(5.5f, 4.0f);
@@ -289,11 +303,14 @@ glm::vec2 Level2::jelly_position(Body2D const &jelly) const {
 }
 
 void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
+	for (Flashlight const &flashlight : flashlights) {
+		const glm::vec2 size(flashlight.height * float(flashlight_texture.pixel_size.x) / float(flashlight_texture.pixel_size.y),
+			flashlight.height);
+		sprites.draw(flashlight_texture, world_to_clip, flashlight.center, size, glm::radians(flashlight.tilt));
+	}
+	//rock hides the buried handles
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Tunnel);
-	const glm::vec2 flashlight_size(flashlight_height * float(flashlight_texture.pixel_size.x) / float(flashlight_texture.pixel_size.y),
-		flashlight_height);
-	sprites.draw(flashlight_texture, world_to_clip, flashlight_center, flashlight_size, glm::radians(flashlight_tilt));
-	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlight_anchor.x, physics.bounds_min.y),
+	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlights[0].anchor.x, physics.bounds_min.y),
 		flashlight_base_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
 	const glm::vec2 key_size(key_height * float(key_texture.pixel_size.x) / float(key_texture.pixel_size.y), key_height);
 	sprites.draw(key_texture, world_to_clip, key_position, key_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);

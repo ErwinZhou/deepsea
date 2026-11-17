@@ -6,6 +6,7 @@
 #include "Water.hpp"
 
 #include <cstddef>
+#include <array>
 #include <optional>
 #include <vector>
 
@@ -37,6 +38,8 @@ private:
 	static constexpr float key_end_inset = 1.5f;
 
 	static constexpr float flashlight_height = 4.8f; //flashlight height
+	static constexpr float inside_flashlight_height = 2.0f; //smaller lamp inside the tunnel
+	static constexpr float inside_flashlight_range = 35.0f; //inside beam reach
 	static constexpr float flashlight_entrance_offset = -5.0f; //horizontal offset from entrance, negative is on left
 	static constexpr float flashlight_burial_depth = 0.3f; //pivot depth below floor
 	static constexpr float flashlight_initial_tilt = 20.0f; //degrees left from upward
@@ -68,13 +71,20 @@ private:
 	SpriteTexture key_texture;
 	SpriteTexture flashlight_texture;
 	SpriteTexture flashlight_base_texture;
-	glm::vec2 flashlight_anchor{0.0f};
-	glm::vec2 flashlight_center{0.0f};
-	float flashlight_tilt = flashlight_initial_tilt;
-	bool flashlight_turned = false;
-	Water::Beam flashlight_light;
+	struct Flashlight {
+		glm::vec2 anchor{0.0f};
+		glm::vec2 center{0.0f};
+		float height = flashlight_height;
+		float range = flashlight_beam_range;
+		float tilt = flashlight_initial_tilt;
+		bool turned = false;
+		Water::Beam light;
+	};
+	std::array<Flashlight, 2> flashlights{};
 	void setup_flashlight(UnderwaterPhysics &physics);
-	void aim_flashlight(UnderwaterPhysics const &physics);
+	void aim_flashlight(Flashlight &flashlight, UnderwaterPhysics const &physics);
+	void push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics, Body2D &player,
+		glm::vec2 const &movement, float elapsed);
 	glm::vec2 key_position{0.0f};
 	glm::vec2 tunnel_center{0.0f};
 	glm::vec2 tunnel_size{0.0f};
