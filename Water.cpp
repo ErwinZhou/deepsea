@@ -72,7 +72,7 @@ std::string const Water::glsl =
 	"		int sample_index = min(int(sample_at), BEAM_SAMPLES - 2);\n"
 	//nearer sample prevents light leaking around rock edges
 	"		float reach = min(BEAMS[i].reaches[sample_index], BEAMS[i].reaches[sample_index + 1]);\n"
-	//surface light fades half a world unit into rock
+	//surface light fades slightly into rock
 	"		float contact = surface ? 1.0 - smoothstep(reach, reach + 0.5, forward) : step(forward, reach);\n"
 	//same squared-distance exponential falloff as jellyfish and coral
 	"		float core_offset = across / BEAMS[i].shape.x;\n"

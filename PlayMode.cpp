@@ -108,8 +108,6 @@ void PlayMode::update(float elapsed) {
 	}
 	if (level1) {
 		hit_stop = level1->before_physics(physics, elapsed);
-	} else {
-		level2->update(elapsed, physics.bodies[fish_body].active);
 	}
 
 	// step physics at a fixed rate so it plays the same at any frame rate
@@ -126,11 +124,17 @@ void PlayMode::update(float elapsed) {
 		}
 		fish.add_force(swim_thrust);
 		physics.step();
+		if (level2) {
+			level2->push_flashlight(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
+		}
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
 		accumulated_time -= UnderwaterPhysics::fixed_step;
 	}
 
+	if (level2) {
+		level2->update(elapsed, physics, fish_body);
+	}
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 

@@ -13,7 +13,8 @@ struct Level2 {
 	Level2();
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
-	void update(float elapsed, bool player_alive);
+	void update(float elapsed, UnderwaterPhysics const &physics, size_t player_body);
+	void push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	bool restart_requested() const;
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 		std::optional<size_t> carried_body) const;
@@ -29,16 +30,18 @@ private:
 	static constexpr float entrance_distance = 12.0f;
 	//place the tunnel's left edge one third of the way across the cave
 	static constexpr float tunnel_start_fraction = 1.0f / 3.0f;
-	//world width gives the fish clearance through the artwork's narrow inner turns
+	//leave room through the tunnel's narrow turns
 	static constexpr float tunnel_width = 127.0f;
 	//drawn key height and its distance below the tunnel's upper opening
 	static constexpr float key_height = 1.6f;
 	static constexpr float key_end_inset = 1.5f;
 
-	static constexpr float flashlight_height = 4.8f; //artwork canvas height
+	static constexpr float flashlight_height = 4.8f; //flashlight height
 	static constexpr float flashlight_entrance_offset = -5.0f; //horizontal offset from entrance, negative is on left
 	static constexpr float flashlight_burial_depth = 0.3f; //pivot depth below floor
 	static constexpr float flashlight_initial_tilt = 20.0f; //degrees left from upward
+	static constexpr glm::vec2 flashlight_tilt_limits{-35.0f, 45.0f}; //right and left tilt limits
+	static constexpr float flashlight_turn_speed = 55.0f; //degrees per second when pushing near the lens
 	static constexpr float flashlight_beam_range = 65.0f; //maximum forward reach before wall clipping
 	static constexpr float flashlight_beam_half_width = 0.75f; //bright core half-width
 	static constexpr float flashlight_spill_radius = 4.0f; //extra lateral reach of soft light
@@ -61,14 +64,17 @@ private:
 	std::optional<size_t> jelly_body;
 	std::optional<SpriteTexture> jellyfish_texture;
 	SpriteTexture tunnel_texture;
-	std::vector<unsigned char> tunnel_alpha; //artwork opacity for light blocking, rows run downward
+	std::vector<unsigned char> tunnel_alpha; //opacity for light blocking, rows run downward
 	SpriteTexture key_texture;
 	SpriteTexture flashlight_texture;
 	SpriteTexture flashlight_base_texture;
 	glm::vec2 flashlight_anchor{0.0f};
 	glm::vec2 flashlight_center{0.0f};
+	float flashlight_tilt = flashlight_initial_tilt;
+	bool flashlight_turned = false;
 	Water::Beam flashlight_light;
 	void setup_flashlight(UnderwaterPhysics &physics);
+	void aim_flashlight(UnderwaterPhysics const &physics);
 	glm::vec2 key_position{0.0f};
 	glm::vec2 tunnel_center{0.0f};
 	glm::vec2 tunnel_size{0.0f};
