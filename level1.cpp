@@ -216,43 +216,6 @@ void Level1::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_b
 	ambient->set_volume(1.0f, fade_in_time);
 }
 
-//find when a moving rock hits the collision box, or infinity if it misses
-static float hit_time(Body2D const &rock, StaticBox2D const &box, float elapsed, glm::vec2 *contact) {
-	float miss = std::numeric_limits<float>::infinity();
-	glm::vec2 away = rock.position - glm::clamp(rock.position, box.min, box.max);
-	if (glm::dot(rock.velocity, away) >= 0.0f) return miss;
-	float first = 0.0f;
-	float last = elapsed;
-	for (int axis = 0; axis < 2; ++axis) {
-		float low = box.min[axis] - rock.radius;
-		float high = box.max[axis] + rock.radius;
-		if (std::abs(rock.velocity[axis]) < 0.00001f) {
-			if (rock.position[axis] < low || rock.position[axis] > high) return miss;
-		} else {
-			float a = (low - rock.position[axis]) / rock.velocity[axis];
-			float b = (high - rock.position[axis]) / rock.velocity[axis];
-			first = std::max(first, std::min(a, b));
-			last = std::min(last, std::max(a, b));
-		}
-	}
-	if (first > last) return miss;
-	glm::vec2 center = rock.position + rock.velocity * first;
-	*contact = glm::clamp(center, box.min, box.max);
-	if (glm::dot(center - *contact, center - *contact) > rock.radius * rock.radius + 0.00001f) {
-		//at a corner the circle reaches the box after its bounding square does
-		glm::vec2 offset = rock.position - *contact;
-		float a = glm::dot(rock.velocity, rock.velocity);
-		float b = glm::dot(offset, rock.velocity);
-		float c = glm::dot(offset, offset) - rock.radius * rock.radius;
-		float discriminant = b * b - a * c;
-		if (discriminant < 0.0f) return miss;
-		first = (-b - std::sqrt(discriminant)) / a;
-		if (first < 0.0f || first > last) return miss;
-		*contact = glm::clamp(rock.position + rock.velocity * first, box.min, box.max);
-	}
-	return first;
-}
-
 static glm::vec2 world_point(glm::vec2 const &point, glm::vec2 const &center, glm::vec2 const &size, float angle) {
 	glm::vec2 offset = size * glm::vec2(point.x - 0.5f, 0.5f - point.y);
 	float co = std::cos(angle);
@@ -789,6 +752,7 @@ glm::vec3 Level1::prepare_water(Water::Look &look, UnderwaterPhysics const &phys
 	const float eye = physics.bodies[fish_body].active ? 1.0f : std::max(0.0f, 1.0f - end_time / eye_out_time);
 	const glm::vec2 half_view = 0.5f * view_size;
 	look.glows.clear();
+	look.beams.clear();
 	look.blockers.clear();
 	for (glm::vec3 const &spot : light_spots) {
 		if (std::abs(spot.x - view_center.x) < half_view.x + 3.0f * glow_radius.x) look.glows.push_back(spot);

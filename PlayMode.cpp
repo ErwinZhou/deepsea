@@ -11,8 +11,10 @@
 #include <cassert>
 #include <cmath>
 
-PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents, std::string const &checkpoint_file)
+PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents, std::string const &checkpoint_file,
+	float display_gain)
 	: level_id(start_level),
+	  display_gain(display_gain),
 	  checkpoint_file(checkpoint_file),
 	  entry_belly_contents(belly_contents),
 	  fish_texture(data_path("normal.png")),
@@ -24,6 +26,9 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 	if (level_id == LevelId::One) {
 		level1.emplace();
 		level1->setup(physics, camera, fish_body);
+	} else if (level_id == LevelId::Test) {
+		test_level.emplace();
+		test_level->setup(physics, camera, fish_body);
 	} else {
 		assert(level_id == LevelId::Two && "play mode requires a supported level");
 		level2.emplace();
@@ -41,10 +46,14 @@ std::optional<Body2D> PlayMode::carried_contents() const {
 	return std::nullopt;
 }
 
+void PlayMode::clear_input() {
+	input = {};
+	if (state == FishState::Kirby) state = FishState::Normal;
+}
+
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
 	if (evt.type == SDL_EVENT_WINDOW_FOCUS_LOST) {
-		input = {};
-		if (state == FishState::Kirby) state = FishState::Normal;
+		clear_input();
 		return true;
 	}
 	if (evt.type != SDL_EVENT_KEY_DOWN && evt.type != SDL_EVENT_KEY_UP) return false;
@@ -78,7 +87,7 @@ void PlayMode::update(float elapsed) {
 		if (transition_time >= transition_fade_time) {
 			//keep this mode alive until update returns after replacing it
 			std::shared_ptr<Mode> const keep = shared_from_this();
-			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, carried_contents(), checkpoint_file));
+			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, carried_contents(), checkpoint_file, display_gain));
 		}
 		return;
 	}
@@ -108,7 +117,7 @@ void PlayMode::update(float elapsed) {
 	}
 	if (level1) {
 		hit_stop = level1->before_physics(physics, elapsed);
-	} else {
+	} else if (level2) {
 		level2->update(elapsed, physics.bodies[fish_body].active);
 	}
 
@@ -125,12 +134,19 @@ void PlayMode::update(float elapsed) {
 			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
 		}
 		fish.add_force(swim_thrust);
+		if (test_level) test_level->check_puzzle_hits(physics);
 		physics.step();
+		if (test_level) {
+			test_level->push_flashlight(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
+		}
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
 		accumulated_time -= UnderwaterPhysics::fixed_step;
 	}
 
+	if (test_level) {
+		test_level->update(elapsed, physics, fish_body);
+	}
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
@@ -149,13 +165,15 @@ void PlayMode::update(float elapsed) {
 		} else {
 			restart = level1->restart_requested(physics);
 		}
+	} else if (test_level) {
+		restart = test_level->restart_requested();
 	} else {
 		restart = level2->restart_requested();
 	}
 	if (restart) {
 		//keep this mode alive until update returns after replacing it
 		std::shared_ptr<Mode> const keep = shared_from_this();
-		Mode::set_current(std::make_shared<PlayMode>(level_id, entry_belly_contents, checkpoint_file));
+		Mode::set_current(std::make_shared<PlayMode>(level_id, entry_belly_contents, checkpoint_file, display_gain));
 	}
 }
 
@@ -219,9 +237,9 @@ void PlayMode::spit() {
 	body.velocity = body.kind == Body2D::Jelly ? glm::vec2(0.0f) : fish.velocity;
 	body.force = glm::vec2(0.0f);
 	body.active = true;
-	body.player_spat = body.kind == Body2D::Rock;
+	body.player_spat = body.kind == Body2D::Rock || body.kind == Body2D::Key || body.kind == Body2D::Keycard;
 	// the jellyfish floats where it is released
-	if (body.kind == Body2D::Rock) body.apply_impulse(facing * spit_impulse);
+	if (body.player_spat) body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
 	if (level1) {
@@ -255,6 +273,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::vec3 jelly_light(0.0f);
 	if (level1) {
 		jelly_light = level1->prepare_water(water_look, physics, carried_body, view_center, render_view);
+	} else if (test_level) {
+		test_level->prepare_water(water_look);
 	} else {
 		jelly_light = level2->prepare_water(water_look, physics, fish_body, carried_body);
 	}
@@ -273,6 +293,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	water.haze();
 	if (level1) {
 		level1->draw(sprites, world_to_clip, physics);
+	} else if (test_level) {
+		test_level->draw(sprites, world_to_clip, physics);
 	} else {
 		level2->draw(sprites, world_to_clip, physics);
 	}
@@ -302,7 +324,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	if (level1) {
 		level1->draw_foreground(sprites, world_to_clip);
 	}
-	water.finish();
+	water.finish(display_gain);
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -314,6 +336,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		fade = transition_time / transition_fade_time;
 	} else if (level2) {
 		fade = level2->fade_amount();
+	} else if (test_level) {
+		fade = test_level->fade_amount();
 	}
 	background.draw_fade(sprites, world_to_clip, view_center, render_view, fade);
 

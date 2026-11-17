@@ -22,7 +22,12 @@ std::string const Water::glsl =
 	"uniform vec4 BLOCKERS[" + std::to_string(max_blockers) + "];\n"
 	"uniform int COLUMN_COUNT;\n"
 	"uniform vec3 BUBBLE_COLUMNS[" + std::to_string(max_columns) + "];\n"
-	// unlit water color from Sarah's cavern art
+	"#define BEAM_SAMPLES " + std::to_string(beam_samples) + "\n"
+	//shape packs half-width, range, strength, then spill radius
+	"struct Beam { vec4 origin_direction; vec4 shape; float reaches[BEAM_SAMPLES]; };\n"
+	"uniform int BEAM_COUNT;\n"
+	"uniform Beam BEAMS[" + std::to_string(max_beams) + "];\n"
+	//unlit water color from Sarah's cavern art
 	"const vec3 WATER = vec3(0.025, 0.028, 0.029);\n"
 	// how bright things are when they're far from every light
 	"const float DIM = 0.04;\n"
@@ -54,7 +59,35 @@ std::string const Water::glsl =
 	"	}\n"
 	"	return 1.0;\n"
 	"}\n"
-	"float light(vec2 world, bool shadows) {\n"
+	"float beam_light(vec2 world, bool surface) {\n"
+	"	float amount = 0.0;\n"
+	"	for (int i = 0; i < BEAM_COUNT; ++i) {\n"
+	"		vec2 offset = world - BEAMS[i].origin_direction.xy;\n"
+	"		vec2 direction = BEAMS[i].origin_direction.zw;\n"
+	"		float forward = dot(offset, direction);\n"
+	"		float across = dot(offset, vec2(direction.y, -direction.x));\n"
+	"		float light_width = BEAMS[i].shape.x + BEAMS[i].shape.w;\n"
+	"		if (forward < 0.0 || abs(across) >= light_width) continue;\n"
+	"		float sample_at = (0.5 * across / light_width + 0.5) * float(BEAM_SAMPLES - 1);\n"
+	"		int sample_index = min(int(sample_at), BEAM_SAMPLES - 2);\n"
+	//nearer sample prevents light leaking around rock edges
+	"		float reach = min(BEAMS[i].reaches[sample_index], BEAMS[i].reaches[sample_index + 1]);\n"
+	//surface light fades slightly into rock
+	"		float contact = surface ? 1.0 - smoothstep(reach, reach + 0.5, forward) : step(forward, reach);\n"
+	//same squared-distance exponential falloff as jellyfish and coral
+	"		float core_offset = across / BEAMS[i].shape.x;\n"
+	"		float core = exp(-2.0 * core_offset * core_offset);\n"
+	//soft light widens forward until reaching the spill radius
+	"		float spread = BEAMS[i].shape.x + min(0.6 * forward, BEAMS[i].shape.w);\n"
+	"		float spill_offset = across / spread;\n"
+	"		float spill = 0.5 * exp(-3.0 * spill_offset * spill_offset);\n"
+	"		float edge = 1.0 - smoothstep(0.75 * light_width, light_width, abs(across));\n"
+	"		float falloff = exp(-1.5 * forward / BEAMS[i].shape.y) * (1.0 - smoothstep(0.85 * BEAMS[i].shape.y, BEAMS[i].shape.y, forward));\n"
+	"		amount += BEAMS[i].shape.z * (core + spill) * edge * falloff * contact;\n"
+	"	}\n"
+	"	return amount;\n"
+	"}\n"
+	"float point_light(vec2 world, bool shadows) {\n"
 	"	float amount = DIM;\n"
 	"	for (int i = 0; i < GLOW_COUNT; ++i) {\n"
 	"		vec2 offset = (world - GLOWS[i].xy) / GLOW_RADIUS;\n"
@@ -62,7 +95,10 @@ std::string const Water::glsl =
 	"		float strength = distance2 < 9.0 ? exp(-distance2) : 0.0;\n"
 	"		if (strength > 0.0001) amount += GLOWS[i].z * strength * (shadows ? visible(GLOWS[i].xy, world) : 1.0);\n"
 	"	}\n"
-	"	return BRIGHTNESS * amount;\n"
+	"	return amount;\n"
+	"}\n"
+	"float light(vec2 world, bool shadows) {\n"
+	"	return BRIGHTNESS * (point_light(world, shadows) + beam_light(world, shadows));\n"
 	"}\n"
 	"float noise(vec2 p) {\n"
 	"	ivec2 cell = ivec2(floor(p));\n"
@@ -95,6 +131,13 @@ Water::Uniforms::Uniforms(GLuint program_) : program(program_) {
 	blockers = glGetUniformLocation(program, "BLOCKERS[0]");
 	column_count = glGetUniformLocation(program, "COLUMN_COUNT");
 	columns = glGetUniformLocation(program, "BUBBLE_COLUMNS[0]");
+	beam_count = glGetUniformLocation(program, "BEAM_COUNT");
+	for (size_t i = 0; i < beams.size(); ++i) {
+		const std::string name = "BEAMS[" + std::to_string(i) + "].";
+		beams[i].origin_direction = glGetUniformLocation(program, (name + "origin_direction").c_str());
+		beams[i].shape = glGetUniformLocation(program, (name + "shape").c_str());
+		beams[i].reaches = glGetUniformLocation(program, (name + "reaches[0]").c_str());
+	}
 }
 
 void Water::Uniforms::upload(Look const &look) const {
@@ -113,6 +156,14 @@ void Water::Uniforms::upload(Look const &look) const {
 	GLsizei column_size = GLsizei(std::min(look.bubble_columns.size(), max_columns));
 	glUniform1i(column_count, column_size);
 	if (column_size > 0) glUniform3fv(columns, column_size, &look.bubble_columns[0].x);
+	const GLsizei beam_size = GLsizei(std::min(look.beams.size(), max_beams));
+	glUniform1i(beam_count, beam_size);
+	for (GLsizei i = 0; i < beam_size; ++i) {
+		Beam const &beam = look.beams[i];
+		glUniform4f(beams[i].origin_direction, beam.origin.x, beam.origin.y, beam.direction.x, beam.direction.y);
+		glUniform4f(beams[i].shape, beam.half_width, beam.range, beam.strength, beam.spill_radius);
+		glUniform1fv(beams[i].reaches, GLsizei(beam_samples), beam.reaches.data());
+	}
 	glUseProgram(0);
 }
 
@@ -135,13 +186,16 @@ Water::Water() {
 		"out vec4 fragColor;\n"
 		"void main() {\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, uv);\n"
-		"	float glow = max(0.0, light(world, false) - BRIGHTNESS * DIM);\n"
+		"	float beam = beam_light(world, false);\n"
+		"	float beam_glow = BRIGHTNESS * beam;\n"
+		"	float glow = max(0.0, BRIGHTNESS * (point_light(world, false) + beam) - BRIGHTNESS * DIM);\n"
 		"	vec2 drifting = world / 1.1 + vec2(TIME * 0.02, TIME * 0.045);\n"
 		"	uvec2 cell = uvec2(ivec2(floor(drifting)));\n"
 		"	uint key = hash(cell.x ^ hash(cell.y));\n"
 		"	vec2 center = vec2(random(key), random(key ^ 173U));\n"
 		"	float dust = (1.0 - smoothstep(0.006, 0.023, length(fract(drifting) - center))) * step(0.65, random(key ^ 719U));\n"
-		"	float density = 0.04 * glow * (0.45 + 0.65 * mist(world));\n"
+		//less beam haze keeps nearby illuminated objects visible
+		"	float density = (0.04 * max(0.0, glow - beam_glow) + 0.012 * beam_glow) * (0.45 + 0.65 * mist(world));\n"
 		"	density += dust * min(0.15, 0.08 * glow);\n"
 		"	float bubbles = 0.0;\n"
 		"	for (int column = 0; column < COLUMN_COUNT; ++column) {\n"
@@ -169,8 +223,9 @@ Water::Water() {
 		"#version 330\n" + glsl +
 		"uniform sampler2D SCENE;\n"
 		"uniform uint FRAME;\n"
+		"uniform float DISPLAY_GAIN;\n"
 		"const float EDGE_DARKNESS = 0.6;\n"
-		"const float GRAIN = 0.012;\n"
+		"uniform float GRAIN;\n"
 		//based on https://en.wikipedia.org/wiki/SRGB#Transfer_function_(%22gamma%22)
 		"vec3 to_srgb(vec3 linear) {\n"
 		"	return mix(12.92 * linear, 1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, linear));\n"
@@ -181,6 +236,9 @@ Water::Water() {
 		"	vec3 color = texture(SCENE, uv).rgb;\n"
 		// darker toward the edges, darkest in the corners
 		"	color *= 1.0 - EDGE_DARKNESS * smoothstep(0.5, 1.45, length(2.0 * uv - 1.0));\n"
+		//lift shadows while keeping black and white fixed
+		"	float peak = clamp(max(color.r, max(color.g, color.b)), 0.0, 1.0);\n"
+		"	color *= DISPLAY_GAIN / mix(1.0, DISPLAY_GAIN, peak);\n"
 		//grain reduces color banding in dark water
 		"	uvec2 pixel = uvec2(gl_FragCoord.xy);\n"
 		"	float grain = random(pixel.x ^ hash(pixel.y ^ hash(FRAME)));\n"
@@ -189,6 +247,8 @@ Water::Water() {
 	);
 	haze_uniforms = Uniforms(haze_program);
 	frame_uniform = glGetUniformLocation(finish_program, "FRAME");
+	display_gain_uniform = glGetUniformLocation(finish_program, "DISPLAY_GAIN");
+	grain_uniform = glGetUniformLocation(finish_program, "GRAIN");
 	glUseProgram(finish_program);
 	glUniform1i(glGetUniformLocation(finish_program, "SCENE"), 0);
 	glUseProgram(0);
@@ -251,12 +311,14 @@ void Water::haze() {
 	glUseProgram(0);
 }
 
-void Water::finish() {
+void Water::finish(float display_gain, bool grain) {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
 	glUseProgram(finish_program);
 	glUniform1ui(frame_uniform, frame++);
+	glUniform1f(display_gain_uniform, display_gain);
+	glUniform1f(grain_uniform, grain ? 0.012f : 0.0f);
 	glDisable(GL_BLEND);
 	// add grain after converting to sRGB
 	glDisable(GL_FRAMEBUFFER_SRGB);

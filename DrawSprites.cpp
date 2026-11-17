@@ -14,11 +14,19 @@
 SpriteTexture::SpriteTexture(std::string const &filename) {
 	std::vector<glm::u8vec4> pixels;
 	load_png(filename, &pixel_size, &pixels, LowerLeftOrigin);
+	upload(pixels.data());
+}
+
+SpriteTexture::SpriteTexture(glm::u8vec4 const &color) : pixel_size(1) {
+	upload(&color);
+}
+
+void SpriteTexture::upload(glm::u8vec4 const *pixels) {
 	glGenTextures(1, &texture);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, pixel_size.x, pixel_size.y,
-		0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	//based on https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGenerateMipmap.xhtml
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -42,6 +50,7 @@ DrawSprites::DrawSprites() {
 		"#define PLAYER " + std::to_string(Player) + "\n" +
 		"#define CRACKED " + std::to_string(Cracked) + "\n" +
 		"#define PILLAR " + std::to_string(Pillar) + "\n" +
+		"#define TUNNEL " + std::to_string(Tunnel) + "\n" +
 		"#define FAR_TAIL " + std::to_string(FarTail) + "\n";
 
 	program = gl_compile_program(
@@ -84,7 +93,7 @@ DrawSprites::DrawSprites() {
 		"	}\n"
 		"	if (color.a < 0.0039 && eye_halo < 0.01) discard;\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, 0.5 * clip + 0.5);\n"
-		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR;\n"
+		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR || MATERIAL == TUNNEL;\n"
 		"	float lit = MATERIAL != EMISSIVE ? light(world, surface) : 1.0;\n"
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
 		//adjust brightness for each kind of sprite
@@ -118,6 +127,11 @@ DrawSprites::DrawSprites() {
 		"		wet_shine = 0.5 * shine * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
 		"	}\n"
 		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
+		//black pixels need a color to reflect light
+		"	if (MATERIAL == TUNNEL) {\n"
+		"		color.rgb = vec3(0.045, 0.052, 0.055);\n"
+		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
+		"	}\n"
 		//wall cracks need the jellyfish nearby
 		"	if (MATERIAL == CRACKED) {\n"
 		"		vec2 from_jelly = (world - JELLY_LIGHT.xy) / GLOW_RADIUS;\n"

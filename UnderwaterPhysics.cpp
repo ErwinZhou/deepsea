@@ -4,6 +4,42 @@
 #include <cmath>
 #include <limits>
 
+float hit_time(Body2D const &body, StaticBox2D const &box, float elapsed, glm::vec2 *contact) {
+	float miss = std::numeric_limits<float>::infinity();
+	glm::vec2 away = body.position - glm::clamp(body.position, box.min, box.max);
+	if (glm::dot(body.velocity, away) >= 0.0f) return miss;
+	float first = 0.0f;
+	float last = elapsed;
+	for (int axis = 0; axis < 2; ++axis) {
+		float low = box.min[axis] - body.radius;
+		float high = box.max[axis] + body.radius;
+		if (std::abs(body.velocity[axis]) < 0.00001f) {
+			if (body.position[axis] < low || body.position[axis] > high) return miss;
+		} else {
+			float a = (low - body.position[axis]) / body.velocity[axis];
+			float b = (high - body.position[axis]) / body.velocity[axis];
+			first = std::max(first, std::min(a, b));
+			last = std::min(last, std::max(a, b));
+		}
+	}
+	if (first > last) return miss;
+	glm::vec2 center = body.position + body.velocity * first;
+	*contact = glm::clamp(center, box.min, box.max);
+	if (glm::dot(center - *contact, center - *contact) > body.radius * body.radius + 0.00001f) {
+		//at a corner the circle reaches the box after its bounding square does
+		glm::vec2 offset = body.position - *contact;
+		float a = glm::dot(body.velocity, body.velocity);
+		float b = glm::dot(offset, body.velocity);
+		float c = glm::dot(offset, offset) - body.radius * body.radius;
+		float discriminant = b * b - a * c;
+		if (discriminant < 0.0f) return miss;
+		first = (-b - std::sqrt(discriminant)) / a;
+		if (first < 0.0f || first > last) return miss;
+		*contact = glm::clamp(body.position + body.velocity * first, box.min, box.max);
+	}
+	return first;
+}
+
 void Body2D::add_force(glm::vec2 const &value) {
 	if (active && inverse_mass > 0.0f) force += value;
 }

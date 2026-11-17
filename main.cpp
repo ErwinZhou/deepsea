@@ -4,6 +4,7 @@
 //The 'PlayMode' mode plays the game:
 #include "PlayMode.hpp"
 #include "Checkpoint.hpp"
+#include "BrightnessMode.hpp"
 
 //For asset loading:
 #include "Load.hpp"
@@ -37,11 +38,13 @@ extern "C" { uint32_t GetACP(); }
 int main(int argc, char **argv) {
 	PlayMode::LevelId start_level = PlayMode::LevelId::One;
 	if (argc != 1) {
-		if (argc != 3 || std::string(argv[1]) != "--level" || (std::string(argv[2]) != "1" && std::string(argv[2]) != "2")) {
-			std::cerr << "Usage: game [--level 1|2]\n";
+		std::string level = argc == 3 ? argv[2] : "";
+		if (argc != 3 || std::string(argv[1]) != "--level" || (level != "1" && level != "2" && level != "test")) {
+			std::cerr << "Usage: game [--level 1|2|test]\n";
 			return 1;
 		}
-		start_level = std::string(argv[2]) == "1" ? PlayMode::LevelId::One : PlayMode::LevelId::Two;
+		if (level == "2") start_level = PlayMode::LevelId::Two;
+		if (level == "test") start_level = PlayMode::LevelId::Test;
 	}
 #ifdef _WIN32
 	{ //when compiled on windows, check that code page is forced to utf-8 (makes file loading/saving work right):
@@ -131,9 +134,11 @@ int main(int argc, char **argv) {
 
 	//------------ create game mode + make current --------------
 	std::string checkpoint_file;
+	std::string brightness_file = preference_path("brightness.txt");
+	std::optional<int> brightness = BrightnessMode::load(brightness_file);
 	std::optional<Body2D> belly_contents;
 	if (argc == 1) {
-		checkpoint_file = checkpoint_path();
+		checkpoint_file = preference_path("checkpoint.csv");
 		if (!checkpoint_file.empty()) {
 			const std::optional<Checkpoint> saved = load_checkpoint(checkpoint_file);
 			if (saved) {
@@ -142,7 +147,15 @@ int main(int argc, char **argv) {
 			}
 		}
 	}
-	Mode::set_current(std::make_shared<PlayMode>(start_level, belly_contents, checkpoint_file));
+	auto start_game = [&](int value) {
+		brightness = value;
+		Mode::set_current(std::make_shared<PlayMode>(start_level, belly_contents, checkpoint_file, BrightnessMode::display_gain(value)));
+	};
+	if (argc == 1 && !brightness && !brightness_file.empty()) {
+		Mode::set_current(std::make_shared<BrightnessMode>(brightness_file, std::nullopt, start_game));
+	} else {
+		start_game(brightness.value_or(BrightnessMode::default_brightness));
+	}
 
 	//------------ main loop ------------
 
@@ -177,11 +190,27 @@ int main(int argc, char **argv) {
 					continue;
 				}
 				//handle resizing:
-				if (evt.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+				if (evt.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || evt.type == SDL_EVENT_WINDOW_RESIZED) {
 					on_resize();
 				}
+				auto current = Mode::current;
+				if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_F2) {
+					if (auto game = std::dynamic_pointer_cast<PlayMode>(current)) {
+						auto resume = [&, game](int value) {
+							brightness = value;
+							game->display_gain = BrightnessMode::display_gain(value);
+							Mode::set_current(game);
+							Sound::set_paused(false);
+						};
+						auto menu = std::make_shared<BrightnessMode>(brightness_file, brightness, resume);
+						game->clear_input();
+						Sound::set_paused(true);
+						Mode::set_current(menu);
+					}
+					continue;
+				}
 				//handle input:
-				if (Mode::current && Mode::current->handle_event(evt, window_size)) {
+				if (current && current->handle_event(evt, window_size)) {
 					// mode handled it; great
 				} else if (evt.type == SDL_EVENT_QUIT) {
 					Mode::set_current(nullptr);

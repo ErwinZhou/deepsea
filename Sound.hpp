@@ -95,6 +95,7 @@ struct PlayingSample {
 void init(); //call Sound::init() from main.cpp before using any member functions
 
 void shutdown(); //call Sound::shutdown() from main.cpp to gracefully(-ish) exit
+void set_paused(bool paused);
 
 //Call 'Sound::play' to play a sample once.
 //  if you hang on to the return value, you can change the panning, volume, or stop playback early.
