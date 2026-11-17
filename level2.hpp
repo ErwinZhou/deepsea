@@ -36,6 +36,10 @@ private:
 	//drawn key height and its distance below the tunnel's upper opening
 	static constexpr float key_height = 1.6f;
 	static constexpr float key_end_inset = 1.5f;
+	static constexpr float coral_size = 2.4f; //guide coral size
+	static constexpr float coral_base_inset = 0.08f; //bury the flat edge slightly
+	static constexpr float coral_glow = 0.7f; //soft guiding light
+	static constexpr float coral_light_offset = 0.4f; //light sits outside the rock
 
 	static constexpr float flashlight_height = 4.8f; //flashlight height
 	static constexpr float inside_flashlight_height = 2.0f; //smaller lamp inside the tunnel
@@ -69,6 +73,12 @@ private:
 	SpriteTexture tunnel_texture;
 	std::vector<unsigned char> tunnel_alpha; //opacity for light blocking, rows run downward
 	SpriteTexture key_texture;
+	SpriteTexture coral_texture;
+	struct Coral {
+		glm::vec2 position{0.0f};
+		float angle = 0.0f;
+	};
+	std::array<Coral, 3> corals{};
 	SpriteTexture flashlight_texture;
 	SpriteTexture flashlight_base_texture;
 	struct Flashlight {

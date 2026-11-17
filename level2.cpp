@@ -15,6 +15,12 @@ static constexpr glm::vec2 TunnelEndUV(991.0f / 1180.0f, 0.0f);
 static constexpr glm::vec2 TunnelEntranceUV(637.0f / 1180.0f, 541.0f / 820.0f);
 //inside lamp rests on this ledge
 static constexpr glm::vec2 InsideFlashlightUV(828.0f / 1180.0f, 292.0f / 820.0f);
+//three mounts follow the rock faces
+static constexpr glm::vec3 CoralMounts[] = {
+	{706.0f / 1180.0f, 408.0f / 820.0f, 0.0f},
+	{634.0f / 1180.0f, 303.0f / 820.0f, -60.0f},
+	{783.0f / 1180.0f, 336.0f / 820.0f, -16.0f}
+};
 //lens and pivot heights for flashlight
 static constexpr float FlashlightLensUV = 100.0f / 682.0f;
 static constexpr float FlashlightPivotUV = 545.0f / 682.0f;
@@ -52,6 +58,7 @@ static FlashlightContact flashlight_contact(glm::vec2 const &position, float rad
 }
 
 Level2::Level2() : tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")),
+	coral_texture(data_path("coral.png")),
 	flashlight_texture(data_path("level2/flashlight.png")), flashlight_base_texture(data_path("small_rock.png")) {
 }
 
@@ -62,6 +69,16 @@ void Level2::setup_tunnel(UnderwaterPhysics &physics) {
 		physics.bounds_max.y - 0.5f * tunnel_size.y);
 	key_position = tunnel_center + glm::vec2((TunnelEndUV.x - 0.5f) * tunnel_size.x,
 		(0.5f - TunnelEndUV.y) * tunnel_size.y - key_end_inset);
+	for (size_t i = 0; i < corals.size(); ++i) {
+		glm::vec3 const &mount = CoralMounts[i];
+		const float angle = glm::radians(mount.z);
+		const glm::vec2 outward(-std::sin(angle), std::cos(angle));
+		corals[i] = {
+			tunnel_center + (glm::vec2(mount.x, 1.0f - mount.y) - 0.5f) * tunnel_size
+				+ outward * (0.5f * coral_size - coral_base_inset),
+			angle
+		};
+	}
 
 	glm::uvec2 size(0);
 	std::vector<glm::u8vec4> pixels;
@@ -273,6 +290,10 @@ bool Level2::restart_requested() const {
 glm::vec3 Level2::prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 	std::optional<size_t> carried_body) const {
 	look.glows.clear();
+	for (Coral const &coral : corals) {
+		const glm::vec2 outward(-std::sin(coral.angle), std::cos(coral.angle));
+		look.glows.emplace_back(coral.position + outward * coral_light_offset, coral_glow);
+	}
 	//share sprite and haze lighting with jellyfish and coral
 	look.beams.clear();
 	for (Flashlight const &flashlight : flashlights) {
@@ -308,7 +329,11 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 			flashlight.height);
 		sprites.draw(flashlight_texture, world_to_clip, flashlight.center, size, glm::radians(flashlight.tilt));
 	}
-	//rock hides the buried handles
+	for (Coral const &coral : corals) {
+		sprites.draw(coral_texture, world_to_clip, coral.position, glm::vec2(coral_size), coral.angle,
+			false, glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
+	}
+	//rock hides the buried bases
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Tunnel);
 	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlights[0].anchor.x, physics.bounds_min.y),
 		flashlight_base_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
