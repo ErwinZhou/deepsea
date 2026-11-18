@@ -36,7 +36,8 @@ private:
 	//drawn key height and its distance below the tunnel's upper opening
 	static constexpr float key_height = 1.6f;
 	static constexpr float key_radius = 0.6f; //key collision radius
-	static constexpr float key_end_inset = 1.5f;
+	static constexpr float key_end_inset = 3.2f;
+	static constexpr float key_left_offset = 0.9f;
 	static constexpr float coral_size = 2.4f; //guide coral size
 	static constexpr float coral_base_inset = 0.08f; //bury the flat edge slightly
 	static constexpr float coral_glow = 1.0f; //light reaches the key

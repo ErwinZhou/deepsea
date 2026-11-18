@@ -66,7 +66,7 @@ void Level2::setup_tunnel(UnderwaterPhysics &physics) {
 	const float tunnel_left = physics.bounds_min.x + tunnel_start_fraction * (physics.bounds_max.x - physics.bounds_min.x);
 	tunnel_center = glm::vec2(tunnel_left + 0.5f * tunnel_size.x,
 		physics.bounds_max.y - 0.5f * tunnel_size.y);
-	key_position = tunnel_center + glm::vec2((TunnelEndUV.x - 0.5f) * tunnel_size.x,
+	key_position = tunnel_center + glm::vec2((TunnelEndUV.x - 0.5f) * tunnel_size.x - key_left_offset,
 		(0.5f - TunnelEndUV.y) * tunnel_size.y - key_end_inset);
 	for (size_t i = 0; i < corals.size(); ++i) {
 		glm::vec3 const &mount = CoralMounts[i];
