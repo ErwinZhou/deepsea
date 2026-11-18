@@ -444,11 +444,12 @@ void Level2::Worm::draw(DrawSprites const &sprites, glm::mat4 const &world_to_cl
 		const float angle = std::atan2(-delta.x, delta.y);
 		sprites.draw(texture, world_to_clip, (start + end) * 0.5f,
 			glm::vec2(size, length + 0.45f), angle, false, glm::u8vec4(255), 0.0f,
-			DrawSprites::Surface, glm::vec4(0.0f, row, 1.0f, row));
+			DrawSprites::LightOnly, glm::vec4(0.0f, row, 1.0f, row));
 	}
 
 	const glm::vec2 forward = facing();
-	sprites.draw(texture, world_to_clip, head, glm::vec2(size), std::atan2(-forward.x, forward.y));
+	sprites.draw(texture, world_to_clip, head, glm::vec2(size), std::atan2(-forward.x, forward.y),
+		false, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
 }
 
 void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
