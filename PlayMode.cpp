@@ -266,7 +266,11 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-	background.draw(sprites, world_to_clip, view_center, render_view, physics.bounds_min, physics.bounds_max);
+	int level = 1;
+	if (level1) level = 1;
+	else if (level2) level = 2;
+
+	background.draw(sprites, world_to_clip, view_center, render_view, physics.bounds_min, physics.bounds_max, level);
 	if (level1) {
 		level1->draw_distant(sprites, world_to_clip, view_center);
 	}
@@ -315,7 +319,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	} else if (level2) {
 		fade = level2->fade_amount();
 	}
-	background.draw_fade(sprites, world_to_clip, view_center, render_view, fade);
+	background.draw_fade(sprites, world_to_clip, view_center, render_view, fade, level);
 
 	glDisable(GL_BLEND);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);
