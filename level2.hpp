@@ -16,12 +16,14 @@ struct Level2 {
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
 	void update(float elapsed, UnderwaterPhysics const &physics, size_t player_body);
+	void update_worm(UnderwaterPhysics &physics, size_t player_body, glm::vec2 previous_position, float elapsed);
 	void push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	bool restart_requested() const;
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 		std::optional<size_t> carried_body) const;
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
+	glm::vec2 arrival_shake() const;
 
 private:
 	static constexpr float level_length = 170.0f;
@@ -88,6 +90,7 @@ private:
 		bool stopped = false;
 		static constexpr float size = 3.6f;
 
+		glm::vec2 facing() const;
 		void chase(glm::vec2 player, glm::vec2 entrance, float elapsed);
 		void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	} worm;
@@ -119,6 +122,9 @@ private:
 	glm::vec2 tunnel_center{0.0f};
 	glm::vec2 tunnel_size{0.0f};
 	void setup_tunnel(UnderwaterPhysics &physics);
+	static constexpr float shake_duration = 12.373f; //length of the big fish arrival roar
+	static constexpr float shake_strength = 0.08f;
+	float shake_left = 0.0f;
 	float clock = 0.0f;
 	float death_time = 0.0f;
 };

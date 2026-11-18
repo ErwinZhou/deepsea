@@ -287,16 +287,49 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	return carried_body;
 }
 
-void Level2::update(float elapsed, UnderwaterPhysics const &physics, size_t player_body) {
-	clock += elapsed;
+void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::vec2 previous_position, float elapsed) {
+	Body2D &player = physics.bodies[player_body];
+	if (!player.active) {
+		return;
+	}
 
 	//the first swallow wakes the worm for the rest of the chase
-	if (key_body && !physics.bodies[*key_body].active) {
+	if (!worm.awake && key_body && !physics.bodies[*key_body].active) {
 		worm.awake = true;
+		shake_left = shake_duration;
 	}
-	const glm::vec2 entrance = tunnel_center + (glm::vec2(TunnelEntranceUV.x, 1.0f - TunnelEntranceUV.y) - 0.5f) * tunnel_size;
-	worm.chase(physics.bodies[player_body].position, entrance, elapsed);
+	if (!worm.awake) {
+		return;
+	}
 
+	const glm::vec2 previous_head = worm.head;
+	const glm::vec2 entrance = tunnel_center + (glm::vec2(TunnelEntranceUV.x, 1.0f - TunnelEntranceUV.y) - 0.5f) * tunnel_size;
+	worm.chase(player.position, entrance, elapsed);
+
+	//fit the bite to the oval inside the teeth
+	const glm::vec2 forward = worm.facing();
+	const glm::vec2 side(-forward.y, forward.x);
+	const glm::vec2 radii = Worm::size * glm::vec2(0.29f, 0.14f) + player.radius;
+	const auto mouth_offset = [&](glm::vec2 offset) {
+		return glm::vec2(glm::dot(offset, side), glm::dot(offset, forward)) / radii;
+	};
+
+	//check the closest approach during this step
+	const glm::vec2 start = mouth_offset(previous_position - previous_head);
+	const glm::vec2 step = mouth_offset(player.position - worm.head) - start;
+	const float length_squared = glm::dot(step, step);
+	const float time = length_squared > 0.0f ? glm::clamp(-glm::dot(start, step) / length_squared, 0.0f, 1.0f) : 0.0f;
+	const glm::vec2 closest = start + time * step;
+	if (glm::dot(closest, closest) <= 1.0f) {
+		player.active = false;
+		player.velocity = glm::vec2(0.0f);
+		player.force = glm::vec2(0.0f);
+	}
+}
+
+void Level2::update(float elapsed, UnderwaterPhysics const &physics, size_t player_body) {
+	clock += elapsed;
+	shake_left = std::max(0.0f, shake_left - elapsed);
 	for (Flashlight &flashlight : flashlights) {
 		if (!flashlight.turned) {
 			continue;
@@ -305,6 +338,7 @@ void Level2::update(float elapsed, UnderwaterPhysics const &physics, size_t play
 		flashlight.turned = false;
 	}
 	if (!physics.bodies[player_body].active) {
+		shake_left = 0.0f;
 		death_time += elapsed;
 	}
 }
@@ -383,13 +417,20 @@ void Level2::Worm::chase(glm::vec2 player, glm::vec2 entrance, float elapsed) {
 	stopped = returning_to_entrance && glm::distance(head, entrance) < 0.25f;
 }
 
+glm::vec2 Level2::Worm::facing() const {
+	glm::vec2 delta = head - trail.back();
+	if (glm::length(delta) < 0.001f) {
+		delta = trail.back() - trail[trail.size() - 2];
+	}
+	return glm::normalize(delta);
+}
+
 void Level2::Worm::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
 	if (!awake) {
 		return;
 	}
 
 	const float row = 0.5f / float(texture.pixel_size.y);
-	float angle = glm::radians(-90.0f);
 
 	//overlap body segments to cover the bends
 	for (size_t i = 0; i < trail.size(); ++i) {
@@ -400,13 +441,14 @@ void Level2::Worm::draw(DrawSprites const &sprites, glm::mat4 const &world_to_cl
 		if (length < 0.001f) {
 			continue;
 		}
-		angle = std::atan2(-delta.x, delta.y);
+		const float angle = std::atan2(-delta.x, delta.y);
 		sprites.draw(texture, world_to_clip, (start + end) * 0.5f,
 			glm::vec2(size, length + 0.45f), angle, false, glm::u8vec4(255), 0.0f,
 			DrawSprites::Surface, glm::vec4(0.0f, row, 1.0f, row));
 	}
 
-	sprites.draw(texture, world_to_clip, head, glm::vec2(size), angle);
+	const glm::vec2 forward = facing();
+	sprites.draw(texture, world_to_clip, head, glm::vec2(size), std::atan2(-forward.x, forward.y));
 }
 
 void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
@@ -435,6 +477,14 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 		sprites.draw(*jellyfish_texture, world_to_clip, jelly_position(physics.bodies[*jelly_body]), glm::vec2(1.8f * pulse, 2.15f / pulse),
 			0.04f * std::sin(clock * 0.4f), false, glm::u8vec4(175, 185, 190, 165), 0.0f, DrawSprites::Emissive);
 	}
+}
+
+glm::vec2 Level2::arrival_shake() const {
+	//ease in and out with the big fish roar
+	const float rise = (shake_duration - shake_left) / 0.25f;
+	const float fade = shake_left / 0.6f;
+	const float strength = shake_strength * std::min({1.0f, rise, fade});
+	return strength * glm::vec2(std::sin(clock * 67.0f), std::cos(clock * 53.0f));
 }
 
 float Level2::fade_amount() const {
