@@ -180,29 +180,35 @@ void Level2::aim_flashlight(Flashlight &flashlight, UnderwaterPhysics const &phy
 
 void Level2::push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed) {
 	assert(player_body < physics.bodies.size() && "Push flashlight requires a valid player");
-	Body2D &player = physics.bodies[player_body];
-	if (!player.active) {
-		return;
-	}
-	for (Flashlight &flashlight : flashlights) {
-		push_flashlight(flashlight, physics, player, movement, elapsed);
+	for (Body2D &body : physics.bodies) {
+		if (!body.active) {
+			continue;
+		}
+		const bool player = &body == &physics.bodies[player_body];
+		if (!player && body.kind != Body2D::Key && body.kind != Body2D::Rock) {
+			continue;
+		}
+		for (Flashlight &flashlight : flashlights) {
+			const glm::vec2 push = player ? movement : body.velocity;
+			push_flashlight(flashlight, physics, body, push, elapsed);
+		}
 	}
 }
 
-void Level2::push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics, Body2D &player,
+void Level2::push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics, Body2D &body,
 	glm::vec2 const &movement, float elapsed) {
 	//resolve contact again after turning
 	for (unsigned pass = 0; pass < 3; ++pass) {
 		const float angle = glm::radians(flashlight.tilt);
 		const glm::vec2 sideways(std::cos(angle), std::sin(angle));
 		const glm::vec2 upward(-sideways.y, sideways.x);
-		const glm::vec2 offset = player.position - flashlight.anchor;
+		const glm::vec2 offset = body.position - flashlight.anchor;
 		const glm::vec2 position(glm::dot(offset, sideways), glm::dot(offset, upward));
 		FlashlightContact contact;
 
 		for (StaticBox2D const &part : FlashlightParts) {
 			const StaticBox2D bounds{part.min * flashlight.height, part.max * flashlight.height};
-			const FlashlightContact candidate = flashlight_contact(position, player.radius, bounds);
+			const FlashlightContact candidate = flashlight_contact(position, body.radius, bounds);
 			if (candidate.depth > contact.depth) {
 				contact = candidate;
 			}
@@ -223,12 +229,12 @@ void Level2::push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics,
 			flashlight.turned = true;
 			continue;
 		}
-		player.position += outward * contact.depth;
-		player.position = glm::clamp(player.position, physics.bounds_min + player.radius, physics.bounds_max - player.radius);
+		body.position += outward * contact.depth;
+		body.position = glm::clamp(body.position, physics.bounds_min + body.radius, physics.bounds_max - body.radius);
 		//stop inward motion but allow sliding
-		const float closing_speed = glm::dot(player.velocity, outward);
+		const float closing_speed = glm::dot(body.velocity, outward);
 		if (closing_speed < 0.0f) {
-			player.velocity -= closing_speed * outward;
+			body.velocity -= closing_speed * outward;
 		}
 	}
 }

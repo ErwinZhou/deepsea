@@ -96,7 +96,7 @@ private:
 	std::array<Flashlight, 2> flashlights{};
 	void setup_flashlight(UnderwaterPhysics &physics);
 	void aim_flashlight(Flashlight &flashlight, UnderwaterPhysics const &physics);
-	void push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics, Body2D &player,
+	void push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics, Body2D &body,
 		glm::vec2 const &movement, float elapsed);
 	glm::vec2 key_position{0.0f};
 	glm::vec2 tunnel_center{0.0f};
