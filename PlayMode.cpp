@@ -117,7 +117,8 @@ void PlayMode::update(float elapsed) {
 		// suck first, so a rock at the mouth isn't bumped away by the collision
 		update_interaction();
 		glm::vec2 swim_thrust = move * swim_force;
-		if (carried_body && physics.bodies[*carried_body].kind == Body2D::Rock && move != glm::vec2(0.0f)) {
+		if (carried_body && (physics.bodies[*carried_body].kind == Body2D::Rock
+			|| physics.bodies[*carried_body].kind == Body2D::Key) && move != glm::vec2(0.0f)) {
 			const float acceleration_scale = 1.0f / (1.0f + carried_inertia_per_radius * physics.bodies[*carried_body].radius);
 			// reduce net acceleration while keeping enough thrust to overcome drag at full speed
 			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
@@ -225,7 +226,7 @@ void PlayMode::spit() {
 	body.active = true;
 	body.player_spat = body.kind == Body2D::Rock;
 	// the jellyfish floats where it is released
-	if (body.kind == Body2D::Rock) body.apply_impulse(facing * spit_impulse);
+	if (body.kind == Body2D::Rock || body.kind == Body2D::Key) body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
 	if (level1) {
