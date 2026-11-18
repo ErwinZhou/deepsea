@@ -78,7 +78,7 @@ private:
 		glm::vec2 position{0.0f};
 		float angle = 0.0f;
 	};
-	std::array<Coral, 3> corals{};
+	std::array<Coral, 1> corals{};
 	SpriteTexture flashlight_texture;
 	SpriteTexture flashlight_base_texture;
 	struct Flashlight {

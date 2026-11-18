@@ -14,12 +14,10 @@ static constexpr glm::vec2 TunnelEndUV(991.0f / 1180.0f, 0.0f);
 //entrance coordinates from the asset
 static constexpr glm::vec2 TunnelEntranceUV(637.0f / 1180.0f, 541.0f / 820.0f);
 //inside lamp rests on this ledge
-static constexpr glm::vec2 InsideFlashlightUV(828.0f / 1180.0f, 292.0f / 820.0f);
-//three mounts follow the rock faces
+static constexpr glm::vec2 InsideFlashlightUV(848.0f / 1180.0f, 292.0f / 820.0f);
+//mounts follow the rock faces
 static constexpr glm::vec3 CoralMounts[] = {
-	{706.0f / 1180.0f, 408.0f / 820.0f, 0.0f},
-	{634.0f / 1180.0f, 303.0f / 820.0f, -60.0f},
-	{783.0f / 1180.0f, 336.0f / 820.0f, -16.0f}
+	{706.0f / 1180.0f, 408.0f / 820.0f, 0.0f}
 };
 //lens and pivot heights for flashlight
 static constexpr float FlashlightLensUV = 100.0f / 682.0f;
