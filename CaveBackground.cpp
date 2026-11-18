@@ -6,13 +6,14 @@
 #include <cmath>
 
 CaveBackground::CaveBackground()
-	: background_texture(data_path("cavern_background.png")),
-	  cavern_texture(data_path("cavern_rock.png")) {
+	: background_texture_1(data_path("cavern_background.png")),
+	  cavern_texture(data_path("cavern_rock.png")),
+	  background_texture_2(data_path("level2/ruins_background.png")) {
 }
 
 void CaveBackground::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
 	glm::vec2 const &view_center, glm::vec2 const &view_size,
-	glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) const {
+	glm::vec2 const &bounds_min, glm::vec2 const &bounds_max, int level) const {
 	const glm::vec2 half_view = 0.5f * view_size;
 	const float middle_y = 0.5f * (bounds_min.y + bounds_max.y);
 	auto draw_layer = [&](SpriteTexture const &texture, float parallax, float height, float fade, uint8_t alpha) {
@@ -27,14 +28,16 @@ void CaveBackground::draw(DrawSprites const &sprites, glm::mat4 const &world_to_
 				glm::u8vec4(255, 255, 255, alpha), fade, DrawSprites::Background);
 		}
 	};
-	draw_layer(background_texture, 0.12f, 28.0f, 0.72f, 255);
+	if (level == 1) draw_layer(background_texture_1, 0.12f, 28.0f, 0.72f, 255);
+	if (level == 2) draw_layer(background_texture_2, 0.12f, 28.0f, 0.72f, 255);
 	draw_layer(cavern_texture, 0.28f, 34.0f, 0.45f, 55);
 }
 
 void CaveBackground::draw_fade(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
-	glm::vec2 const &view_center, glm::vec2 const &view_size, float amount) const {
+	glm::vec2 const &view_center, glm::vec2 const &view_size, float amount, int level) const {
 	if (amount > 0.0f) {
 		const uint8_t alpha = uint8_t(255.0f * std::clamp(amount, 0.0f, 1.0f));
-		sprites.draw(background_texture, world_to_clip, view_center, view_size, 0.0f, false, glm::u8vec4(0, 0, 0, alpha));
+		if (level == 1) sprites.draw(background_texture_1, world_to_clip, view_center, view_size, 0.0f, false, glm::u8vec4(0, 0, 0, alpha));
+		if (level == 2) sprites.draw(background_texture_2, world_to_clip, view_center, view_size, 0.0f, false, glm::u8vec4(0, 0, 0, alpha));
 	}
 }
