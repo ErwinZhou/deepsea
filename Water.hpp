@@ -3,6 +3,7 @@
 #include "GL.hpp"
 
 #include <glm/glm.hpp>
+#include <array>
 #include <cstddef>
 #include <string>
 #include <vector>
@@ -14,11 +15,25 @@ struct Water {
 	Water(Water const &) = delete;
 	Water &operator=(Water const &) = delete;
 
+	static constexpr size_t max_beams = 2; //one outside flashlight and one inside
+	static constexpr size_t beam_samples = 65; //ray count across the core and soft light
+	struct Beam {
+		glm::vec2 origin{0.0f}; //lens position
+		glm::vec2 direction{0.0f, 1.0f}; //unit vector pointing forward
+		float half_width = 1.0f;
+		float spill_radius = 4.0f;
+		float range = 1.0f;
+		float strength = 1.0f;
+		//first wall distance along each ray
+		std::array<float, beam_samples> reaches{};
+	};
+
 	struct Look {
 		glm::vec2 view_min = glm::vec2(0.0f);
 		glm::vec2 view_max = glm::vec2(0.0f);
 		// light positions and their strength
 		std::vector< glm::vec3 > glows;
+		std::vector<Beam> beams;
 		glm::vec2 glow_radius = glm::vec2(1.0f);
 		float brightness = 1.0f;
 		float time = 0.0f;
@@ -40,6 +55,13 @@ struct Water {
 		GLint brightness = -1, time = -1;
 		GLint blocker_count = -1, blockers = -1;
 		GLint column_count = -1, columns = -1;
+		GLint beam_count = -1;
+		struct BeamUniforms {
+			GLint origin_direction = -1;
+			GLint shape = -1;
+			GLint reaches = -1;
+		};
+		std::array<BeamUniforms, max_beams> beams{};
 	};
 
 	// draw into the scene texture

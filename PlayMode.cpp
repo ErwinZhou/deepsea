@@ -108,8 +108,6 @@ void PlayMode::update(float elapsed) {
 	}
 	if (level1) {
 		hit_stop = level1->before_physics(physics, elapsed);
-	} else {
-		level2->update(elapsed, physics.bodies[fish_body].active);
 	}
 
 	// step physics at a fixed rate so it plays the same at any frame rate
@@ -119,18 +117,27 @@ void PlayMode::update(float elapsed) {
 		// suck first, so a rock at the mouth isn't bumped away by the collision
 		update_interaction();
 		glm::vec2 swim_thrust = move * swim_force;
-		if (carried_body && physics.bodies[*carried_body].kind == Body2D::Rock && move != glm::vec2(0.0f)) {
+		if (carried_body && (physics.bodies[*carried_body].kind == Body2D::Rock
+			|| physics.bodies[*carried_body].kind == Body2D::Key) && move != glm::vec2(0.0f)) {
 			const float acceleration_scale = 1.0f / (1.0f + carried_inertia_per_radius * physics.bodies[*carried_body].radius);
 			// reduce net acceleration while keeping enough thrust to overcome drag at full speed
 			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
 		}
+		const glm::vec2 previous_position = fish.position;
 		fish.add_force(swim_thrust);
 		physics.step();
+		if (level2) {
+			level2->push_flashlight(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
+			level2->update_worm(physics, fish_body, previous_position, float(UnderwaterPhysics::fixed_step));
+		}
 		float speed = glm::length(fish.velocity);
 		if (fish.active && speed > max_swim_speed) fish.velocity *= max_swim_speed / speed;
 		accumulated_time -= UnderwaterPhysics::fixed_step;
 	}
 
+	if (level2) {
+		level2->update(elapsed, physics, fish_body);
+	}
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
 
@@ -221,7 +228,7 @@ void PlayMode::spit() {
 	body.active = true;
 	body.player_spat = body.kind == Body2D::Rock;
 	// the jellyfish floats where it is released
-	if (body.kind == Body2D::Rock) body.apply_impulse(facing * spit_impulse);
+	if (body.kind == Body2D::Rock || body.kind == Body2D::Key) body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
 	if (level1) {
@@ -243,7 +250,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	GLsizei height = std::max(1, int(camera.view_size.y * scale));
 	glViewport((int(drawable_size.x) - width) / 2, (int(drawable_size.y) - height) / 2, width, height);
 	glm::vec2 const &render_view = camera.view_size;
-	glm::vec2 view_center = level1 ? level1->shaken_center(camera.center, physics) : camera.center;
+	glm::vec2 view_center = level1 ? level1->shaken_center(camera.center, physics) : camera.constrain(camera.center + level2->arrival_shake(), physics.bounds_min, physics.bounds_max);
 	glm::vec2 half_view = 0.5f * render_view;
 	//keep horizontal shake inside the entrance and exit
 	view_center.x = camera.constrain(view_center, physics.bounds_min, physics.bounds_max).x;

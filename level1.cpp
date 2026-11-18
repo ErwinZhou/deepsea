@@ -789,6 +789,7 @@ glm::vec3 Level1::prepare_water(Water::Look &look, UnderwaterPhysics const &phys
 	const float eye = physics.bodies[fish_body].active ? 1.0f : std::max(0.0f, 1.0f - end_time / eye_out_time);
 	const glm::vec2 half_view = 0.5f * view_size;
 	look.glows.clear();
+	look.beams.clear();
 	look.blockers.clear();
 	for (glm::vec3 const &spot : light_spots) {
 		if (std::abs(spot.x - view_center.x) < half_view.x + 3.0f * glow_radius.x) look.glows.push_back(spot);
