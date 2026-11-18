@@ -41,7 +41,8 @@ struct Level2 {
 	void react_to_suction(glm::vec2 const &mouth, glm::vec2 const &facing, float range, float cone_cos, float any_side);
 
 private:
-	static constexpr float level_length = 170.0f;
+	//place the upper tunnel opening about two thirds through the level
+	static constexpr float level_length = 320.0f;
 	//the corridor scrolls vertically inside the tighter view
 	static constexpr float corridor_height = 80.0f;
 	static constexpr float camera_height = 24.0f;
