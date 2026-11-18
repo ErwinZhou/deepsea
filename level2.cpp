@@ -57,7 +57,7 @@ static FlashlightContact flashlight_contact(glm::vec2 const &position, float rad
 }
 
 Level2::Level2() : tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")),
-	coral_texture(data_path("coral.png")),
+	worm{SpriteTexture(data_path("level2/worm.png")), {}, {}, {}}, coral_texture(data_path("coral.png")),
 	flashlight_texture(data_path("level2/flashlight.png")), flashlight_base_texture(data_path("small_rock.png")) {
 }
 
@@ -68,6 +68,12 @@ void Level2::setup_tunnel(UnderwaterPhysics &physics) {
 		physics.bounds_max.y - 0.5f * tunnel_size.y);
 	key_position = tunnel_center + glm::vec2((TunnelEndUV.x - 0.5f) * tunnel_size.x - key_left_offset,
 		(0.5f - TunnelEndUV.y) * tunnel_size.y - key_end_inset);
+
+	//anchor the tail inside the upper wall
+	const glm::vec2 spawn_uv(888.0f / 1180.0f, 1.0f - 15.0f / 820.0f);
+	worm.head = tunnel_center + (spawn_uv - 0.5f) * tunnel_size;
+	worm.trail = {worm.head - glm::vec2(5.0f, 0.0f), worm.head};
+
 	for (size_t i = 0; i < corals.size(); ++i) {
 		glm::vec3 const &mount = CoralMounts[i];
 		const float angle = glm::radians(mount.z);
@@ -283,6 +289,14 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 
 void Level2::update(float elapsed, UnderwaterPhysics const &physics, size_t player_body) {
 	clock += elapsed;
+
+	//the first swallow wakes the worm for the rest of the chase
+	if (key_body && !physics.bodies[*key_body].active) {
+		worm.awake = true;
+	}
+	const glm::vec2 entrance = tunnel_center + (glm::vec2(TunnelEntranceUV.x, 1.0f - TunnelEntranceUV.y) - 0.5f) * tunnel_size;
+	worm.chase(physics.bodies[player_body].position, entrance, elapsed);
+
 	for (Flashlight &flashlight : flashlights) {
 		if (!flashlight.turned) {
 			continue;
@@ -335,6 +349,66 @@ glm::vec2 Level2::jelly_position(Body2D const &jelly) const {
 	return jelly.position + glm::vec2(0.18f * std::sin(clock * 0.3f), 0.25f * std::sin(clock * 0.65f));
 }
 
+void Level2::Worm::chase(glm::vec2 player, glm::vec2 entrance, float elapsed) {
+	if (!awake || stopped) {
+		return;
+	}
+
+	if (player.y <= entrance.y) {
+		returning_to_entrance = true;
+	}
+
+	//follow the player through each turn
+	const glm::vec2 target = returning_to_entrance ? entrance : player;
+	if (tracks.empty() || glm::distance(tracks.back(), target) >= 0.25f) {
+		tracks.push_back(target);
+	}
+
+	float travel = 0.6f * 3.5f * elapsed;
+	while (travel > 0.0f && !tracks.empty()) {
+		const glm::vec2 delta = tracks.front() - head;
+		const float distance = glm::length(delta);
+		if (distance > travel) {
+			head += delta * (travel / distance);
+			break;
+		}
+		head = tracks.front();
+		tracks.pop_front();
+		travel -= distance;
+	}
+
+	if (glm::distance(head, trail.back()) >= 0.35f) {
+		trail.push_back(head);
+	}
+	stopped = returning_to_entrance && glm::distance(head, entrance) < 0.25f;
+}
+
+void Level2::Worm::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
+	if (!awake) {
+		return;
+	}
+
+	const float row = 0.5f / float(texture.pixel_size.y);
+	float angle = glm::radians(-90.0f);
+
+	//overlap body segments to cover the bends
+	for (size_t i = 0; i < trail.size(); ++i) {
+		const glm::vec2 start = trail[i];
+		const glm::vec2 end = i == trail.size() - 1 ? head : trail[i + 1];
+		const glm::vec2 delta = end - start;
+		const float length = glm::length(delta);
+		if (length < 0.001f) {
+			continue;
+		}
+		angle = std::atan2(-delta.x, delta.y);
+		sprites.draw(texture, world_to_clip, (start + end) * 0.5f,
+			glm::vec2(size, length + 0.45f), angle, false, glm::u8vec4(255), 0.0f,
+			DrawSprites::Surface, glm::vec4(0.0f, row, 1.0f, row));
+	}
+
+	sprites.draw(texture, world_to_clip, head, glm::vec2(size), angle);
+}
+
 void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
 	for (Flashlight const &flashlight : flashlights) {
 		const glm::vec2 size(flashlight.height * float(flashlight_texture.pixel_size.x) / float(flashlight_texture.pixel_size.y),
@@ -345,6 +419,7 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 		sprites.draw(coral_texture, world_to_clip, coral.position, glm::vec2(coral_size), coral.angle,
 			false, glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
 	}
+	worm.draw(sprites, world_to_clip);
 	//rock hides the buried bases
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Tunnel);
 	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlights[0].anchor.x, physics.bounds_min.y),

@@ -7,6 +7,7 @@
 
 #include <cstddef>
 #include <array>
+#include <deque>
 #include <optional>
 #include <vector>
 
@@ -75,6 +76,22 @@ private:
 	SpriteTexture tunnel_texture;
 	std::vector<unsigned char> tunnel_alpha; //opacity for light blocking, rows run downward
 	SpriteTexture key_texture;
+
+	struct Worm {
+		SpriteTexture texture;
+		glm::vec2 head{};
+		std::vector<glm::vec2> trail; //where the head has been
+		std::deque<glm::vec2> tracks; //player positions still to reach
+
+		bool awake = false;
+		bool returning_to_entrance = false;
+		bool stopped = false;
+		static constexpr float size = 3.6f;
+
+		void chase(glm::vec2 player, glm::vec2 entrance, float elapsed);
+		void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
+	} worm;
+
 	SpriteTexture coral_texture;
 	struct Coral {
 		glm::vec2 position{0.0f};
