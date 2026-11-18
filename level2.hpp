@@ -35,10 +35,11 @@ private:
 	static constexpr float tunnel_width = 127.0f;
 	//drawn key height and its distance below the tunnel's upper opening
 	static constexpr float key_height = 1.6f;
+	static constexpr float key_radius = 0.6f; //key collision radius
 	static constexpr float key_end_inset = 1.5f;
 	static constexpr float coral_size = 2.4f; //guide coral size
 	static constexpr float coral_base_inset = 0.08f; //bury the flat edge slightly
-	static constexpr float coral_glow = 0.7f; //soft guiding light
+	static constexpr float coral_glow = 1.0f; //light reaches the key
 	static constexpr float coral_light_offset = 0.4f; //light sits outside the rock
 
 	static constexpr float flashlight_height = 4.8f; //flashlight height
@@ -78,7 +79,8 @@ private:
 		glm::vec2 position{0.0f};
 		float angle = 0.0f;
 	};
-	std::array<Coral, 1> corals{};
+	std::array<Coral, 2> corals{};
+	std::optional<size_t> key_body;
 	SpriteTexture flashlight_texture;
 	SpriteTexture flashlight_base_texture;
 	struct Flashlight {

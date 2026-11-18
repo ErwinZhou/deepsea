@@ -15,9 +15,10 @@ static constexpr glm::vec2 TunnelEndUV(991.0f / 1180.0f, 0.0f);
 static constexpr glm::vec2 TunnelEntranceUV(637.0f / 1180.0f, 541.0f / 820.0f);
 //inside lamp rests on this ledge
 static constexpr glm::vec2 InsideFlashlightUV(848.0f / 1180.0f, 292.0f / 820.0f);
-//mounts follow the rock faces
+//mounts follow the passage surfaces
 static constexpr glm::vec3 CoralMounts[] = {
-	{706.0f / 1180.0f, 408.0f / 820.0f, 0.0f}
+	{783.0f / 1180.0f, 336.0f / 820.0f, -16.0f},
+	{934.0f / 1180.0f, 74.0f / 820.0f, 180.0f}
 };
 //lens and pivot heights for flashlight
 static constexpr float FlashlightLensUV = 100.0f / 682.0f;
@@ -241,6 +242,13 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	physics.obstacles.clear();
 	setup_tunnel(physics);
 	setup_flashlight(physics);
+	Body2D key{};
+	key.position = key_position;
+	key.radius = key_radius;
+	key.current_scale = 0.0f;
+	key.kind = Body2D::Key;
+	key_body = physics.bodies.size();
+	physics.bodies.push_back(key);
 	physics.bodies[player_body].position = glm::vec2(physics.bounds_min.x + entrance_distance, 0.0f);
 
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height);
@@ -335,8 +343,11 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Tunnel);
 	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlights[0].anchor.x, physics.bounds_min.y),
 		flashlight_base_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	const glm::vec2 key_size(key_height * float(key_texture.pixel_size.x) / float(key_texture.pixel_size.y), key_height);
-	sprites.draw(key_texture, world_to_clip, key_position, key_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
+	if (key_body && physics.bodies[*key_body].active) {
+		const glm::vec2 key_size(key_height * float(key_texture.pixel_size.x) / float(key_texture.pixel_size.y), key_height);
+		sprites.draw(key_texture, world_to_clip, physics.bodies[*key_body].position, key_size, 0.0f, false,
+			glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
+	}
 	if (jelly_body && physics.bodies[*jelly_body].active) {
 		assert(jellyfish_texture && "a level 2 jellyfish requires its texture");
 		const float pulse = 1.0f + 0.035f * std::sin(clock * 1.3f);
