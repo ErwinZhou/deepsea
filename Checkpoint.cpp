@@ -41,7 +41,7 @@ static bool read_number(std::string const &field, float &value) {
 }
 
 std::string checkpoint_path() {
-	//this idea of saving directory and returned-pointer ownership is inspired by https://wiki.libsdl.org/SDL3/SDL_GetPrefPath
+	//this idea of saving directory and returned-poier ownership is inspired by https://wiki.libsdl.org/SDL3/SDL_GetPrefPath
 	std::unique_ptr<char, decltype(&SDL_free)> directory(SDL_GetPrefPath("DeepSea", "DeepSea"), SDL_free);
 	if (!directory) {
 		std::cerr << "Could not locate checkpoint directory: " << SDL_GetError() << '\n';
