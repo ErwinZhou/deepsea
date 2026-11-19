@@ -76,7 +76,7 @@ Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max
 	  fish_eyes_texture(data_path("level2/small_fish_eyes.png")),
 	  fish_group_speed(fish_group_speed_multiplier * max_swim_speed),
 	  tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")),
-	worm{SpriteTexture(data_path("level2/worm.png")), {}, {}, {}}, coral_texture(data_path("coral.png")),
+	worm{SpriteTexture(data_path("level2/worm.png")), Worm::speed_fraction * max_swim_speed, {}, {}, {}}, coral_texture(data_path("coral.png")),
 	flashlight_texture(data_path("level2/flashlight.png")), flashlight_base_texture(data_path("small_rock.png")) {
 	assert(fish_height > 0.0f && max_swim_speed > 0.0f && "small scary fish require a positive size and swim speed");
 }
@@ -146,6 +146,7 @@ void Level2::setup_flashlight(UnderwaterPhysics &physics) {
 	const float entrance_x = tunnel_center.x + (TunnelEntranceUV.x - 0.5f) * tunnel_size.x;
 	flashlights[0].anchor = glm::vec2(entrance_x + flashlight_entrance_offset, physics.bounds_min.y - flashlight_burial_depth);
 	flashlights[1].anchor = tunnel_center + (glm::vec2(InsideFlashlightUV.x, 1.0f - InsideFlashlightUV.y) - 0.5f) * tunnel_size;
+	flashlights[1].tilt = -flashlight_initial_tilt; //aim up and right
 	flashlights[1].height = inside_flashlight_height;
 	flashlights[1].range = inside_flashlight_range;
 
@@ -892,7 +893,7 @@ void Level2::Worm::chase(glm::vec2 player, glm::vec2 entrance, float elapsed) {
 		tracks.push_back(target);
 	}
 
-	float travel = 0.6f * 3.5f * elapsed;
+	float travel = chase_speed * elapsed;
 	while (travel > 0.0f && !tracks.empty()) {
 		const glm::vec2 delta = tracks.front() - head;
 		const float distance = glm::length(delta);

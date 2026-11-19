@@ -11,18 +11,6 @@
 #include <optional>
 #include <vector>
 
-// small scary fish random appearing effects
-struct SmallScaryFish {
-	enum class State { Waiting, Arriving, Mimicking, Fleeing, Gone, Dormant, Turning, Chasing };
-	State state = State::Waiting; // default to wait there first
-	glm::vec2 position{0.0f};
-	glm::vec2 velocity{0.0f};
-	glm::vec2 arrival_offset{0.0f};
-	float angle = 0.0f;
-	float radius = 0.0f;
-	float scale = 1.0f; //size relative to the player
-};
-
 struct Level2 {
 	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
@@ -107,6 +95,17 @@ private:
 	SpriteTexture const &small_fish_texture;
 	const float small_fish_height;
 	const float small_fish_fast_speed;
+
+	struct SmallScaryFish {
+		enum class State { Waiting, Arriving, Mimicking, Fleeing, Gone, Dormant, Turning, Chasing };
+		State state = State::Waiting; // default to wait there first
+		glm::vec2 position{0.0f};
+		glm::vec2 velocity{0.0f};
+		glm::vec2 arrival_offset{0.0f};
+		float angle = 0.0f;
+		float radius = 0.0f;
+		float scale = 1.0f; //size relative to the player
+	};
 	SmallScaryFish small_fish;
 	float next_mimic_time = 0.0f; //level time when the next fish may appear
 	bool mimic_encounters_finished = false; //stop single fish for this run after nearing the seven fish
@@ -141,7 +140,9 @@ private:
 	SpriteTexture key_texture;
 
 	struct Worm {
+		static constexpr float speed_fraction = 0.75f; //relative to full swim speed with the key
 		SpriteTexture texture;
+		float chase_speed;
 		glm::vec2 head{};
 		std::vector<glm::vec2> trail; //where the head has been
 		std::deque<glm::vec2> tracks; //player positions still to reach
