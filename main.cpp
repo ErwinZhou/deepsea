@@ -17,6 +17,9 @@
 //for screenshots:
 #include "load_save_png.hpp"
 
+// For splash screen into
+#include "GP26IntroMode.hpp"
+
 //Includes for libSDL:
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -36,12 +39,16 @@ extern "C" { uint32_t GetACP(); }
 #endif
 int main(int argc, char **argv) {
 	PlayMode::LevelId start_level = PlayMode::LevelId::One;
+	bool do_skip_intro = false;
 	if (argc != 1) {
-		if (argc != 3 || std::string(argv[1]) != "--level" || (std::string(argv[2]) != "1" && std::string(argv[2]) != "2")) {
-			std::cerr << "Usage: game [--level 1|2]\n";
+		if (argc < 3 || std::string(argv[1]) != "--level" || (std::string(argv[2]) != "1" && std::string(argv[2]) != "2")) {
+			std::cerr << "Usage: game [--level 1|2] [--skip-intro]\n";
 			return 1;
 		}
 		start_level = std::string(argv[2]) == "1" ? PlayMode::LevelId::One : PlayMode::LevelId::Two;
+		if (argc > 3 && std::string(argv[3]) ==  "--skip-intro"){
+			do_skip_intro = true;
+		}
 	}
 #ifdef _WIN32
 	{ //when compiled on windows, check that code page is forced to utf-8 (makes file loading/saving work right):
@@ -142,7 +149,16 @@ int main(int argc, char **argv) {
 			}
 		}
 	}
-	Mode::set_current(std::make_shared<PlayMode>(start_level, belly_contents, checkpoint_file));
+
+	{ //create mode:
+		auto intro = std::make_shared< GP26IntroMode >([&checkpoint_file, &start_level, &belly_contents](){
+			Mode::set_current(std::make_shared< PlayMode >(start_level, belly_contents, checkpoint_file));
+		} );
+		if (do_skip_intro) {
+			intro->time = 10.0f; //force intro to end immediately
+		}
+		Mode::set_current( intro );
+	}
 
 	//------------ main loop ------------
 
