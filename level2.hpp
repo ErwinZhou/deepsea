@@ -216,7 +216,7 @@ private:
 	 * Door Puzzle
 	 */
 	SpriteTexture door_texture;
-	static constexpr float door_fraction = 7.0f / 8.0f;
+	static constexpr float door_fraction = 7.0f / 8.0f; // door should be around 7/8 of the puzzle
 	static constexpr float door_height = 6.0f;
-
+	SpriteTexture pipe_texture;
 };

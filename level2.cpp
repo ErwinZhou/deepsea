@@ -82,7 +82,7 @@ Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max
 	small_fish_fast_speed(mimic_speed_multiplier * max_swim_speed),
 	fish_eyes_texture(data_path("level2/small_fish_eyes.png")),
 	fish_group_speed(fish_group_speed_multiplier * max_swim_speed),
-	door_texture(data_path("level2/door.png")) {
+	door_texture(data_path("level2/door.png")), pipe_texture(data_path("level2/pipe.png")) {
 }
 	
 void Level2::setup_tunnel(UnderwaterPhysics &physics) {
