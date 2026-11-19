@@ -145,7 +145,7 @@ void PlayMode::update(float elapsed) {
 	}
 
 	if (test_level) {
-		test_level->update(elapsed, physics, fish_body);
+		test_level->update(elapsed, physics, fish_body, camera);
 	}
 	camera.update(physics.bodies[fish_body].position, elapsed, physics.bounds_min, physics.bounds_max);
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
@@ -237,7 +237,8 @@ void PlayMode::spit() {
 	body.velocity = body.kind == Body2D::Jelly ? glm::vec2(0.0f) : fish.velocity;
 	body.force = glm::vec2(0.0f);
 	body.active = true;
-	body.player_spat = body.kind == Body2D::Rock || body.kind == Body2D::Key || body.kind == Body2D::Keycard;
+	body.player_spat = body.kind == Body2D::Rock || body.kind == Body2D::Key || body.kind == Body2D::Keycard ||
+		body.kind == Body2D::Pipe || body.kind == Body2D::Pearl || body.kind == Body2D::Trash;
 	// the jellyfish floats where it is released
 	if (body.player_spat) body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
@@ -287,6 +288,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
 	background.draw(sprites, world_to_clip, view_center, render_view, physics.bounds_min, physics.bounds_max);
+	if (test_level) test_level->draw_backdrop(world_to_clip);
 	if (level1) {
 		level1->draw_distant(sprites, world_to_clip, view_center);
 	}
@@ -319,8 +321,10 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	SpriteTexture const &current_fish_texture = (carried_body && physics.bodies[*carried_body].kind == Body2D::Jelly) ? fat_glow_texture : state == FishState::Fat ? fat_texture
 		: state == FishState::Kirby ? kirby_texture : fish_texture;
 	glm::vec2 fish_size = sprite_size(current_fish_texture, fish_height);
-	if (fish.active) sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
-		glm::u8vec4(255), 0.0f, DrawSprites::Player);
+	if (fish.active || (test_level && test_level->show_dead_fish())) {
+		sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
+			glm::u8vec4(255), 0.0f, DrawSprites::Player);
+	}
 	if (level1) {
 		level1->draw_foreground(sprites, world_to_clip);
 	}
