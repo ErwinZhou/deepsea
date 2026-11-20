@@ -82,7 +82,8 @@ Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max
 	small_fish_fast_speed(mimic_speed_multiplier * max_swim_speed),
 	fish_eyes_texture(data_path("level2/small_fish_eyes.png")),
 	fish_group_speed(fish_group_speed_multiplier * max_swim_speed),
-	door_texture(data_path("level2/door.png")), pipe_texture(data_path("level2/pipe.png")) {
+	door_texture(data_path("level2/door.png")), door_wheel_texture(data_path("level2/door_wheel.png")),
+	pipe_texture(data_path("level2/pipe.png")) {
 }
 	
 void Level2::setup_tunnel(UnderwaterPhysics &physics) {
@@ -1057,6 +1058,7 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	const glm::vec2 door_center(glm::mix(physics.bounds_min.x, physics.bounds_max.x, door_fraction),
 		physics.bounds_min.y + 0.5f * door_height);
 	sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f);
+	sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, 0.0f);
 }
 
 void Level2::draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
