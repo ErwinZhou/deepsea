@@ -416,10 +416,27 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	/**
 	 * Door and wheel setup
 	 */
-	door_center = glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, door_fraction),
-		physics.bounds_min.y + 0.5f * door_height);
+	//align the visible right and bottom edges with the level bounds
+	door_center = glm::vec2(physics.bounds_max.x - door_height * (887.0f - 512.0f) / 2048.0f,
+		physics.bounds_min.y + door_height * (2020.0f - 1024.0f) / 2048.0f);
+	Body2D wheel{};
+	wheel.kind = Body2D::Wheel;
+	wheel.position = door_center;
+	wheel.inverse_mass = 0.0f;
+	wheel.radius = wheel_radius;
+	wheel_body = physics.bodies.size();
+	physics.bodies.push_back(wheel);
 	wheel_angle = 0.0f;
 	door_open = false;
+
+	Body2D pipe{};
+	pipe.kind = Body2D::Pipe;
+	pipe.radius = pipe_sprite_size * 0.06f;
+	pipe.half_segment = pipe_sprite_size * 0.63f;
+	pipe.active = false;
+	pipe.position = door_center;
+	pipe_body = physics.bodies.size();
+	physics.bodies.push_back(pipe);
 
 	// camera logic
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height); // reference view in world units 16:9
@@ -431,21 +448,34 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	return carried_body;
 }
 
-void Level2::push_door_wheel(Body2D const &player, glm::vec2 const &movement, float elapsed) {
+void Level2::push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed) {
 	if (door_open) {
+		// already open, just leave it there
 		return;
 	}
 
+	const Body2D &player = physics.bodies[player_body];
 	const glm::vec2 offset = player.position - door_center;
 	const float distance = glm::length(offset);
-	if (!player.active || distance <= 0.0f || std::abs(distance - wheel_radius) > player.radius) {
+	// wheel is pushable
+	Body2D &wheel = physics.bodies[wheel_body];
+	if (player.active && distance > 0.0f && distance <= wheel_radius + player.radius + 0.001f) {
+		const glm::vec2 tangent(-offset.y / distance, offset.x / distance);
+		wheel_angle += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
+	}
+	// wheel again changes
+	wheel_angle += wheel.spin * elapsed;
+	wheel.spin *= std::exp(-3.0f * elapsed);
+	if (std::abs(wheel_angle) < wheel_open_angle) {
 		return;
 	}
 
-	//only a push along the rim turns the wheel
-	const glm::vec2 tangent(-offset.y / distance, offset.x / distance);
-	wheel_angle += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
-	door_open = std::abs(wheel_angle) >= wheel_open_angle;
+	// enough angle, then open the door and active and launch the pipe
+	door_open = true;
+	wheel.active = false;
+	Body2D &pipe = physics.bodies[pipe_body];
+	pipe.active = true;
+	pipe.apply_impulse(glm::vec2(-pipe_launch_impulse, 0.0f));
 }
 
 void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::vec2 previous_position, float elapsed) {
@@ -1086,6 +1116,12 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 		const glm::vec2 edge_size(0.16f * door_size.x, door_size.y);
 		const glm::vec2 hinge = door_center + glm::vec2(0.34f * door_size.x, 0.0f);
 		sprites.draw(door_texture, world_to_clip, hinge, edge_size);
+
+		// pops out the pipe once opened the door
+		const Body2D &pipe = physics.bodies[pipe_body];
+		if (pipe.active) {
+			sprites.draw(pipe_texture, world_to_clip, pipe.position, glm::vec2(pipe_sprite_size), glm::radians(45.0f));
+		}
 		return;
 	}
 	sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f);

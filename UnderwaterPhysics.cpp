@@ -46,9 +46,14 @@ void UnderwaterPhysics::step() {
 
 void UnderwaterPhysics::resolve_contact(Body2D &a, Body2D &b) const {
 	if (!a.active || !b.active) return;
+
 	float inverse_sum = a.inverse_mass + b.inverse_mass;
 	if (inverse_sum <= 0.0f) return;
+
 	glm::vec2 delta = b.position - a.position;
+	float reach = a.half_segment + b.half_segment;
+	delta.x -= glm::clamp(delta.x, -reach, reach);
+	
 	float distance_squared = glm::dot(delta, delta);
 	float radius = a.radius + b.radius;
 	if (distance_squared > radius * radius) return;
@@ -63,16 +68,29 @@ void UnderwaterPhysics::resolve_contact(Body2D &a, Body2D &b) const {
 	float closing_speed = glm::dot(b.velocity - a.velocity, normal);
 	// already moving apart, so no bounce
 	if (closing_speed >= 0.0f) return;
+	//a hit on the wheel handles starts a turn
+	if (a.kind == Body2D::Wheel || b.kind == Body2D::Wheel) {
+		Body2D &wheel = a.kind == Body2D::Wheel ? a : b;
+		glm::vec2 relative = b.velocity - a.velocity;
+		float along_rim = normal.x * relative.y - normal.y * relative.x;
+		wheel.spin += std::copysign(-closing_speed / wheel.radius, along_rim);
+	}
+
 	glm::vec2 impulse = normal * (-(1.0f + restitution) * closing_speed / inverse_sum);
 	a.velocity -= impulse * a.inverse_mass;
 	b.velocity += impulse * b.inverse_mass;
 }
 
-void UnderwaterPhysics::resolve_contact(Body2D &body, StaticBox2D const &box) const {
+void UnderwaterPhysics::resolve_contact(Body2D &body, StaticBox2D const &wall) const {
 	if (!body.active || body.inverse_mass <= 0.0f) return;
+
+	const glm::vec2 reach(body.half_segment, 0.0f);
+	const StaticBox2D box{wall.min - reach, wall.max + reach};
+
 	glm::vec2 closest = glm::clamp(body.position, box.min, box.max);
 	glm::vec2 delta = body.position - closest;
 	float distance_squared = glm::dot(delta, delta);
+
 	if (distance_squared >= body.radius * body.radius) return;
 
 	glm::vec2 normal(0.0f);
@@ -104,13 +122,17 @@ void UnderwaterPhysics::resolve_contact(Body2D &body, StaticBox2D const &box) co
 void UnderwaterPhysics::contain(Body2D &body) const {
 	if (!body.active || body.inverse_mass <= 0.0f) return;
 	for (int axis = 0; axis < 2; ++axis) {
-		float low = bounds_min[axis] + body.radius;
-		float high = bounds_max[axis] - body.radius;
+		const float extent = body.radius + (axis == 0 ? body.half_segment : 0.0f);
+		float low = bounds_min[axis] + extent;
+		float high = bounds_max[axis] - extent;
+
 		if (body.position[axis] < low) {
 			body.position[axis] = low;
+
 			if (body.velocity[axis] < 0.0f) body.velocity[axis] *= -restitution;
 		} else if (body.position[axis] > high) {
 			body.position[axis] = high;
+
 			if (body.velocity[axis] > 0.0f) body.velocity[axis] *= -restitution;
 		}
 	}

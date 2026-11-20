@@ -133,7 +133,9 @@ void PlayMode::update(float elapsed) {
 		update_interaction();
 		glm::vec2 swim_thrust = move * swim_force;
 		if (carried_body && (physics.bodies[*carried_body].kind == Body2D::Rock
-			|| physics.bodies[*carried_body].kind == Body2D::Key) && move != glm::vec2(0.0f)) {
+			|| physics.bodies[*carried_body].kind == Body2D::Key 
+			|| physics.bodies[*carried_body].kind == Body2D::Pipe) 
+			&& move != glm::vec2(0.0f)) {
 			const float acceleration_scale = 1.0f / (1.0f + carried_inertia_per_radius * physics.bodies[*carried_body].radius);
 			// reduce net acceleration while keeping enough thrust to overcome drag at full speed
 			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
@@ -142,7 +144,7 @@ void PlayMode::update(float elapsed) {
 		fish.add_force(swim_thrust);
 		physics.step();
 		if (level2) {
-			level2->push_door_wheel(fish, move, float(UnderwaterPhysics::fixed_step));
+			level2->push_door_wheel(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
 			level2->push_flashlight(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
 			level2->update_worm(physics, fish_body, previous_position, float(UnderwaterPhysics::fixed_step));
 		}
@@ -209,6 +211,8 @@ void PlayMode::update_interaction() {
 		auto const &body = physics.bodies[i];
 		if (i == fish_body || !body.active || body.inverse_mass <= 0.0f) continue;
 		glm::vec2 offset = body.position - mouth;
+		offset.x -= glm::clamp(offset.x, -body.half_segment, body.half_segment);
+
 		float distance = glm::length(offset);
 		// dot(offset, facing) is distance times the cosine of the angle to the body
 		bool in_cone = glm::dot(offset, facing) >= distance * cone_cos;
@@ -240,14 +244,14 @@ void PlayMode::spit() {
 	auto const &fish = physics.bodies[fish_body];
 	auto &body = physics.bodies[*carried_body];
 	// place it past the mouth, inside the level
-	body.position = fish.position + facing * (fish.radius + body.radius + spit_clearance);
+	body.position = fish.position + facing * (fish.radius + body.radius + std::abs(facing.x) * body.half_segment + spit_clearance);
 	body.position = glm::clamp(body.position, physics.bounds_min + body.radius, physics.bounds_max - body.radius);
 	body.velocity = body.kind == Body2D::Jelly ? glm::vec2(0.0f) : fish.velocity;
 	body.force = glm::vec2(0.0f);
 	body.active = true;
 	body.player_spat = body.kind == Body2D::Rock;
 	// the jellyfish floats where it is released
-	if (body.kind == Body2D::Rock || body.kind == Body2D::Key) body.apply_impulse(facing * spit_impulse);
+	if (body.kind == Body2D::Rock || body.kind == Body2D::Key || body.kind == Body2D::Pipe) body.apply_impulse(facing * spit_impulse);
 	carried_body.reset();
 	state = FishState::Normal;
 	if (level1) {
