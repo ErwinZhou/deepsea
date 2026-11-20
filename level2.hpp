@@ -223,6 +223,8 @@ private:
 	static constexpr float wheel_radius = door_height * 0.125f; //outer
 	static constexpr float wheel_turn_speed = 2.5f; //radians per second at full push
 	glm::vec2 door_center{0.0f};
+	static constexpr float wheel_open_angle = glm::radians(270.0f); //270/360 releases the door
+	bool door_open = false;
 	float wheel_angle = 0.0f; // initial is 0
 	SpriteTexture pipe_texture;
 };

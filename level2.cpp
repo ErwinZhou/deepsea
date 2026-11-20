@@ -419,6 +419,7 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	door_center = glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, door_fraction),
 		physics.bounds_min.y + 0.5f * door_height);
 	wheel_angle = 0.0f;
+	door_open = false;
 
 	// camera logic
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height); // reference view in world units 16:9
@@ -431,6 +432,10 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 }
 
 void Level2::push_door_wheel(Body2D const &player, glm::vec2 const &movement, float elapsed) {
+	if (door_open) {
+		return;
+	}
+
 	const glm::vec2 offset = player.position - door_center;
 	const float distance = glm::length(offset);
 	if (!player.active || distance <= 0.0f || std::abs(distance - wheel_radius) > player.radius) {
@@ -440,6 +445,7 @@ void Level2::push_door_wheel(Body2D const &player, glm::vec2 const &movement, fl
 	//only a push along the rim turns the wheel
 	const glm::vec2 tangent(-offset.y / distance, offset.x / distance);
 	wheel_angle += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
+	door_open = std::abs(wheel_angle) >= wheel_open_angle;
 }
 
 void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::vec2 previous_position, float elapsed) {
@@ -1074,6 +1080,14 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	 * Door related
 	 */
 	const glm::vec2 door_size(door_height * float(door_texture.pixel_size.x) / float(door_texture.pixel_size.y), door_height);
+	if (door_open) {
+		//leave the opening dark and show the panel edge at the right hinge
+		sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f, false, glm::u8vec4(0, 0, 0, 255));
+		const glm::vec2 edge_size(0.16f * door_size.x, door_size.y);
+		const glm::vec2 hinge = door_center + glm::vec2(0.34f * door_size.x, 0.0f);
+		sprites.draw(door_texture, world_to_clip, hinge, edge_size);
+		return;
+	}
 	sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f);
 	sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, wheel_angle);
 }
