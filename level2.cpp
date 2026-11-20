@@ -413,6 +413,13 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	fish_group_triggered = false;
 	fish_group_turn_remaining = 0.0f;
 
+	/**
+	 * Door and wheel setup
+	 */
+	door_center = glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, door_fraction),
+		physics.bounds_min.y + 0.5f * door_height);
+	wheel_angle = 0.0f;
+
 	// camera logic
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height); // reference view in world units 16:9
 	//half etxtends a central box so the player does not move the camera
@@ -421,6 +428,18 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	camera.center = camera.constrain(physics.bodies[player_body].position, physics.bounds_min, physics.bounds_max);
 
 	return carried_body;
+}
+
+void Level2::push_door_wheel(Body2D const &player, glm::vec2 const &movement, float elapsed) {
+	const glm::vec2 offset = player.position - door_center;
+	const float distance = glm::length(offset);
+	if (!player.active || distance <= 0.0f || std::abs(distance - wheel_radius) > player.radius) {
+		return;
+	}
+
+	//only a push along the rim turns the wheel
+	const glm::vec2 tangent(-offset.y / distance, offset.x / distance);
+	wheel_angle += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
 }
 
 void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::vec2 previous_position, float elapsed) {
@@ -1055,10 +1074,8 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	 * Door related
 	 */
 	const glm::vec2 door_size(door_height * float(door_texture.pixel_size.x) / float(door_texture.pixel_size.y), door_height);
-	const glm::vec2 door_center(glm::mix(physics.bounds_min.x, physics.bounds_max.x, door_fraction),
-		physics.bounds_min.y + 0.5f * door_height);
 	sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f);
-	sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, 0.0f);
+	sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, wheel_angle);
 }
 
 void Level2::draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip,

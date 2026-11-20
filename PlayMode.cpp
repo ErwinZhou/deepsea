@@ -20,15 +20,22 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 	  fat_texture(data_path("fat.png")),
 	  fat_glow_texture(data_path("fat_with_glow.png")),
 	  stone_texture(data_path("small_rock.png")) {
+	// push the bodies inside
 	physics.bodies.push_back({.radius = fish_radius, .drag = 1.8f, .current_scale = 0.0f, .kind = Body2D::Fish});
+	
+	// choose the correct level setup
 	if (level_id == LevelId::One) {
 		level1.emplace();
 		level1->setup(physics, camera, fish_body);
+		// we only have two levels right now
 	} else {
-		assert(level_id == LevelId::Two && "play mode requires a supported level");
+		assert(level_id == LevelId::Two && "We only support 2 level right now");
+
 		level2.emplace(fish_texture, fish_height, max_swim_speed);
 		carried_body = level2->setup(physics, camera, fish_body, belly_contents);
+
 		if (carried_body) {
+			// set correct body if the player carries something to the second level
 			state = FishState::Fat;
 		}
 	}
@@ -38,6 +45,7 @@ std::optional<Body2D> PlayMode::carried_contents() const {
 	if (carried_body) {
 		return physics.bodies[*carried_body];
 	}
+
 	return std::nullopt;
 }
 
@@ -47,22 +55,29 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &) {
 		if (state == FishState::Kirby) state = FishState::Normal;
 		return true;
 	}
+	
 	if (evt.type != SDL_EVENT_KEY_DOWN && evt.type != SDL_EVENT_KEY_UP) return false;
 	if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.repeat) return false;
 	if (transition_time >= 0.0f && evt.key.key != SDLK_ESCAPE) {
 		return true;
 	}
+
 	bool pressed = evt.type == SDL_EVENT_KEY_DOWN;
+
 	switch (evt.key.key) {
+	
 	case SDLK_W: input.up = pressed; break;
 	case SDLK_S: input.down = pressed; break;
 	case SDLK_A: input.left = pressed; break;
 	case SDLK_D: input.right = pressed; break;
 	case SDLK_SPACE:
+		// suction and spit related logic
 		if (pressed && !input.space) input.space_pressed = true;
 		input.space = pressed;
+
 		if (!pressed) input.suppress_suction = false;
 		break;
+	
 	case SDLK_ESCAPE:
 		if (pressed) Mode::set_current(nullptr);
 		break;
@@ -127,6 +142,7 @@ void PlayMode::update(float elapsed) {
 		fish.add_force(swim_thrust);
 		physics.step();
 		if (level2) {
+			level2->push_door_wheel(fish, move, float(UnderwaterPhysics::fixed_step));
 			level2->push_flashlight(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
 			level2->update_worm(physics, fish_body, previous_position, float(UnderwaterPhysics::fixed_step));
 		}

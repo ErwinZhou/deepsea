@@ -27,6 +27,7 @@ struct Level2 {
 	// draw worm update moving
 	void update_worm(UnderwaterPhysics &physics, size_t player_body, glm::vec2 previous_position, float elapsed);
 	// push flashlight to another angle
+	void push_door_wheel(Body2D const &player, glm::vec2 const &movement, float elapsed);
 	void push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	bool restart_requested() const;
 	// for arrival of worm, could be reused for big fish and final combat
@@ -219,5 +220,9 @@ private:
 	SpriteTexture door_wheel_texture;
 	static constexpr float door_fraction = 7.0f / 8.0f; // door should be around 7/8 of the puzzle
 	static constexpr float door_height = 6.0f;
+	static constexpr float wheel_radius = door_height * 0.125f; //outer
+	static constexpr float wheel_turn_speed = 2.5f; //radians per second at full push
+	glm::vec2 door_center{0.0f};
+	float wheel_angle = 0.0f; // initial is 0
 	SpriteTexture pipe_texture;
 };
