@@ -25,11 +25,13 @@ struct Level2Puzzle {
 	bool machine_running() const { return machine_time >= 0.0f; }
 	bool touches_arm(glm::vec2 const &position, float radius) const { return tentacles.touches(position, radius, clock); }
 	void hide_pipe(UnderwaterPhysics &physics, glm::vec2 const &position);
-	void reveal_pipe(UnderwaterPhysics &physics) { physics.bodies[pipe_body].active = true; }
+	void launch_pipe(UnderwaterPhysics &physics);
 
 private:
 	static constexpr float death_hold_time = 0.7f;
 	static constexpr float death_fade_time = 1.5f;
+	static constexpr float door_pipe_size = 3.2f;
+	static constexpr float pipe_launch_impulse = 10.0f;
 	SpriteTexture pipe_texture, pearl_texture, clam_open_texture, clam_closed_texture;
 	SpriteTexture coral_texture, trash_texture, chest_texture, keycard_texture;
 	SpriteTexture scanner_locked_texture, scanner_unlocked_texture;

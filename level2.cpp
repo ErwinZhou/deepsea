@@ -415,8 +415,20 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	puzzle.setup(physics, glm::vec2(clam_x, floor + 0.5f * Level2Puzzle::clam_height),
 		glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 1.0f / 6.0f), floor + 0.38f * Level2Puzzle::chest_height),
 		glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 5.0f / 6.0f), floor + 0.5f * Level2Puzzle::scanner_height), *key_body);
-	door_center = glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, door_fraction), floor + 0.5f * door_height);
-	puzzle.hide_pipe(physics, door_center + glm::vec2(-0.6f, 0.0f));
+
+	//align the visible right and bottom edges with the level bounds
+	door_center = glm::vec2(physics.bounds_max.x - door_height * (887.0f - 512.0f) / 2048.0f,
+		physics.bounds_min.y + door_height * (2020.0f - 1024.0f) / 2048.0f);
+	Body2D wheel{};
+	wheel.kind = Body2D::Wheel;
+	wheel.position = door_center;
+	wheel.inverse_mass = 0.0f;
+	wheel.radius = wheel_radius;
+	wheel_body = physics.bodies.size();
+	physics.bodies.push_back(wheel);
+	wheel_angle = 0.0f;
+	door_open = false;
+	puzzle.hide_pipe(physics, door_center);
 
 	// camera logic
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height); // reference view in world units 16:9
@@ -471,11 +483,6 @@ void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::ve
 void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &camera, size_t player_body,
 	glm::vec2 const &player_movement, float player_angle) {
 	clock += elapsed;
-	if (door_open) {
-		bool opening = door_time < 0.7f;
-		door_time += elapsed;
-		if (opening && door_time >= 0.7f) puzzle.reveal_pipe(physics);
-	}
 	shake_left = std::max(0.0f, shake_left - elapsed);
 	for (Flashlight &flashlight : flashlights) {
 		if (!flashlight.turned) {
@@ -1085,22 +1092,21 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 
 	const glm::vec2 door_size(door_height * float(door_texture.pixel_size.x) / float(door_texture.pixel_size.y), door_height);
 	if (door_open) {
-		//draw the recess behind the pipe revealed inside it
+		//leave the opening dark and show the panel edge at the right hinge
 		sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f, false, glm::u8vec4(0, 0, 0, 255));
-	}
-	puzzle.draw(sprites, world_to_clip, physics);
-	sprites.draw(coral_texture, world_to_clip, door_center + glm::vec2(-0.25f * door_height, 0.0f), glm::vec2(coral_size),
-		glm::radians(90.0f), false, glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
-	if (door_open) {
-		//keep the right hinge still as the door swings away
-		float width = door_size.x * std::cos(1.45f * glm::smoothstep(0.0f, 0.7f, door_time));
-		glm::vec2 center = door_center + glm::vec2(0.5f * (door_size.x - width), 0.0f);
-		sprites.draw(door_texture, world_to_clip, center, glm::vec2(width, door_size.y));
-		sprites.draw(door_wheel_texture, world_to_clip, center, glm::vec2(width, door_size.y));
+		const glm::vec2 edge_size(0.16f * door_size.x, door_size.y);
+		const glm::vec2 hinge = door_center + glm::vec2(0.34f * door_size.x, 0.0f);
+		sprites.draw(door_texture, world_to_clip, hinge, edge_size);
+
 	} else {
 		sprites.draw(door_texture, world_to_clip, door_center, door_size);
 		sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, wheel_angle);
 	}
+
+	puzzle.draw(sprites, world_to_clip, physics);
+	sprites.draw(coral_texture, world_to_clip, door_center + glm::vec2(-0.25f * door_height, 0.0f), glm::vec2(coral_size),
+		glm::radians(90.0f), false, glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
+
 	//show solid ground wherever the camera looks below the swimming area
 	sprites.draw(floor_texture, world_to_clip, glm::vec2(0.0f, physics.bounds_min.y - 4.0f),
 		glm::vec2(level_length, 8.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Emissive);
@@ -1134,23 +1140,34 @@ float Level2::fade_amount() const {
 	return std::max(entrance, puzzle.fade_amount());
 }
 
-void Level2::push_door(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed) {
-	Body2D &player = physics.bodies[player_body];
-	if (door_open || !player.active) return;
-	glm::vec2 offset = player.position - door_center;
-	float distance = glm::length(offset);
-	float radius = door_height * 0.17f;
-	if (distance > radius + player.radius + 0.4f || distance < 0.001f) return;
-	glm::vec2 normal = offset / distance;
-	glm::vec2 tangent(-normal.y, normal.x);
-	if (distance < radius + player.radius) player.position = door_center + normal * (radius + player.radius);
-	//one steady push turns the wheel a quarter turn
-	float push = std::max(0.0f, -glm::dot(movement, normal));
-	push = std::max(push, std::abs(glm::dot(movement, tangent)));
-	wheel_angle = std::min(wheel_angle + push * 2.2f * elapsed, glm::radians(90.0f));
-	if (wheel_angle >= glm::radians(90.0f)) {
-		door_open = true;
+void Level2::push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed) {
+	if (door_open) {
+		// already open, just leave it there
+		return;
 	}
+
+	const Body2D &player = physics.bodies[player_body];
+	const glm::vec2 offset = player.position - door_center;
+	const float distance = glm::length(offset);
+	// wheel is pushable
+	Body2D &wheel = physics.bodies[wheel_body];
+	glm::vec2 contact_normal;
+	if (player.active && distance > 0.0f && wheel.wheel_clearance(player.position, contact_normal) <= player.radius + 0.001f) {
+		const glm::vec2 tangent(-offset.y / distance, offset.x / distance);
+		wheel_angle += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
+	}
+	// wheel again changes
+	wheel_angle += wheel.spin * elapsed;
+	wheel.wheel_angle = wheel_angle;
+	wheel.spin *= std::exp(-3.0f * elapsed);
+	if (wheel_angle < wheel_open_angle) {
+		return;
+	}
+
+	// enough angle, then open the door and active and launch the pipe
+	door_open = true;
+	wheel.active = false;
+	puzzle.launch_pipe(physics);
 }
 
 size_t Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body) {

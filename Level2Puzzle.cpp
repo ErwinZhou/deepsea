@@ -88,6 +88,9 @@ void Level2Puzzle::check_puzzle_hits(UnderwaterPhysics &physics) {
 	//a pipe hitting either shell props it open, even during a snap
 	StaticBox2D shell{clam_center + clam_height * glm::vec2(-0.47f, -0.5f),
 		clam_center + clam_height * glm::vec2(0.47f, 0.43f)};
+	//either end of the pipe can hit the shell
+	shell.min.x -= pipe.half_segment;
+	shell.max.x += pipe.half_segment;
 	if (!clam_wedged && hits(pipe, shell)) {
 		pipe.active = false;
 		pipe.player_spat = false;
@@ -238,7 +241,8 @@ void Level2Puzzle::draw(DrawSprites const &sprites, glm::mat4 const &world_to_cl
 	Body2D const &pipe = physics.bodies[pipe_body];
 	if (pipe.active || clam_wedged) {
 		sprites.draw(pipe_texture, world_to_clip, clam_wedged ? clam_center + clam_height * glm::vec2(0.23f, -0.03f) : pipe.position,
-			glm::vec2(pipe_height), PipeAngle, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
+			glm::vec2(pipe.half_segment > 0.0f ? door_pipe_size : pipe_height),
+			clam_wedged || pipe.half_segment == 0.0f ? PipeAngle : glm::radians(45.0f), false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
 		if (clam_wedged) {
 			//the front lip hides the lower end of the prop between the shells
 			constexpr float lip = 0.30f;
@@ -287,9 +291,17 @@ float Level2Puzzle::fade_amount() const {
 
 void Level2Puzzle::hide_pipe(UnderwaterPhysics &physics, glm::vec2 const &position) {
 	Body2D &pipe = physics.bodies[pipe_body];
+	pipe.radius = door_pipe_size * 0.06f; //rounded end
+	pipe.half_segment = door_pipe_size * 0.63f; //straight section on either side
 	pipe.position = position;
 	pipe.velocity = glm::vec2(0.0f);
 	pipe.force = glm::vec2(0.0f);
 	pipe.active = false;
 	pipe.player_spat = false;
+}
+
+void Level2Puzzle::launch_pipe(UnderwaterPhysics &physics) {
+	Body2D &pipe = physics.bodies[pipe_body];
+	pipe.active = true;
+	pipe.apply_impulse(glm::vec2(-pipe_launch_impulse, 0.0f));
 }

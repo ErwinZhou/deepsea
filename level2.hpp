@@ -23,7 +23,7 @@ struct Level2 {
 	bool show_dead_fish() const { return puzzle.show_dead_fish(); }
 	int checkpoint() const { return checkpoint_reached ? 1 : 0; }
 	size_t resume_checkpoint(UnderwaterPhysics &physics, size_t player_body);
-	void push_door(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
+	void push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
 
@@ -228,12 +228,14 @@ private:
 	SpriteTexture floor_texture;
 	Level2Puzzle puzzle;
 	SpriteTexture door_wheel_texture;
+	static constexpr float door_height = 30.0f;
+	static constexpr float wheel_radius = door_height * 0.17f; //include the handles
+	size_t wheel_body = 0;
+	static constexpr float wheel_turn_speed = 2.5f; //radians per second at full push
 	glm::vec2 door_center{0.0f};
+	static constexpr float wheel_open_angle = glm::radians(180.0f); //180 out of 360 counterclockwise opens the door
 	bool door_open = false;
-	float door_time = 0.0f;
-	float wheel_angle = 0.0f;
-	bool checkpoint_reached = false;
-	static constexpr float door_fraction = 0.96f;
-	static constexpr float door_height = 18.0f;
+	float wheel_angle = 0.0f; // initial is 0
 
+	bool checkpoint_reached = false;
 };
