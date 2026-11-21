@@ -239,4 +239,15 @@ private:
 	float wheel_angle = 0.0f; // initial is 0
 
 	bool checkpoint_reached = false;
+
+	/**
+	 * Octopus pit
+	 */
+	SpriteTexture mound_texture;
+	std::vector<unsigned char> mound_alpha; //opacity for light blocking, rows run downward
+	glm::vec2 mound_size{0.0f};
+	glm::vec2 right_mound_center{0.0f};
+	glm::vec2 left_mound_center{0.0f};
+	static constexpr float mound_width = level_length / 10.0f;
+	void setup_octopus_pit(UnderwaterPhysics &physics, glm::vec2 const &chest_position);
 };

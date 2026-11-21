@@ -84,7 +84,8 @@ Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max
 	fish_group_speed(fish_group_speed_multiplier * max_swim_speed),
 	door_texture(data_path("level2/door.png")),
 	floor_texture(glm::u8vec4(0, 0, 0, 255)),
-	door_wheel_texture(data_path("level2/door_wheel.png")) {
+	door_wheel_texture(data_path("level2/door_wheel.png")),
+	mound_texture(data_path("level2/rock_mound.png")) {
 }
 
 void Level2::setup_tunnel(UnderwaterPhysics &physics) {
@@ -299,6 +300,61 @@ void Level2::push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics,
 	}
 }
 
+void Level2::setup_octopus_pit(UnderwaterPhysics &physics, glm::vec2 const &chest_position) {
+	mound_size = mound_width * glm::vec2(1.0f, float(mound_texture.pixel_size.y) / float(mound_texture.pixel_size.x));
+	right_mound_center = chest_position + glm::vec2(25.0f, 0.0f);
+	left_mound_center = chest_position - glm::vec2(25.0f, 0.0f);
+
+	glm::uvec2 size(0);
+	std::vector<glm::u8vec4> pixels;
+	load_png(data_path("level2/rock_mound.png"), &size, &pixels, UpperLeftOrigin);
+	mound_alpha.resize(pixels.size());
+
+	for (size_t i = 0; i < pixels.size(); ++i) {
+		mound_alpha[i] = pixels[i].a;
+	}
+	const glm::vec2 right_origin = right_mound_center - 0.5f * mound_size;
+	const glm::vec2 left_origin = left_mound_center  - 0.5f * mound_size;
+	const glm::vec2 pixel_size = mound_size / glm::vec2(size);
+	const glm::vec2 clearance(0.08f);
+	const unsigned columns = (size.x + TunnelCollisionPixels - 1) / TunnelCollisionPixels;
+
+	// draw
+	for (unsigned y = 0; y < size.y; y += TunnelCollisionPixels) {
+		const unsigned sample_y = std::min(y + TunnelCollisionPixels / 2, size.y - 1);
+		bool in_run = false;
+		unsigned run_start = 0;
+		for (unsigned column = 0; column <= columns; ++column) {
+			const unsigned sample_x = std::min(column * TunnelCollisionPixels + TunnelCollisionPixels / 2, size.x - 1);
+			const bool solid = column < columns && pixels[size_t(sample_y) * size.x + sample_x].a >= 128;
+			if (solid && !in_run) {
+				run_start = column * TunnelCollisionPixels;
+				in_run = true;
+			} else if (!solid && in_run) {
+				//png rows run downward, while the cave's y axis runs upward
+				const unsigned run_end = std::min(column * TunnelCollisionPixels, size.x);
+				const unsigned bottom = std::min(y + TunnelCollisionPixels, size.y);
+				const float y_min = right_origin.y + float(size.y - bottom) * pixel_size.y + clearance.y;
+				const float y_max = right_origin.y + float(size.y - y) * pixel_size.y - clearance.y;
+
+				// right side of pit
+				const float r_x_min = right_origin.x + float(run_start) * pixel_size.x + clearance.x;
+				const float r_x_max = right_origin.x + float(run_end) * pixel_size.x - clearance.x;
+				physics.obstacles.push_back(StaticBox2D{glm::vec2(r_x_min, y_min), glm::vec2(r_x_max, y_max)});
+				// horizontally mirrored left side
+				const float l_x_min = left_origin.x + float(size.x - run_end) * pixel_size.x + clearance.x;
+				const float l_x_max = left_origin.x + float(size.x - run_start) * pixel_size.x - clearance.x;
+				physics.obstacles.push_back(StaticBox2D{glm::vec2(l_x_min, y_min), glm::vec2(l_x_max, y_max)});
+
+				in_run = false;
+			}
+		}
+	}
+	if (physics.obstacles.empty()) {
+		throw std::runtime_error("level2/rock_mound.png has no solid walls");
+	}
+}
+
 std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 	std::optional<Body2D> const &belly_contents) {
 	assert(physics.bodies.size() == 1 && player_body == 0 && physics.bodies[player_body].kind == Body2D::Fish
@@ -429,6 +485,10 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	wheel_angle = 0.0f;
 	door_open = false;
 	puzzle.hide_pipe(physics, door_center);
+
+	//octopus pit
+	// physics.obstacles.clear();
+	setup_octopus_pit(physics, glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 1.0f / 6.0f), floor + 0.38f * Level2Puzzle::chest_height));
 
 	// camera logic
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height); // reference view in world units 16:9
@@ -1051,6 +1111,7 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	 * (2) Tunnel related: flashlight, corals, worms, keys
 	 * (3) Small scary fish
 	 * (4) Doors and pipes
+	 * (5) Octopus Pit
 	 */
 
 	if (jelly_body && physics.bodies[*jelly_body].active) {
@@ -1058,6 +1119,11 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 		sprites.draw(*jellyfish_texture, world_to_clip, jelly_position(physics.bodies[*jelly_body]), glm::vec2(1.8f * pulse, 2.15f / pulse),
 			0.04f * std::sin(clock * 0.4f), false, glm::u8vec4(175, 185, 190, 165), 0.0f, DrawSprites::Emissive);
 	}
+
+	sprites.draw(mound_texture, world_to_clip, right_mound_center, mound_size, 0.0f, false, 
+		glm::u8vec4(255), 0.0f, DrawSprites::Pillar);
+	sprites.draw(mound_texture, world_to_clip, left_mound_center, mound_size, 0.0f, true,
+		glm::u8vec4(255), 0.0f, DrawSprites::Pillar);
 
 	/**
 	 * Small scary fish

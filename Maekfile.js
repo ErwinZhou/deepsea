@@ -158,6 +158,7 @@ let copies = [
 	maek.COPY('assets/level2/ruins_background.png', 'dist/level2/ruins_background.png'),
 	maek.COPY('assets/level2/door.png', 'dist/level2/door.png'),
 	maek.COPY('assets/level2/door_wheel.png', 'dist/level2/door_wheel.png'),
+	maek.COPY('assets/level2/rock_mound.png', 'dist/level2/rock_mound.png'),
 
 	maek.COPY('assets/sound/modified_big_fish_roar.opus', 'dist/modified_big_fish_roar.opus'),
 	maek.COPY('assets/sound/modified_big_fish_roar1.opus', 'dist/modified_big_fish_roar1.opus'),
