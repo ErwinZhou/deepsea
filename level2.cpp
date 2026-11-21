@@ -446,13 +446,19 @@ void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::ve
 		return;
 	}
 
-	//the first suck wakes the worm for the rest of the chase
-	if (!worm.awake && !worm.stopped && key_body && !physics.bodies[*key_body].active) {
+	//swallowing the key or pushing it away starts the chase once
+	if (!worm.awake) {
+		if (worm.stopped || !key_body) {
+			return;
+		}
+
+		const Body2D &key = physics.bodies[*key_body];
+		if (key.active && glm::distance(key.position, key_position) < key_wake_distance) {
+			return;
+		}
+
 		worm.awake = true;
 		shake_left = shake_duration;
-	}
-	if (!worm.awake) {
-		return;
 	}
 
 	const glm::vec2 previous_head = worm.head; // make its body infinite long

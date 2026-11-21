@@ -92,6 +92,7 @@ private:
 	glm::vec2 key_position{0.0f};
 	static constexpr float key_height = 1.6f; //draw key height and its distance below the tunnel's upper opening
 	static constexpr float key_radius = 0.6f; //key collision radius
+	static constexpr float key_wake_distance = 10.0f; //distance from spawn that wakes the worm
 	static constexpr float key_end_inset = 3.2f;
 	static constexpr float key_left_offset = 0.9f;
 
