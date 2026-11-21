@@ -404,8 +404,15 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	fish_group_triggered = false;
 	fish_group_turn_remaining = 0.0f;
 
-	float floor = physics.bounds_min.y;
-	puzzle.setup(physics, glm::vec2(0.0f, floor + 0.5f * Level2Puzzle::clam_height),
+	/**
+	 * Clamp with Pearl Puzzle
+	 */
+	//leave room between clamp and flashlight
+	constexpr float clam_offset_from_lamp = 20.0f;
+	const float clam_x = flashlights[0].anchor.x + clam_offset_from_lamp;
+
+	const float floor = physics.bounds_min.y;
+	puzzle.setup(physics, glm::vec2(clam_x, floor + 0.5f * Level2Puzzle::clam_height),
 		glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 1.0f / 6.0f), floor + 0.38f * Level2Puzzle::chest_height),
 		glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 5.0f / 6.0f), floor + 0.5f * Level2Puzzle::scanner_height), *key_body);
 	door_center = glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, door_fraction), floor + 0.5f * door_height);
