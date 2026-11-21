@@ -459,14 +459,16 @@ void Level2::push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm
 	const float distance = glm::length(offset);
 	// wheel is pushable
 	Body2D &wheel = physics.bodies[wheel_body];
-	if (player.active && distance > 0.0f && distance <= wheel_radius + player.radius + 0.001f) {
+	glm::vec2 contact_normal;
+	if (player.active && distance > 0.0f && wheel.wheel_clearance(player.position, contact_normal) <= player.radius + 0.001f) {
 		const glm::vec2 tangent(-offset.y / distance, offset.x / distance);
 		wheel_angle += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
 	}
 	// wheel again changes
 	wheel_angle += wheel.spin * elapsed;
+	wheel.wheel_angle = wheel_angle;
 	wheel.spin *= std::exp(-3.0f * elapsed);
-	if (std::abs(wheel_angle) < wheel_open_angle) {
+	if (wheel_angle < wheel_open_angle) {
 		return;
 	}
 

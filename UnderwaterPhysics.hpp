@@ -8,6 +8,9 @@ struct Body2D {
 	glm::vec2 position{0.0f};
 	glm::vec2 velocity{0.0f};
 	glm::vec2 force{0.0f};
+	void add_force(glm::vec2 const &value);
+	void apply_impulse(glm::vec2 const &value);
+
 	// 0 means nothing can move it
 	float inverse_mass = 1.0f;
 	float radius = 0.5f;
@@ -23,10 +26,9 @@ struct Body2D {
 	 * Level2 -  The Wheel and Door Puzzle
 	 */
 	float half_segment = 0.0f; //horizontal length from the center to either rounded end
+	float wheel_angle = 0.0f;
 	float spin = 0.0f;
-
-	void add_force(glm::vec2 const &value);
-	void apply_impulse(glm::vec2 const &value);
+	float wheel_clearance(glm::vec2 point, glm::vec2 &normal) const; // wheel inside rotation
 };
 
 struct StaticBox2D {

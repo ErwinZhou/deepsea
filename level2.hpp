@@ -13,10 +13,13 @@
 
 struct Level2 {
 	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
+
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
+
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 		std::optional<size_t> carried_body) const;
+	
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
 
@@ -223,7 +226,7 @@ private:
 	size_t wheel_body = 0;
 	static constexpr float wheel_turn_speed = 2.5f; //radians per second at full push
 	glm::vec2 door_center{0.0f};
-	static constexpr float wheel_open_angle = glm::radians(270.0f); //270/360 releases the door
+	static constexpr float wheel_open_angle = glm::radians(180.0f); //180 out of 360 counterclockwise opens the door
 	bool door_open = false;
 	float wheel_angle = 0.0f; // initial is 0
 	SpriteTexture pipe_texture;
