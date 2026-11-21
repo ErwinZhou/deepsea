@@ -2,7 +2,7 @@
 
 #include "Camera2D.hpp"
 #include "DrawSprites.hpp"
-#include "Tentacles.hpp"
+#include "Level2Puzzle.hpp"
 #include "UnderwaterPhysics.hpp"
 #include "Water.hpp"
 
@@ -44,45 +44,15 @@ private:
 	static constexpr float scene_brightness = 0.85f;
 	//seconds to fade in from black at the start
 	static constexpr float fade_in_time = 1.5f;
-	//seconds to fade to black and retry after the player dies
-	static constexpr float death_fade_time = 1.5f;
-	static constexpr float death_hold_time = 0.7f;
+	//seconds before retrying after the player dies
 	static constexpr float restart_delay = 3.0f;
 	SpriteTexture tunnel_texture;
-	SpriteTexture pipe_texture;
-	SpriteTexture pearl_texture;
-	SpriteTexture clam_open_texture;
-	SpriteTexture clam_closed_texture;
-	SpriteTexture coral_texture;
 	SpriteTexture key_texture;
-	SpriteTexture trash_texture;
 	SpriteTexture flashlight_texture;
 	SpriteTexture flashlight_base_texture;
-	SpriteTexture chest_texture;
-	SpriteTexture keycard_texture;
-	SpriteTexture scanner_locked_texture;
-	SpriteTexture scanner_unlocked_texture;
-	Tentacles tentacles;
-	StaticBox2D chest;
-	StaticBox2D scanner;
-	glm::vec2 chest_center{0.0f};
-	glm::vec2 scanner_center{0.0f};
-	glm::vec2 clam_center{0.0f};
-	glm::vec2 held_pearl{0.0f};
-	std::array<glm::vec2, 5> corals{};
-	std::array<glm::vec2, 3> outlets{};
-	std::array<size_t, 24> trash_bodies{};
-	size_t pipe_body = 0, pearl_body = 0, card_body = 0, key_body = 0;
-	unsigned drops_spawned = 0;
-	float next_drop = 1.2f;
-	bool clam_wedged = false;
-	bool tentacles_distracted = false;
-	float clam_time = -1.0f;
-	float wedge_time = 0.0f;
-	bool chest_open = false;
-	float machine_time = -1.0f;
+	Level2Puzzle puzzle;
+	size_t key_body = 0;
 
-	void setup_puzzle(UnderwaterPhysics &physics);
 	std::vector<unsigned char> tunnel_alpha; //opacity for light blocking, rows run downward
 	struct Flashlight {
 		glm::vec2 anchor{0.0f};

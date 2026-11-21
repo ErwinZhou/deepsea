@@ -27,7 +27,7 @@ struct DrawSprites {
 	DrawSprites(DrawSprites const &) = delete;
 	DrawSprites &operator=(DrawSprites const &) = delete;
 
-	enum Material { Emissive, Surface, Background, Stone, Predator, Player, Cracked, FarTail, Pillar, Tunnel };
+	enum Material { Emissive, Surface, Background, Stone, Predator, Player, Cracked, FarTail, Pillar, LightOnly, Tunnel };
 
 	// fade blends distant sprites into the water
 	void draw(SpriteTexture const &texture, glm::mat4 const &world_to_clip,

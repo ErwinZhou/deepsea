@@ -2,8 +2,6 @@
 
 #include "data_path.hpp"
 #include "load_save_png.hpp"
-#include "Load.hpp"
-#include "Sound.hpp"
 
 #include <algorithm>
 #include <cassert>
@@ -23,20 +21,6 @@ static constexpr StaticBox2D FlashlightParts[] = {
 };
 //4px cells keep collisions close to the silhouette without closing the narrow opening
 static constexpr unsigned TunnelCollisionPixels = 4;
-static constexpr float ChestSize = 6.4f;
-static constexpr float ScannerSize = 8.6f;
-static constexpr float ClamSize = 7.0f;
-static constexpr float ClamWarningTime = 0.8f;
-static constexpr float ClamClosedTime = 1.5f;
-static constexpr float PipeSize = 2.2f;
-
-static Load<Sound::Sample> arm_sound(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("modified_rock_hit.opus"));
-});
-static Load<Sound::Sample> capture_sound(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("modified_chomp.opus"));
-});
-
 struct FlashlightContact {
 	glm::vec2 point{0.0f};
 	glm::vec2 normal{0.0f};
@@ -63,14 +47,8 @@ static FlashlightContact flashlight_contact(glm::vec2 const &position, float rad
 }
 
 TestLevel::TestLevel()
-	: tunnel_texture(data_path("level2/tunnel.png")), pipe_texture(data_path("level2/pipe.png")),
-	  pearl_texture(data_path("level2/pearl.png")), clam_open_texture(data_path("level2/shell_open.png")),
-	  clam_closed_texture(data_path("level2/shell_closed.png")), coral_texture(data_path("coral.png")),
-	  key_texture(data_path("level2/key.png")), trash_texture(data_path("level2/metal_trash.png")),
-	  flashlight_texture(data_path("level2/flashlight.png")), flashlight_base_texture(data_path("small_rock.png")),
-	  chest_texture(data_path("level2/chest.png")), keycard_texture(data_path("level2/keycard.png")),
-	  scanner_locked_texture(data_path("level2/key_scanner_locked.png")),
-	  scanner_unlocked_texture(data_path("level2/key_scanner_unlocked.png")) {
+	: tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")),
+	  flashlight_texture(data_path("level2/flashlight.png")), flashlight_base_texture(data_path("small_rock.png")) {
 }
 
 void TestLevel::setup_tunnel(UnderwaterPhysics &physics) {
@@ -132,84 +110,8 @@ void TestLevel::setup_flashlight(UnderwaterPhysics &physics) {
 	}
 }
 
-void TestLevel::setup_puzzle(UnderwaterPhysics &physics) {
-	float floor = physics.bounds_min.y;
-	clam_center = glm::vec2(-4.0f, floor + 0.5f * ClamSize);
-	chest_center = glm::vec2(34.0f, floor + 0.38f * ChestSize);
-	scanner_center = glm::vec2(66.0f, floor + 0.50f * ScannerSize);
-	chest = {glm::vec2(chest_center.x - 2.7f, floor), chest_center + glm::vec2(2.7f, 1.9f)};
-	scanner = {glm::vec2(scanner_center.x - 2.2f, floor), scanner_center + glm::vec2(2.3f, 4.1f)};
-	physics.obstacles.push_back(chest);
-	physics.obstacles.push_back(scanner);
-	//only the lower shell is solid; the open mouth must be reachable
-	physics.obstacles.push_back({clam_center + glm::vec2(-2.9f, -3.5f), clam_center + glm::vec2(2.9f, -2.4f)});
-	tentacles.setup(glm::vec2(chest_center.x, floor - 0.1f));
-	pipe_body = physics.bodies.size();
-	physics.bodies.push_back({.position = glm::vec2(-8.8f, floor + 3.3f),
-		.radius = 0.6f, .current_scale = 0.0f, .kind = Body2D::Pipe});
-	pearl_body = physics.bodies.size();
-	physics.bodies.push_back({.position = clam_center + glm::vec2(0.0f, -1.2f),
-		.radius = 0.4f, .current_scale = 0.0f, .active = false, .kind = Body2D::Pearl});
-	card_body = physics.bodies.size();
-	physics.bodies.push_back({.position = chest_center + glm::vec2(0.0f, 4.2f),
-		.radius = 0.46f, .current_scale = 0.0f, .active = false, .kind = Body2D::Keycard});
-	key_body = physics.bodies.size();
-	physics.bodies.push_back({.position = glm::vec2(12.0f, floor + 2.5f),
-		.radius = 0.6f, .current_scale = 0.0f, .kind = Body2D::Key});
-	corals = {glm::vec2(-10.5f, floor + 0.7f), glm::vec2(0.0f, floor + 0.7f),
-		glm::vec2(14.0f, floor + 0.7f), glm::vec2(30.0f, floor + 0.7f), glm::vec2(68.0f, floor + 0.7f)};
-	outlets = {glm::vec2(54.0f, 10.0f), glm::vec2(60.0f, 10.0f), glm::vec2(75.0f, 10.0f)};
-	//keep the body list fixed while the puzzle is running
-	for (size_t &index : trash_bodies) {
-		index = physics.bodies.size();
-		physics.bodies.push_back({.radius = 0.55f, .drag = 1.2f, .current_scale = 0.0f,
-			.active = false, .kind = Body2D::Trash});
-	}
-}
-
 void TestLevel::check_puzzle_hits(UnderwaterPhysics &physics) {
-	auto hits = [](Body2D const &body, StaticBox2D const &target) {
-		if (!body.active || !body.player_spat) return false;
-		glm::vec2 offset = body.position - glm::clamp(body.position, target.min, target.max);
-		glm::vec2 contact;
-		return glm::dot(offset, offset) <= body.radius * body.radius ||
-			std::isfinite(hit_time(body, target, float(UnderwaterPhysics::fixed_step), &contact));
-	};
-	Body2D &pipe = physics.bodies[pipe_body];
-	Body2D &pearl = physics.bodies[pearl_body];
-	Body2D &card = physics.bodies[card_body];
-	Body2D &key = physics.bodies[key_body];
-	StaticBox2D mouth{clam_center + glm::vec2(-2.5f, -1.9f), clam_center + glm::vec2(2.5f, 0.0f)};
-	if (!clam_wedged && clam_time < ClamWarningTime && hits(pipe, mouth)) {
-		pipe.active = false;
-		pipe.player_spat = false;
-		clam_wedged = true;
-		clam_time = -1.0f;
-		pearl.active = true;
-	}
-	if (!tentacles_distracted && pearl.active && pearl.player_spat &&
-		tentacles.touches(pearl.position, pearl.radius, clock)) {
-		pearl.active = false;
-		pearl.player_spat = false;
-		tentacles_distracted = true;
-		held_pearl = pearl.position;
-		tentacles.distract(held_pearl);
-	}
-	if (!chest_open && tentacles_distracted && hits(key, chest)) {
-		key.active = false;
-		key.player_spat = false;
-		chest_open = true;
-		card.active = true;
-	}
-	if (machine_time < 0.0f && hits(card, scanner)) {
-		card.active = false;
-		card.player_spat = false;
-		machine_time = 0.0f;
-	}
-	for (size_t index : trash_bodies) {
-		Body2D &trash = physics.bodies[index];
-		if (trash.active && !trash.player_spat) trash.add_force(glm::vec2(0.0f, -6.0f));
-	}
+	puzzle.check_puzzle_hits(physics);
 }
 
 void TestLevel::aim_flashlight(Flashlight &flashlight, UnderwaterPhysics const &physics) {
@@ -320,7 +222,14 @@ void TestLevel::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t playe
 	physics.obstacles.clear();
 	setup_tunnel(physics);
 	setup_flashlight(physics);
-	setup_puzzle(physics);
+	size_t key = physics.bodies.size();
+	physics.bodies.push_back({.position = glm::vec2(12.0f, physics.bounds_min.y + 2.5f),
+		.radius = 0.6f, .current_scale = 0.0f, .kind = Body2D::Key});
+	key_body = key;
+	float floor = physics.bounds_min.y;
+	puzzle.setup(physics, glm::vec2(-4.0f, floor + 0.5f * Level2Puzzle::clam_height),
+		glm::vec2(34.0f, floor + 0.38f * Level2Puzzle::chest_height),
+		glm::vec2(66.0f, floor + 0.5f * Level2Puzzle::scanner_height), key);
 
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height);
 	camera.dead_zone = glm::vec2(5.0f, 2.5f);
@@ -330,59 +239,14 @@ void TestLevel::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t playe
 
 void TestLevel::update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera) {
 	clock += elapsed;
-	Body2D &fish = physics.bodies[player_body];
-	StaticBox2D mouth{clam_center + glm::vec2(-2.5f, -1.9f), clam_center + glm::vec2(2.5f, 0.0f)};
-	bool in_mouth = glm::distance(fish.position, glm::clamp(fish.position, mouth.min, mouth.max)) < fish.radius;
-	if (!clam_wedged) {
-		if (clam_time < 0.0f && fish.active && in_mouth) clam_time = 0.0f;
-		if (clam_time >= 0.0f) {
-			clam_time += elapsed;
-			if (clam_time >= ClamWarningTime && in_mouth) fish.active = false;
-			if (clam_time > ClamWarningTime + ClamClosedTime) clam_time = -1.0f;
-		}
-	}
-	if (clam_wedged) wedge_time += elapsed;
-	//let the player see the chest and guarding arms before an attack can start
-	glm::vec2 half_view = 0.5f * camera.view_size;
-	bool in_view = chest_center.x > camera.center.x - half_view.x + 5.0f &&
-		chest_center.x < camera.center.x + half_view.x - 5.0f;
-	if (tentacles.update(elapsed, fish.position, fish.active && !chest_open && in_view)) {
-		glm::vec2 source = glm::mix(fish.position, chest_center, 0.5f);
-		Sound::play_3D(*arm_sound, 0.3f, glm::vec3(source, 0.0f), 18.0f);
-	}
-	tentacles.push_fish(fish, clock);
-	if (!fish.active && death_time == 0.0f) {
-		Sound::play_3D(*capture_sound, 0.3f, glm::vec3(fish.position, 0.0f), 18.0f);
-	}
-	if (tentacles.holding_fish()) fish.position = tentacles.grip_position();
-	if (machine_time >= 0.0f && fish.active) {
-		machine_time += elapsed;
-		if (machine_time >= next_drop) {
-			next_drop += 0.9f;
-			for (size_t index : trash_bodies) {
-				Body2D &trash = physics.bodies[index];
-				bool unused = drops_spawned < trash_bodies.size() && index == trash_bodies[drops_spawned];
-				//reuse settled debris, never an item the player has swallowed
-				bool settled = drops_spawned >= trash_bodies.size() && trash.active &&
-					trash.position.y < physics.bounds_min.y + 1.5f;
-				if (!unused && !settled) continue;
-				trash.position = outlets[drops_spawned % outlets.size()] - glm::vec2(0.0f, 0.55f);
-				trash.velocity = glm::vec2(0.0f, -2.0f);
-				trash.force = glm::vec2(0.0f);
-				trash.active = true;
-				trash.player_spat = false;
-				++drops_spawned;
-				break;
-			}
-		}
-	}
+	puzzle.update(elapsed, physics, player_body, camera);
 	for (Flashlight &flashlight : flashlights) {
 		if (flashlight.turned) {
 			aim_flashlight(flashlight, physics);
 			flashlight.turned = false;
 		}
 	}
-	if (!fish.active) death_time += elapsed;
+	if (!physics.bodies[player_body].active) death_time += elapsed;
 }
 
 bool TestLevel::restart_requested() const {
@@ -390,22 +254,16 @@ bool TestLevel::restart_requested() const {
 }
 
 void TestLevel::draw_backdrop(glm::mat4 const &world_to_clip) const {
-	tentacles.draw_backdrop(world_to_clip);
+	puzzle.draw_backdrop(world_to_clip);
 }
 
 bool TestLevel::show_dead_fish() const {
-	return tentacles.holding_fish() && death_time < death_hold_time + death_fade_time;
+	return puzzle.show_dead_fish();
 }
 
 void TestLevel::prepare_water(Water::Look &look) const {
 	look.glows.clear();
-	for (size_t i = 0; i < corals.size(); ++i) {
-		float strength = i == 3 ? 0.35f : 0.6f;
-		look.glows.emplace_back(corals[i] + glm::vec2(0.0f, 1.0f), strength);
-	}
-	if (machine_time >= 0.0f) {
-		for (glm::vec2 const &outlet : outlets) look.glows.emplace_back(outlet, 0.25f);
-	}
+	puzzle.add_lights(look);
 	look.beams.clear();
 	for (Flashlight const &flashlight : flashlights) look.beams.push_back(flashlight.light);
 	look.blockers.clear();
@@ -425,91 +283,14 @@ void TestLevel::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Tunnel);
 	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlights[0].anchor.x, physics.bounds_min.y),
 		flashlight_base_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	for (glm::vec2 const &coral : corals) {
-		sprites.draw(coral_texture, world_to_clip, coral, glm::vec2(2.3f),
-			0.0f, false, glm::u8vec4(150, 150, 150, 255), 0.0f, DrawSprites::Emissive);
-	}
-	for (glm::vec2 const &outlet : outlets) {
-		sprites.draw(pipe_texture, world_to_clip, outlet + glm::vec2(0.0f, 3.85f), glm::vec2(5.5f),
-			-0.7853982f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	}
-	for (size_t i = 0; i < trash_bodies.size(); ++i) {
-		Body2D const &trash = physics.bodies[trash_bodies[i]];
-		if (trash.active) {
-			sprites.draw(trash_texture, world_to_clip, trash.position, glm::vec2(1.6f),
-				0.25f * std::sin(clock + float(i)), i % 2 != 0, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-		}
-	}
-	bool closed = !clam_wedged && clam_time >= ClamWarningTime;
-	float warning = !clam_wedged && clam_time >= 0.0f ? std::min(clam_time / ClamWarningTime, 1.0f) : 0.0f;
-	float height = closed ? ClamSize : ClamSize - 0.6f * warning;
-	if (clam_wedged) {
-		//the upper shell settles onto the pipe while the lower shell stays put
-		constexpr float seam = 0.46f;
-		float settle = 0.2f * glm::smoothstep(0.0f, 0.35f, wedge_time);
-		sprites.draw(clam_open_texture, world_to_clip, clam_center + glm::vec2(0.0f, 0.5f * seam * ClamSize - settle),
-			glm::vec2(ClamSize, (1.0f - seam) * ClamSize), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone,
-			glm::vec4(0.0f, seam, 1.0f, 1.0f));
-		sprites.draw(clam_open_texture, world_to_clip, clam_center + glm::vec2(0.0f, (seam - 1.0f) * 0.5f * ClamSize),
-			glm::vec2(ClamSize, seam * ClamSize), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone,
-			glm::vec4(0.0f, 0.0f, 1.0f, seam));
-	} else {
-		sprites.draw(closed ? clam_closed_texture : clam_open_texture, world_to_clip,
-			clam_center + glm::vec2(0.0f, 0.5f * (height - ClamSize)), glm::vec2(ClamSize, height),
-			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	}
-	Body2D const &pipe = physics.bodies[pipe_body];
-	if (pipe.active || clam_wedged) {
-		sprites.draw(pipe_texture, world_to_clip, clam_wedged ? clam_center + glm::vec2(1.35f, -0.55f) : pipe.position,
-			glm::vec2(PipeSize), clam_wedged ? 0.12f : 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-		if (clam_wedged) {
-			//the front lip hides the lower end of the prop between the shells
-			constexpr float lip = 0.30f;
-			sprites.draw(clam_open_texture, world_to_clip, clam_center + glm::vec2(0.0f, (lip - 1.0f) * 0.5f * ClamSize),
-				glm::vec2(ClamSize, lip * ClamSize), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone,
-				glm::vec4(0.0f, 0.0f, 1.0f, lip));
-		}
-	}
-	Body2D const &pearl = physics.bodies[pearl_body];
-	if (pearl.active || (!clam_wedged && !closed)) {
-		sprites.draw(pearl_texture, world_to_clip, pearl.position, glm::vec2(1.2f),
-			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	}
+	puzzle.draw(sprites, world_to_clip, physics);
 	Body2D const &key = physics.bodies[key_body];
 	if (key.active) {
 		sprites.draw(key_texture, world_to_clip, key.position, glm::vec2(1.8f),
 			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
 	}
-	tentacles.draw(world_to_clip, clock);
-	if (chest_open) {
-		//lift the lid using the top half of the chest art
-		constexpr float seam = 0.45f;
-		sprites.draw(chest_texture, world_to_clip, chest_center + glm::vec2(0.0f, (seam - 1.0f) * 0.5f * ChestSize),
-			glm::vec2(ChestSize, seam * ChestSize), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone,
-			glm::vec4(0.0f, 0.0f, 1.0f, seam));
-		sprites.draw(chest_texture, world_to_clip, chest_center + glm::vec2(-0.55f, 0.5f * seam * ChestSize + 0.85f),
-			glm::vec2(ChestSize, (1.0f - seam) * ChestSize), 0.23f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone,
-			glm::vec4(0.0f, seam, 1.0f, 1.0f));
-	} else {
-		sprites.draw(chest_texture, world_to_clip, chest_center, glm::vec2(ChestSize),
-			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	}
-	if (tentacles_distracted) {
-		sprites.draw(pearl_texture, world_to_clip, held_pearl, glm::vec2(1.2f),
-			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	}
-	Body2D const &card = physics.bodies[card_body];
-	if (card.active) {
-		sprites.draw(keycard_texture, world_to_clip, card.position, glm::vec2(1.85f),
-			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-	}
-	bool unlocked = machine_time >= 0.0f;
-	sprites.draw(unlocked ? scanner_unlocked_texture : scanner_locked_texture,
-		world_to_clip, scanner_center, glm::vec2(ScannerSize),
-		0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
 }
 
 float TestLevel::fade_amount() const {
-	return std::max(std::max(0.0f, 1.0f - clock / fade_in_time),
-		glm::clamp((death_time - death_hold_time) / death_fade_time, 0.0f, 1.0f));
+	return std::max(std::max(0.0f, 1.0f - clock / fade_in_time), puzzle.fade_amount());
 }

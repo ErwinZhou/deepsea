@@ -18,6 +18,9 @@
 //for screenshots:
 #include "load_save_png.hpp"
 
+// For splash screen into
+#include "GP26IntroMode.hpp"
+
 //Includes for libSDL:
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -37,14 +40,20 @@ extern "C" { uint32_t GetACP(); }
 #endif
 int main(int argc, char **argv) {
 	PlayMode::LevelId start_level = PlayMode::LevelId::One;
+	bool do_skip_intro = false;
+	bool developer_mode = false;
 	if (argc != 1) {
-		std::string level = argc == 3 ? argv[2] : "";
-		if (argc != 3 || std::string(argv[1]) != "--level" || (level != "1" && level != "2" && level != "test")) {
-			std::cerr << "Usage: game [--level 1|2|test]\n";
+		std::string level = argc >= 3 ? argv[2] : "";
+		if ((argc != 3 && argc != 4) || std::string(argv[1]) != "--level" ||
+			(level != "1" && level != "2" && level != "test" && level != "2-dev") ||
+			(argc == 4 && std::string(argv[3]) != "--skip-intro")) {
+			std::cerr << "Usage: game [--level 1|2|test|2-dev] [--skip-intro]\n";
 			return 1;
 		}
-		if (level == "2") start_level = PlayMode::LevelId::Two;
+		if (level == "2" || level == "2-dev") start_level = PlayMode::LevelId::Two;
 		if (level == "test") start_level = PlayMode::LevelId::Test;
+		developer_mode = level == "2-dev";
+		do_skip_intro = argc == 4 || developer_mode || level == "test";
 	}
 #ifdef _WIN32
 	{ //when compiled on windows, check that code page is forced to utf-8 (makes file loading/saving work right):
@@ -137,6 +146,7 @@ int main(int argc, char **argv) {
 	std::string brightness_file = preference_path("brightness.txt");
 	std::optional<int> brightness = BrightnessMode::load(brightness_file);
 	std::optional<Body2D> belly_contents;
+	int entry_checkpoint = 0;
 	if (argc == 1) {
 		checkpoint_file = preference_path("checkpoint.csv");
 		if (!checkpoint_file.empty()) {
@@ -144,12 +154,18 @@ int main(int argc, char **argv) {
 			if (saved) {
 				start_level = saved->level == 2 ? PlayMode::LevelId::Two : PlayMode::LevelId::One;
 				belly_contents = saved->belly_contents;
+				entry_checkpoint = saved->checkpoint;
 			}
 		}
 	}
 	auto start_game = [&](int value) {
 		brightness = value;
-		Mode::set_current(std::make_shared<PlayMode>(start_level, belly_contents, checkpoint_file, BrightnessMode::display_gain(value)));
+		auto play = [start_level, belly_contents, checkpoint_file, value, developer_mode, entry_checkpoint]() {
+			Mode::set_current(std::make_shared<PlayMode>(start_level, belly_contents, checkpoint_file,
+				BrightnessMode::display_gain(value), developer_mode, entry_checkpoint));
+		};
+		if (do_skip_intro) play();
+		else Mode::set_current(std::make_shared<GP26IntroMode>(play));
 	};
 	if (argc == 1 && !brightness && !brightness_file.empty()) {
 		Mode::set_current(std::make_shared<BrightnessMode>(brightness_file, std::nullopt, start_game));

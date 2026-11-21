@@ -50,6 +50,7 @@ DrawSprites::DrawSprites() {
 		"#define PLAYER " + std::to_string(Player) + "\n" +
 		"#define CRACKED " + std::to_string(Cracked) + "\n" +
 		"#define PILLAR " + std::to_string(Pillar) + "\n" +
+		"#define LIGHT_ONLY " + std::to_string(LightOnly) + "\n" +
 		"#define TUNNEL " + std::to_string(Tunnel) + "\n" +
 		"#define FAR_TAIL " + std::to_string(FarTail) + "\n";
 
@@ -93,14 +94,14 @@ DrawSprites::DrawSprites() {
 		"	}\n"
 		"	if (color.a < 0.0039 && eye_halo < 0.01) discard;\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, 0.5 * clip + 0.5);\n"
-		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR || MATERIAL == TUNNEL;\n"
+		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR || MATERIAL == LIGHT_ONLY || MATERIAL == TUNNEL;\n"
 		"	float lit = MATERIAL != EMISSIVE ? light(world, surface) : 1.0;\n"
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
 		//adjust brightness for each kind of sprite
 		"	if (MATERIAL == PLAYER) shade = 0.03 + 0.55 * lit + 0.35 * eye_light;\n"
 		"	float wet_shine = 0.0;\n"
 		"	if (MATERIAL == PREDATOR) {\n"
-		//use the jaw artwork as a height map to give teeth rounded lighting
+		//use jaw shading to give teeth rounded lighting
 		// based on https://en.wikipedia.org/wiki/Normal_mapping
 		"		const float BLUR = 5.0;\n"
 		"		vec2 reach = pow(2.0, BLUR) / vec2(textureSize(TEX, 0));\n"
@@ -131,6 +132,11 @@ DrawSprites::DrawSprites() {
 		"	if (MATERIAL == TUNNEL) {\n"
 		"		color.rgb = vec3(0.045, 0.052, 0.055);\n"
 		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
+		"	}\n"
+		//keep light-dependent objects hidden without a nearby, unblocked source
+		"	if (MATERIAL == LIGHT_ONLY) {\n"
+		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
+		"		if (shade == 0.0) discard;\n"
 		"	}\n"
 		//wall cracks need the jellyfish nearby
 		"	if (MATERIAL == CRACKED) {\n"

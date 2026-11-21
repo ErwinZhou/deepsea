@@ -153,6 +153,12 @@ let copies = [
 	maek.COPY('assets/level2/key_scanner_locked.png', 'dist/level2/key_scanner_locked.png'),
 	maek.COPY('assets/level2/key_scanner_unlocked.png', 'dist/level2/key_scanner_unlocked.png'),
 	maek.COPY('assets/level2/flashlight.png', 'dist/level2/flashlight.png'),
+	maek.COPY('assets/level2/small_fish_eyes.png', 'dist/level2/small_fish_eyes.png'),
+	maek.COPY('assets/level2/worm.png', 'dist/level2/worm.png'),
+	maek.COPY('assets/level2/ruins_background.png', 'dist/level2/ruins_background.png'),
+	maek.COPY('assets/level2/door.png', 'dist/level2/door.png'),
+	maek.COPY('assets/level2/door_wheel.png', 'dist/level2/door_wheel.png'),
+
 	maek.COPY('assets/sound/modified_big_fish_roar.opus', 'dist/modified_big_fish_roar.opus'),
 	maek.COPY('assets/sound/modified_big_fish_roar1.opus', 'dist/modified_big_fish_roar1.opus'),
 	maek.COPY('assets/sound/modified_big_fish_roar_charge.opus', 'dist/modified_big_fish_roar_charge.opus'),
@@ -161,6 +167,8 @@ let copies = [
 	maek.COPY('assets/sound/modified_rock_hit.opus', 'dist/modified_rock_hit.opus'),
 	maek.COPY('assets/sound/big_fish_presence.opus', 'dist/big_fish_presence.opus'),
 	maek.COPY('assets/sound/ambient_deep.opus', 'dist/ambient_deep.opus'),
+	maek.COPY('assets/sound/chest_open.opus', 'dist/chest_open.opus'),
+	maek.COPY('assets/sound/keycard_scan.opus', 'dist/keycard_scan.opus'),
 ];
 if (maek.OS === 'windows') {
 	copies.push( maek.COPY(`${NEST_LIBS}/SDL3/dist/SDL3.dll`, `dist/SDL3.dll`) );
@@ -185,12 +193,14 @@ const game_names = [
 	maek.CPP('level1.cpp'),
 	maek.CPP('level2.cpp'),
 	maek.CPP('TestLevel.cpp'),
+	maek.CPP('Level2Puzzle.cpp'),
 	maek.CPP('Tentacles.cpp'),
 	maek.CPP('CaveBackground.cpp'),
 	maek.CPP('Water.cpp'),
 	maek.CPP('Sound.cpp'),
 	maek.CPP('load_opus.cpp'),
 	maek.CPP('load_wav.cpp'),
+	maek.CPP('GP26IntroMode.cpp'),
 ];
 
 const common_names = [

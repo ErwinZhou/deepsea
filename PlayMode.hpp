@@ -19,7 +19,7 @@ struct PlayMode : Mode {
 	enum class LevelId { One = 1, Two = 2, Test };
 
 	explicit PlayMode(LevelId start_level = LevelId::One, std::optional<Body2D> const &belly_contents = std::nullopt,
-		std::string const &checkpoint_file = "", float display_gain = 1.0f);
+		std::string const &checkpoint_file = "", float display_gain = 1.0f, bool developer_mode = false, int entry_checkpoint = 0);
 	void clear_input();
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
@@ -54,8 +54,11 @@ struct PlayMode : Mode {
 	std::optional<Level2> level2;
 	std::optional<TestLevel> test_level;
 	float display_gain;
+	bool const developer_mode;
 
 private:
+	glm::vec2 camera_target() const;
+	glm::vec2 camera_bounds_min() const;
 	void update_interaction();
 	void spit();
 	std::optional<Body2D> carried_contents() const;
@@ -63,12 +66,15 @@ private:
 	std::string checkpoint_file;
 	//retry restores the entrance checkpoint rather than the player's later inventory
 	std::optional<Body2D> entry_belly_contents;
+	int entry_checkpoint = 0;
+	bool checkpoint_saved = false;
 
 	struct {
 		bool up = false;
 		bool down = false;
 		bool left = false;
 		bool right = false;
+		bool fast = false;
 		bool space = false;
 		bool space_pressed = false;
 		bool suppress_suction = false;

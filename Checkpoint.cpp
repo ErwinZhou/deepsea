@@ -16,7 +16,8 @@
 static constexpr char checkpoint_header[] = "version,level,checkpoint,belly,inverse_mass,radius,drag,current_scale";
 
 static bool valid_checkpoint(Checkpoint const &checkpoint) {
-	if ((checkpoint.level != 1 && checkpoint.level != 2) || checkpoint.checkpoint != 0) {
+	if ((checkpoint.level != 1 && checkpoint.level != 2) || checkpoint.checkpoint < 0 ||
+		checkpoint.checkpoint > (checkpoint.level == 2 ? 1 : 0)) {
 		return false;
 	}
 	if (!checkpoint.belly_contents) {
@@ -85,9 +86,10 @@ std::optional<Checkpoint> load_checkpoint(std::string const &filename) {
 		}
 	}
 	valid = valid && row.peek() == std::char_traits<char>::eof() && record.back() != ','
-		&& fields[0] == "1" && (fields[1] == "1" || fields[1] == "2") && fields[2] == "0";
+		&& fields[0] == "1" && (fields[1] == "1" || fields[1] == "2") && (fields[2] == "0" || fields[2] == "1");
 	if (valid) {
 		checkpoint.level = fields[1] == "2" ? 2 : 1;
+		checkpoint.checkpoint = fields[2] == "1" ? 1 : 0;
 		Body2D body{};
 		valid = read_number(fields[4], body.inverse_mass) && read_number(fields[5], body.radius)
 			&& read_number(fields[6], body.drag) && read_number(fields[7], body.current_scale);
