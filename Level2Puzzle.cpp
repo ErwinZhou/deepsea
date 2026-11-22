@@ -73,7 +73,7 @@ void Level2Puzzle::setup(UnderwaterPhysics &physics, glm::vec2 const &clam_posit
 	}
 }
 
-void Level2Puzzle::check_puzzle_hits(UnderwaterPhysics &physics) {
+void Level2Puzzle::check_puzzle_hits(UnderwaterPhysics &physics, Checkpoint *progress) {
 	auto hits = [](Body2D const &body, StaticBox2D const &target) {
 		if (!body.active || !body.player_spat) return false;
 		glm::vec2 offset = body.position - glm::clamp(body.position, target.min, target.max);
@@ -97,6 +97,10 @@ void Level2Puzzle::check_puzzle_hits(UnderwaterPhysics &physics) {
 		clam_wedged = true;
 		clam_time = -1.0f;
 		pearl.active = true;
+
+		if (progress) {
+			progress->finish_puzzle(Level2Checkpoint::Clam);
+		}
 	}
 	if (!tentacles_distracted && pearl.active && pearl.player_spat &&
 		tentacles.touches(pearl.position, pearl.radius, clock)) {
@@ -105,18 +109,32 @@ void Level2Puzzle::check_puzzle_hits(UnderwaterPhysics &physics) {
 		tentacles_distracted = true;
 		held_pearl = pearl.position;
 		tentacles.distract(held_pearl);
+
+		if (progress) {
+			progress->finish_puzzle(Level2Checkpoint::Octopus);
+		}
 	}
-	if (!chest_open && tentacles_distracted && hits(key, chest)) {
+	// take the key out alive before opening the chest
+	const bool key_recovered = !progress || (progress->puzzle_flags & puzzle_flag(Level2Checkpoint::Tunnel)) != 0;
+	if (!chest_open && tentacles_distracted && key_recovered && hits(key, chest)) {
 		key.active = false;
 		key.player_spat = false;
 		chest_open = true;
 		card.active = true;
+
+		if (progress) {
+			progress->finish_puzzle(Level2Checkpoint::Chest);
+		}
 		Sound::play_3D(*chest_sound, 0.3f, glm::vec3(chest_center, 0.0f), 18.0f);
 	}
 	if (machine_time < 0.0f && hits(card, scanner)) {
 		card.active = false;
 		card.player_spat = false;
 		machine_time = 0.0f;
+
+		if (progress) {
+			progress->finish_puzzle(Level2Checkpoint::Machine);
+		}
 		Sound::play_3D(*scanner_sound, 0.3f, glm::vec3(scanner_center, 0.0f), 18.0f);
 	}
 	for (size_t index : trash_bodies) {

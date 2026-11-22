@@ -18,11 +18,16 @@ struct Level2 {
 		std::optional<Body2D> const &belly_contents);
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 		std::optional<size_t> carried_body) const;
-	void check_puzzle_hits(UnderwaterPhysics &physics) { puzzle.check_puzzle_hits(physics); }
+	void check_puzzle_hits(UnderwaterPhysics &physics) { puzzle.check_puzzle_hits(physics, &progress); }
 	void draw_backdrop(glm::mat4 const &world_to_clip) const { puzzle.draw_backdrop(world_to_clip); }
 	bool show_dead_fish() const { return puzzle.show_dead_fish(); }
-	int checkpoint() const { return checkpoint_reached ? 1 : 0; }
-	size_t resume_checkpoint(UnderwaterPhysics &physics, size_t player_body);
+	const Checkpoint &puzzle_progress() const { return progress; }
+	bool tunnel_finished() const { return (progress.puzzle_flags & puzzle_flag(Level2Checkpoint::Tunnel)) != 0; }
+	void check_tunnel_exit(Body2D const &player, glm::vec2 previous_position, std::optional<size_t> carried_body);
+	bool has_jelly() const { return jelly_body.has_value(); }
+	bool inside_tunnel(glm::vec2 position) const;
+	void place_jelly_nearby(UnderwaterPhysics &physics, size_t player_body);
+	void resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, bool key_in_cave);
 	void push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
@@ -238,5 +243,5 @@ private:
 	bool door_open = false;
 	float wheel_angle = 0.0f; // initial is 0
 
-	bool checkpoint_reached = false;
+	Checkpoint progress{.level = 2};
 };

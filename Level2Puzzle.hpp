@@ -1,5 +1,6 @@
 #pragma once
 #include "Camera2D.hpp"
+#include "Checkpoint.hpp"
 #include "DrawSprites.hpp"
 #include "Tentacles.hpp"
 #include "UnderwaterPhysics.hpp"
@@ -15,7 +16,7 @@ struct Level2Puzzle {
 	Level2Puzzle();
 	void setup(UnderwaterPhysics &physics, glm::vec2 const &clam_position,
 		glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index);
-	void check_puzzle_hits(UnderwaterPhysics &physics);
+	void check_puzzle_hits(UnderwaterPhysics &physics, Checkpoint *progress = nullptr);
 	void update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera);
 	void add_lights(Water::Look &look) const;
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;

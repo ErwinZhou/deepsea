@@ -308,9 +308,7 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	 * Belly logic of carrying the items to level2
 	 */
 	std::optional<size_t> carried_body;
-	if (belly_contents) {
-		assert((belly_contents->kind == Body2D::Rock || belly_contents->kind == Body2D::Jelly)
-			&& "only rocks and jellyfish transfer from level 1");
+	if (belly_contents && (belly_contents->kind == Body2D::Rock || belly_contents->kind == Body2D::Jelly)) {
 		Body2D body = *belly_contents;
 		body.position = physics.bodies[player_body].position;
 
@@ -437,6 +435,22 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	camera.follow_speed = 4.0f;
 	camera.center = camera.constrain(physics.bodies[player_body].position, physics.bounds_min, physics.bounds_max);
 
+	// reuse the puzzle item already in this level
+	if (belly_contents && !carried_body) {
+		for (size_t i = 0; i < physics.bodies.size(); ++i) {
+			Body2D &body = physics.bodies[i];
+			if (body.kind == belly_contents->kind) {
+				body.inverse_mass = belly_contents->inverse_mass;
+				body.radius = belly_contents->radius;
+				body.drag = belly_contents->drag;
+				body.current_scale = belly_contents->current_scale;
+				body.active = false;
+				carried_body = i;
+				break;
+			}
+		}
+	}
+
 	return carried_body;
 }
 
@@ -486,6 +500,27 @@ void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::ve
 	}
 }
 
+void Level2::check_tunnel_exit(Body2D const &player, glm::vec2 previous_position, std::optional<size_t> carried_body) {
+	// the key must leave with a living fish
+	if (!player.active || !key_body || carried_body != key_body || tunnel_finished()) {
+		return;
+	}
+
+	// the tunnel mouth opens downward at row 541
+	const glm::vec2 entrance = tunnel_center + (glm::vec2(TunnelEntranceUV.x, 1.0f - TunnelEntranceUV.y) - 0.5f) * tunnel_size;
+	if (previous_position.y <= entrance.y || player.position.y > entrance.y) {
+		return;
+	}
+
+	// the opening spans pixels 615 through 660
+	const float fraction = (entrance.y - previous_position.y) / (player.position.y - previous_position.y);
+	const float crossing_x = glm::mix(previous_position.x, player.position.x, fraction);
+	const float pixel_width = tunnel_size.x / 1180.0f;
+	if (crossing_x >= entrance.x - 22.0f * pixel_width && crossing_x < entrance.x + 24.0f * pixel_width) {
+		progress.finish_puzzle(Level2Checkpoint::Tunnel);
+	}
+}
+
 void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &camera, size_t player_body,
 	glm::vec2 const &player_movement, float player_angle) {
 	clock += elapsed;
@@ -502,10 +537,6 @@ void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &c
 
 	const glm::vec2 player_step = player.position - previous_player_position;
 	previous_player_position = player.position;
-	if (!checkpoint_reached && key_body && !physics.bodies[*key_body].active &&
-		player.position.x > tunnel_center.x + 0.5f * tunnel_size.x + 8.0f) {
-		checkpoint_reached = true;
-	}
 
 	//stop single fish half a screen before they encountered the seven small fish group
 	const float quiet_start = physics.bounds_min.x + mimic_end_fraction * (physics.bounds_max.x - physics.bounds_min.x)
@@ -1174,16 +1205,35 @@ void Level2::push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm
 	door_open = true;
 	wheel.active = false;
 	puzzle.launch_pipe(physics);
+	progress.finish_puzzle(Level2Checkpoint::Door);
 }
 
-size_t Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body) {
-	checkpoint_reached = true;
+bool Level2::inside_tunnel(glm::vec2 position) const {
+	const glm::vec2 distance = glm::abs(position - tunnel_center);
+	return distance.x <= tunnel_size.x * 0.5f && distance.y <= tunnel_size.y * 0.5f;
+}
+
+void Level2::place_jelly_nearby(UnderwaterPhysics &physics, size_t player_body) {
+	// bring back the jellyfish from level one
+	Body2D jelly{.radius = 0.5f, .drag = 3.0f, .current_scale = 0.0f, .kind = Body2D::Jelly};
+	const Body2D &fish = physics.bodies[player_body];
+	jelly.position = fish.position + glm::vec2(0.0f, fish.radius + jelly.radius + 1.0f);
+
+	jelly_body = physics.bodies.size();
+	physics.bodies.push_back(jelly);
+	jellyfish_texture.emplace(data_path("jellyfish.png"));
+}
+
+void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, bool key_in_cave) {
+	progress.finish_puzzle(Level2Checkpoint::Tunnel);
 	Body2D &player = physics.bodies[player_body];
 	player.position = glm::vec2(tunnel_center.x + 0.5f * tunnel_size.x + 8.0f, physics.bounds_min.y + 8.0f);
 	previous_player_position = player.position;
 	worm.stopped = true;
 	worm.awake = false;
 	shake_left = 0.0f;
-	physics.bodies[*key_body].active = false;
-	return *key_body;
+	// leave the key nearby unless already swallowed
+	if (!key_in_cave) {
+		physics.bodies[*key_body].position = player.position + glm::vec2(2.0f, 0.0f);
+	}
 }
