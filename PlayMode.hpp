@@ -66,7 +66,18 @@ private:
 	std::string checkpoint_file;
 	//retry restores the entrance checkpoint rather than the player's later inventory
 	std::optional<Body2D> entry_belly_contents;
-	bool checkpoint_saved = false;
+
+	// puzzles already saved to disk
+	unsigned saved_puzzles = 0;
+
+	// checkpoint still waiting to be written
+	std::optional<Checkpoint> pending_save;
+
+	// seconds to wait after a failed save
+	static constexpr float save_retry_delay = 2.0f;
+
+	// seconds left before trying again
+	float save_retry_remaining = 0.0f;
 
 	struct {
 		bool up = false;

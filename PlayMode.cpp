@@ -18,7 +18,7 @@ PlayMode::PlayMode(LevelId start_level, Checkpoint const &entry, std::string con
 	  developer_mode(developer_mode && start_level == LevelId::Two),
 	  checkpoint_file(checkpoint_file),
 	  entry_belly_contents(entry.belly_contents),
-	  checkpoint_saved((entry.puzzle_flags & puzzle_flag(Level2Checkpoint::Tunnel)) != 0),
+	  saved_puzzles(entry.puzzle_flags),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
@@ -206,17 +206,30 @@ void PlayMode::update(float elapsed) {
 	camera.update(camera_target(), elapsed, camera_bounds_min(), physics.bounds_max);
 	if (level2) {
 		level2->update(elapsed, physics, camera, fish_body, move, fish_visual_angle);
-		if (!checkpoint_saved && level2->tunnel_finished()) {
-			checkpoint_saved = true;
-			// see if there is middle level checkpoint needs to be saved
-			if (!checkpoint_file.empty()) {
-				save_checkpoint(checkpoint_file, Checkpoint{
-					.level = 2,
-					.checkpoint = Level2Checkpoint::Tunnel,
-					.belly_contents = carried_contents(),
-					.puzzle_flags = puzzle_flag(Level2Checkpoint::Tunnel),
-					.jelly_nearby = level2->has_jelly()
-				});
+
+		// if user sovled a puzzle, we should save that checkpoint
+		const Checkpoint &progress = level2->puzzle_progress();
+		if (!checkpoint_file.empty() && progress.puzzle_flags != saved_puzzles &&
+			(!pending_save || pending_save->puzzle_flags != progress.puzzle_flags)) {
+			save_retry_remaining = 0.0f;
+			pending_save = progress;
+			pending_save->belly_contents = carried_contents();
+
+			// place the jellyfish beside the returning fish if level2 already has a jelly
+			pending_save->jelly_nearby = level2->has_jelly();
+			if (pending_save->belly_contents && pending_save->belly_contents->kind == Body2D::Jelly) {
+				pending_save->belly_contents.reset();
+			}
+		}
+
+		// keep this exact checkpoint if writing fails
+		save_retry_remaining = std::max(0.0f, save_retry_remaining - elapsed);
+		if (pending_save && save_retry_remaining == 0.0f) {
+			if (save_checkpoint(checkpoint_file, *pending_save)) {
+				saved_puzzles = pending_save->puzzle_flags;
+				pending_save.reset();
+			} else {
+				save_retry_remaining = save_retry_delay;
 			}
 		}
 	}
@@ -264,8 +277,14 @@ void PlayMode::update(float elapsed) {
 		// return to the last completed puzzle
 		checkpoint.belly_contents = belly;
 		checkpoint.jelly_nearby = jelly_nearby;
-		Mode::set_current(std::make_shared<PlayMode>(level_id, checkpoint, checkpoint_file,
-			display_gain, developer_mode, key_in_cave));
+		const std::shared_ptr<PlayMode> next = std::make_shared<PlayMode>(level_id, checkpoint, checkpoint_file,
+			display_gain, developer_mode, key_in_cave);
+
+		// keep an unfinished save across a death
+		next->pending_save = pending_save;
+		next->save_retry_remaining = save_retry_remaining;
+		next->saved_puzzles = saved_puzzles;
+		Mode::set_current(next);
 	}
 }
 

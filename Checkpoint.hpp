@@ -9,6 +9,11 @@
  * Level 2 Intermediate Checkpoints:
  * initial -> door -> clam -> octopus -> chest -> machine
  * Tunnel needs to be finished before the chest
+ * So there are four possible routes, 6 checkpoints each, 24 possibilities
+ * (1) Initial -> Tunnel -> Door -> Clam -> Octopus -> Chest -> Machine
+ * (2) Initial -> Door -> Tunnel -> Clam -> Octopus -> Chest -> Machine
+ * (3) Initial -> Door -> Clam -> Tunnel -> Octopus -> Chest -> Machine
+ * (4) Initial -> Door -> Clam -> Octopus -> Tunnel -> Chest -> Machine
  */
 enum class Level2Checkpoint : unsigned {
 	Entrance = 0,
