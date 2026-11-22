@@ -271,30 +271,49 @@ void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t play
 	if (machine_time >= 0.0f && fish.active) {
 		machine_time += elapsed;
 		if (machine_time >= next_drop) {
-			next_drop += 0.9f;
-			for (size_t index : trash_bodies) {
-				Body2D &trash = physics.bodies[index];
-				bool unused = drops_spawned < trash_bodies.size() && index == trash_bodies[drops_spawned];
-				//reuse settled debris, never an item the player has swallowed
-				bool settled = drops_spawned >= trash_bodies.size() && trash.active &&
-					trash.position.y < physics.bounds_min.y + trash.radius + 0.95f;
-				if (!unused && !settled) continue;
-
-				// shoot along the pipe and then falls down
-				const CeilingPipe &pipe = ceiling_pipes[next_pipe];
-				trash.radius = pipe.large ? big_gear_radius : std::uniform_real_distribution<float>(0.4f, 0.95f)(trash_random);
-				trash.position = pipe.mouth + pipe.direction * trash.radius;
-				trash.velocity = pipe.direction * trash_launch_speed;
-				next_pipe = (next_pipe + 1) % ceiling_pipes.size();
-				trash.force = glm::vec2(0.0f);
-				trash.active = true;
-				trash.player_spat = false;
-				++drops_spawned;
-				break;
-			}
+			constexpr float drop_interval = 0.9f;
+			next_drop = machine_time + drop_interval;
+			drop_nearby_trash(physics, fish.position);
 		}
 	}
 	if (!fish.active) death_time += elapsed;
+}
+
+void Level2Puzzle::drop_nearby_trash(UnderwaterPhysics &physics, glm::vec2 fish_position) {
+	// only pipes above the fish can drop trash
+	constexpr float nearby_distance = 40.0f; // [-40, 40] -> surrounding of dropping zones
+	for (size_t step = 0; step < ceiling_pipes.size(); ++step) {
+		const size_t pipe_index = (next_pipe + step) % ceiling_pipes.size();
+		const CeilingPipe &pipe = ceiling_pipes[pipe_index];
+		if (fish_position.y > pipe.mouth.y || std::abs(fish_position.x - pipe.mouth.x) > nearby_distance) {
+			continue;
+		}
+
+		for (size_t index : trash_bodies) {
+			Body2D &trash = physics.bodies[index];
+			const bool unused = drops_spawned < trash_bodies.size() && index == trash_bodies[drops_spawned];
+			// never an item the player has swallowed
+			const bool settled = drops_spawned >= trash_bodies.size() && trash.active &&
+				trash.position.y < physics.bounds_min.y + trash.radius + 0.95f;
+			if (!unused && !settled) {
+				continue;
+			}
+
+			// shoot along the pipe and then falls down
+			trash.radius = pipe.large ? big_gear_radius : std::uniform_real_distribution<float>(0.4f, 0.95f)(trash_random);
+			trash.position = pipe.mouth + pipe.direction * trash.radius;
+			trash.velocity = pipe.direction * trash_launch_speed;
+			next_pipe = (pipe_index + 1) % ceiling_pipes.size();
+			trash.force = glm::vec2(0.0f);
+			trash.active = true;
+			trash.player_spat = false;
+			++drops_spawned;
+			return;
+		}
+
+		// wait for a free piece of trash
+		return;
+	}
 }
 
 void Level2Puzzle::restore(UnderwaterPhysics &physics, Body2D &fish, Checkpoint const &entry,

@@ -36,6 +36,8 @@ struct Level2Puzzle {
 	void launch_pipe(UnderwaterPhysics &physics);
 
 private:
+	void drop_nearby_trash(UnderwaterPhysics &physics, glm::vec2 fish_position); // to avoid piling up, only drop trash once the player swims close to them
+
 	static constexpr float death_hold_time = 0.7f;
 	static constexpr float death_fade_time = 1.5f;
 	static constexpr float door_pipe_size = 3.2f;
