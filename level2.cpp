@@ -425,6 +425,7 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	wheel_body = physics.bodies.size();
 	physics.bodies.push_back(wheel);
 	wheel_angle = 0.0f;
+	clockwise_turn = 0.0f;
 	door_open = false;
 	puzzle.hide_pipe(physics, door_center);
 
@@ -1084,6 +1085,20 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	 * (4) Doors and pipes
 	 */
 
+	// draw the door behind fish and loose items
+	const glm::vec2 door_size(door_height * float(door_texture.pixel_size.x) / float(door_texture.pixel_size.y), door_height);
+	if (door_open) {
+		//leave the opening dark and show the panel edge at the right hinge
+		sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f, false, glm::u8vec4(0, 0, 0, 255));
+		const glm::vec2 edge_size(0.16f * door_size.x, door_size.y);
+		const glm::vec2 hinge = door_center + glm::vec2(0.34f * door_size.x, 0.0f);
+		sprites.draw(door_texture, world_to_clip, hinge, edge_size);
+
+	} else {
+		sprites.draw(door_texture, world_to_clip, door_center, door_size);
+		sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, wheel_angle);
+	}
+
 	if (jelly_body && physics.bodies[*jelly_body].active) {
 		const float pulse = 1.0f + 0.035f * std::sin(clock * 1.3f);
 		sprites.draw(*jellyfish_texture, world_to_clip, jelly_position(physics.bodies[*jelly_body]), glm::vec2(1.8f * pulse, 2.15f / pulse),
@@ -1125,19 +1140,6 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 		const glm::vec2 key_size(key_height * float(key_texture.pixel_size.x) / float(key_texture.pixel_size.y), key_height);
 		sprites.draw(key_texture, world_to_clip, physics.bodies[*key_body].position, key_size, 0.0f, false,
 			glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
-	}
-
-	const glm::vec2 door_size(door_height * float(door_texture.pixel_size.x) / float(door_texture.pixel_size.y), door_height);
-	if (door_open) {
-		//leave the opening dark and show the panel edge at the right hinge
-		sprites.draw(door_texture, world_to_clip, door_center, door_size, 0.0f, false, glm::u8vec4(0, 0, 0, 255));
-		const glm::vec2 edge_size(0.16f * door_size.x, door_size.y);
-		const glm::vec2 hinge = door_center + glm::vec2(0.34f * door_size.x, 0.0f);
-		sprites.draw(door_texture, world_to_clip, hinge, edge_size);
-
-	} else {
-		sprites.draw(door_texture, world_to_clip, door_center, door_size);
-		sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, wheel_angle);
 	}
 
 	puzzle.draw(sprites, world_to_clip, physics);
@@ -1188,16 +1190,27 @@ void Level2::push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm
 	const float distance = glm::length(offset);
 	// wheel is pushable
 	Body2D &wheel = physics.bodies[wheel_body];
+	float turn = wheel.spin * elapsed;
 	glm::vec2 contact_normal;
 	if (player.active && distance > 0.0f && wheel.wheel_clearance(player.position, contact_normal) <= player.radius + 0.001f) {
 		const glm::vec2 tangent(-offset.y / distance, offset.x / distance);
-		wheel_angle += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
+		turn += glm::dot(movement, tangent) * wheel_turn_speed * elapsed;
 	}
+
 	// wheel again changes
-	wheel_angle += wheel.spin * elapsed;
+	wheel_angle += turn;
 	wheel.wheel_angle = wheel_angle;
 	wheel.spin *= std::exp(-3.0f * elapsed);
-	if (wheel_angle < wheel_open_angle) {
+
+	// a wrong turn starts the count over
+	if (turn > 0.0f) {
+		clockwise_turn = 0.0f;
+	} else {
+		clockwise_turn -= turn;
+	}
+
+	// wait for the full clockwise turn
+	if (clockwise_turn < wheel_open_angle) {
 		return;
 	}
 

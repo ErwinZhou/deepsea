@@ -240,9 +240,12 @@ private:
 	size_t wheel_body = 0;
 	static constexpr float wheel_turn_speed = 2.5f; //radians per second at full push
 	glm::vec2 door_center{0.0f};
-	static constexpr float wheel_open_angle = glm::radians(180.0f); //180 out of 360 counterclockwise opens the door
+	static constexpr float wheel_open_angle = glm::radians(180.0f); // clockwise turn needed to open the door
 	bool door_open = false;
 	float wheel_angle = 0.0f; // initial is 0
+
+	// clockwise travel since the last wrong turn
+	float clockwise_turn = 0.0f;
 
 	Checkpoint progress{.level = 2};
 };
