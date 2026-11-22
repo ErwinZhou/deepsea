@@ -17,7 +17,8 @@
 //(1) small scary fish random appear seconds interval generation
 //(2) small scary fish group sizes random generation
 //(3) small scary fish group initial positioning
-static std::mt19937 mimic_rng{std::random_device{}()};
+//(4) decorations random size and random distances in between
+static std::mt19937 mimic_rng{Level2::random_seed};
 
 static float mimic_random_between(float low, float high) {
 	return std::uniform_real_distribution<float>(low, high)(mimic_rng);
@@ -417,6 +418,11 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	//align the visible right and bottom edges with the level bounds
 	door_center = glm::vec2(physics.bounds_max.x - door_height * (887.0f - 512.0f) / 2048.0f,
 		physics.bounds_min.y + door_height * (2020.0f - 1024.0f) / 2048.0f);
+
+	// reserve the tunnel and school before placing pipes
+	puzzle.decorate(physics, std::mt19937(random_seed),
+		{tunnel_center.x - 0.5f * tunnel_size.x, tunnel_center.x + 0.5f * tunnel_size.x}, group_center.x, door_center.x);
+
 	Body2D wheel{};
 	wheel.kind = Body2D::Wheel;
 	wheel.position = door_center;
@@ -1084,6 +1090,9 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	 * (3) Small scary fish
 	 * (4) Doors and pipes
 	 */
+
+	// draw loose decorations behind all puzzle pieces
+	puzzle.draw_decorations(sprites, world_to_clip);
 
 	// draw the door behind fish and loose items
 	const glm::vec2 door_size(door_height * float(door_texture.pixel_size.x) / float(door_texture.pixel_size.y), door_height);

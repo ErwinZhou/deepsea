@@ -10,9 +10,13 @@
 #include <array>
 #include <deque>
 #include <optional>
+#include <random>
 #include <vector>
 
 struct Level2 {
+	// share one seed for this run of level two
+	inline static const std::mt19937::result_type random_seed = std::random_device{}();
+
 	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);

@@ -5,6 +5,9 @@
 #include <algorithm>
 #include <cmath>
 
+static constexpr float diagonal_pipe_lip = 0.66f;
+static constexpr float big_pipe_lip = 0.43f;
+
 static constexpr float ClamWarningTime = 0.8f;
 static constexpr float ClamClosedTime = 1.5f;
 static constexpr float PipeAngle = -0.7853982f;
@@ -27,7 +30,8 @@ Level2Puzzle::Level2Puzzle()
 	  clam_open_texture(data_path("level2/shell_open.png")), clam_closed_texture(data_path("level2/shell_closed.png")),
 	  coral_texture(data_path("coral.png")), trash_texture(data_path("level2/metal_trash.png")),
 	  chest_texture(data_path("level2/chest.png")), keycard_texture(data_path("level2/keycard.png")),
-	  scanner_locked_texture(data_path("level2/key_scanner_locked.png")),
+	  big_pipe_texture(data_path("level2/big_pipe.png")), gear_texture(data_path("level2/gear_trash.png")),
+	  sheet_texture(data_path("level2/sheet_trash.png")), scanner_locked_texture(data_path("level2/key_scanner_locked.png")),
 	  scanner_unlocked_texture(data_path("level2/key_scanner_unlocked.png")) {
 }
 
@@ -63,13 +67,106 @@ void Level2Puzzle::setup(UnderwaterPhysics &physics, glm::vec2 const &clam_posit
 		glm::vec2(glm::mix(chest_center.x, clam_center.x, 2.0f / 3.0f), floor + 0.7f),
 		glm::vec2(glm::mix(clam_center.x, scanner_center.x, 1.0f / 3.0f), floor + 0.7f),
 		glm::vec2(glm::mix(clam_center.x, scanner_center.x, 2.0f / 3.0f), floor + 0.7f)};
-	outlets = {glm::vec2(scanner_center.x - 12.0f, floor + 22.0f),
-		glm::vec2(scanner_center.x - 6.0f, floor + 22.0f), glm::vec2(scanner_center.x + 9.0f, floor + 22.0f)};
+
+	// keep the three around the test scanner
+	for (const float offset : {-12.0f, -6.0f, 9.0f}) {
+		const glm::vec2 mouth(scanner_center.x + offset, floor + 22.0f);
+		const float size = (physics.bounds_max.y + 3.5f - mouth.y) / (2.0f * diagonal_pipe_lip);
+		ceiling_pipes.push_back({mouth, {0.0f, -1.0f}, glm::vec2(size), 0.0f, false});
+	}
+
 	//keep the body list fixed while the puzzle is running
 	for (size_t &index : trash_bodies) {
 		index = physics.bodies.size();
 		physics.bodies.push_back({.radius = 0.55f, .drag = 1.2f, .current_scale = 0.0f,
 			.active = false, .kind = Body2D::Trash});
+	}
+}
+
+void Level2Puzzle::decorate(UnderwaterPhysics const &physics, std::mt19937 random, glm::vec2 tunnel_edges,
+	float fish_group_x, float door_x) {
+	/**
+	 * Add trash and pipe decorations
+	 */
+	constexpr glm::vec2 pipe_spacing(21.0f, 32.0f);
+	constexpr glm::vec2 scrap_spacing(11.0f, 18.0f);
+	constexpr glm::vec2 scrap_sizes(1.8f, 4.0f);
+
+	constexpr float max_angle = 60.0f;
+	constexpr float mouth_spacing = 14.0f;
+	const float ceiling = physics.bounds_max.y;
+	const float floor = physics.bounds_min.y;
+	const auto between = [&random](float low, float high) {
+		return std::uniform_real_distribution<float>(low, high)(random);
+	};
+
+	// hang the largest pipe above the octopus
+	trash_launch_speed = 9.0f;
+	ceiling_pipes.clear();
+	ceiling_pipes.push_back({{chest_center.x, ceiling - 16.0f}, {0.0f, -1.0f}, {13.0f, 26.0f}, 0.0f, true});
+
+	for (float x = physics.bounds_min.x + 10.0f; x < physics.bounds_max.x - 6.0f; x += between(pipe_spacing.x, pipe_spacing.y)) {
+		// add angles to each pipe and bury its upper end, [-60, 60]
+		const float angle = glm::radians(between(-max_angle, max_angle));
+		const glm::vec2 direction(std::sin(angle), -std::cos(angle));
+		const float length = between(14.0f, 20.0f);
+		const glm::vec2 top(x, ceiling + 3.5f);
+		const glm::vec2 mouth = top + length * direction;
+
+		// leave room for the cave and fish group
+		const float left = std::min(x, mouth.x) - 2.5f;
+		const float right = std::max(x, mouth.x) + 2.5f;
+		if ((left <= tunnel_edges.y && right >= tunnel_edges.x) ||
+			(left <= fish_group_x + 10.0f && right >= fish_group_x - 10.0f) ||
+			(left <= chest_center.x + 11.0f && right >= chest_center.x - 11.0f) ||
+			left < physics.bounds_min.x || right > physics.bounds_max.x) {
+			continue;
+		}
+
+		// don't let each get too crowded
+		bool crowded = false;
+		for (const CeilingPipe &other : ceiling_pipes) {
+			if (std::abs(other.mouth.x - mouth.x) < mouth_spacing) {
+				crowded = true;
+			}
+		}
+		if (!crowded) {
+			ceiling_pipes.push_back({mouth, direction, glm::vec2(length / (2.0f * diagonal_pipe_lip)), angle, false});
+		}
+	}
+
+	// scatter trash but not on puzzles
+	floor_trash.clear();
+	for (float x = physics.bounds_min.x + 5.0f; x < physics.bounds_max.x - 4.0f; x += between(scrap_spacing.x, scrap_spacing.y)) {
+		const float size = between(scrap_sizes.x, scrap_sizes.y);
+		if (std::abs(x - clam_center.x) < 8.0f || std::abs(x - chest_center.x) < 13.0f ||
+			std::abs(x - scanner_center.x) < 7.0f || std::abs(x - door_x) < 10.0f) {
+			continue;
+		}
+
+		const glm::vec2 position(x, floor + 0.32f * size);
+		floor_trash.push_back({position, size, between(-0.55f, 0.55f),
+			std::uniform_int_distribution<unsigned>(0, 2)(random)});
+	}
+
+	// keep choosing sizes from the same sequence
+	trash_random = random;
+}
+
+void Level2Puzzle::draw_decorations(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
+	// align each opening with its falling trash
+	for (const CeilingPipe &pipe : ceiling_pipes) {
+		const float lip = pipe.large ? big_pipe_lip * pipe.size.y : diagonal_pipe_lip * pipe.size.x;
+		const glm::vec2 center = pipe.mouth - lip * pipe.direction;
+		sprites.draw(pipe.large ? big_pipe_texture : pipe_texture, world_to_clip, center, pipe.size,
+			pipe.angle + (pipe.large ? 0.0f : PipeAngle), false, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
+	}
+
+	// keep loose transh behind the swimming fish
+	const SpriteTexture *shapes[] = {&trash_texture, &gear_texture, &sheet_texture};
+	for (const FloorTrash &piece : floor_trash) {
+		sprites.draw(*shapes[piece.shape], world_to_clip, piece.position, glm::vec2(piece.size), piece.angle,
+			false, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
 	}
 }
 
@@ -180,10 +277,15 @@ void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t play
 				bool unused = drops_spawned < trash_bodies.size() && index == trash_bodies[drops_spawned];
 				//reuse settled debris, never an item the player has swallowed
 				bool settled = drops_spawned >= trash_bodies.size() && trash.active &&
-					trash.position.y < physics.bounds_min.y + 1.5f;
+					trash.position.y < physics.bounds_min.y + trash.radius + 0.95f;
 				if (!unused && !settled) continue;
-				trash.position = outlets[drops_spawned % outlets.size()] - glm::vec2(0.0f, 0.55f);
-				trash.velocity = glm::vec2(0.0f, -2.0f);
+
+				// shoot along the pipe and then falls down
+				const CeilingPipe &pipe = ceiling_pipes[next_pipe];
+				trash.radius = pipe.large ? big_gear_radius : std::uniform_real_distribution<float>(0.4f, 0.95f)(trash_random);
+				trash.position = pipe.mouth + pipe.direction * trash.radius;
+				trash.velocity = pipe.direction * trash_launch_speed;
+				next_pipe = (next_pipe + 1) % ceiling_pipes.size();
 				trash.force = glm::vec2(0.0f);
 				trash.active = true;
 				trash.player_spat = false;
@@ -237,7 +339,7 @@ void Level2Puzzle::restore(UnderwaterPhysics &physics, Body2D &fish, Checkpoint 
 		// use another piece if one was swallowed
 		drops_spawned = carried == trash_bodies.front() ? 1 : 0;
 		Body2D &trash = physics.bodies[trash_bodies[drops_spawned]];
-		trash.position = glm::vec2(outlets[0].x, physics.bounds_min.y + trash.radius);
+		trash.position = glm::vec2(scanner_center.x - 6.0f, physics.bounds_min.y + trash.radius);
 		trash.active = true;
 		++drops_spawned;
 	}
@@ -280,9 +382,6 @@ void Level2Puzzle::add_lights(Water::Look &look) const {
 		glm::vec2 outward = i == 4 ? glm::vec2(-1.0f, 0.0f) : glm::vec2(0.0f, 1.0f);
 		look.glows.emplace_back(corals[i] + outward, strength);
 	}
-	if (machine_time >= 0.0f) {
-		for (glm::vec2 const &outlet : outlets) look.glows.emplace_back(outlet, 0.25f);
-	}
 	glm::vec2 center = 0.5f * (look.view_min + look.view_max);
 	std::stable_sort(look.glows.begin(), look.glows.end(), [&](glm::vec3 const &a, glm::vec3 const &b) {
 		return glm::distance(glm::vec2(a), center) < glm::distance(glm::vec2(b), center);
@@ -295,17 +394,14 @@ void Level2Puzzle::draw(DrawSprites const &sprites, glm::mat4 const &world_to_cl
 		sprites.draw(coral_texture, world_to_clip, corals[i], glm::vec2(i >= 5 ? 1.6f : 2.3f),
 			i == 4 ? glm::radians(90.0f) : 0.0f, false, glm::u8vec4(150, 150, 150, 255), 0.0f, DrawSprites::Emissive);
 	}
-	for (glm::vec2 const &outlet : outlets) {
-		for (float y = outlet.y + 3.85f; y < physics.bounds_max.y + 3.85f; y += 7.3f) {
-			sprites.draw(pipe_texture, world_to_clip, glm::vec2(outlet.x, y), glm::vec2(5.5f),
-				PipeAngle, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
-		}
-	}
 	for (size_t i = 0; i < trash_bodies.size(); ++i) {
 		Body2D const &trash = physics.bodies[trash_bodies[i]];
 		if (trash.active) {
-			sprites.draw(trash_texture, world_to_clip, trash.position, glm::vec2(1.6f),
-				0.25f * std::sin(clock + float(i)), i % 2 != 0, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
+			// the saved radius also identifies the large gear
+			const bool gear = trash.radius == big_gear_radius;
+			const float size = trash.radius * (gear ? 2.2f : 2.9f);
+			sprites.draw(gear ? gear_texture : trash_texture, world_to_clip, trash.position, glm::vec2(size),
+				0.25f * std::sin(clock + float(i)), i % 2 != 0, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
 		}
 	}
 	bool closed = !clam_wedged && clam_time >= ClamWarningTime;
@@ -330,7 +426,7 @@ void Level2Puzzle::draw(DrawSprites const &sprites, glm::mat4 const &world_to_cl
 	if (pipe.active || clam_wedged) {
 		sprites.draw(pipe_texture, world_to_clip, clam_wedged ? clam_center + clam_height * glm::vec2(0.23f, -0.03f) : pipe.position,
 			glm::vec2(pipe.half_segment > 0.0f ? door_pipe_size : pipe_height),
-			clam_wedged || pipe.half_segment == 0.0f ? PipeAngle : glm::radians(45.0f), false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
+			clam_wedged || pipe.half_segment == 0.0f ? PipeAngle : glm::radians(45.0f), false, glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
 		if (clam_wedged) {
 			//the front lip hides the lower end of the prop between the shells
 			constexpr float lip = 0.30f;

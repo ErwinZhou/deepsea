@@ -7,6 +7,8 @@
 #include "Water.hpp"
 #include <array>
 #include <cstddef>
+#include <random>
+#include <vector>
 
 struct Level2Puzzle {
 	static constexpr float clam_height = 10.0f;
@@ -16,6 +18,9 @@ struct Level2Puzzle {
 	Level2Puzzle();
 	void setup(UnderwaterPhysics &physics, glm::vec2 const &clam_position,
 		glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index);
+	void decorate(UnderwaterPhysics const &physics, std::mt19937 random, glm::vec2 tunnel_edges,
+		float fish_group_x, float door_x); // add random decorations
+	void draw_decorations(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	void check_puzzle_hits(UnderwaterPhysics &physics, Checkpoint *progress = nullptr);
 	void update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera);
 	void restore(UnderwaterPhysics &physics, Body2D &fish, Checkpoint const &entry,
@@ -37,12 +42,39 @@ private:
 	static constexpr float pipe_launch_impulse = 10.0f;
 	SpriteTexture pipe_texture, pearl_texture, clam_open_texture, clam_closed_texture;
 	SpriteTexture coral_texture, trash_texture, chest_texture, keycard_texture;
+	SpriteTexture big_pipe_texture, gear_texture, sheet_texture;
 	SpriteTexture scanner_locked_texture, scanner_unlocked_texture;
 	Tentacles tentacles;
 	StaticBox2D chest, scanner;
 	glm::vec2 chest_center{0.0f}, scanner_center{0.0f}, clam_center{0.0f}, held_pearl{0.0f};
 	std::array<glm::vec2, 10> corals{};
-	std::array<glm::vec2, 3> outlets{};
+
+	/**
+	 * Dumping Trash -> Last Puzzle, once you swimed back to the octopus
+	 */
+	struct CeilingPipe {
+		glm::vec2 mouth{};
+		glm::vec2 direction{};
+		glm::vec2 size{};
+		float angle = 0.0f;
+		bool large = false;
+	};
+	struct FloorTrash {
+		glm::vec2 position{};
+		float size = 0.0f;
+		float angle = 0.0f;
+		unsigned shape = 0;
+	};
+	std::vector<CeilingPipe> ceiling_pipes;
+	std::vector<FloorTrash> floor_trash;
+	size_t next_pipe = 0;
+
+	float trash_launch_speed = 4.0f; // activate trash dropping speed
+	// small pipes drop pieces of different sizes
+	std::mt19937 trash_random{};
+
+	// the largest piece is always a gear
+	static constexpr float big_gear_radius = 2.4f;
 	std::array<size_t, 24> trash_bodies{};
 	size_t pipe_body = 0, pearl_body = 0, card_body = 0, key_body = 0;
 	unsigned drops_spawned = 0;
