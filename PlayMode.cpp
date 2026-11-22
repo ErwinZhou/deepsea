@@ -11,15 +11,14 @@
 #include <cassert>
 #include <cmath>
 
-PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents, std::string const &checkpoint_file,
-	float display_gain, bool developer_mode, int entry_checkpoint, bool jelly_nearby, bool key_in_cave)
+PlayMode::PlayMode(LevelId start_level, Checkpoint const &entry, std::string const &checkpoint_file,
+	float display_gain, bool developer_mode, bool key_in_cave)
 	: level_id(start_level),
 	  display_gain(display_gain),
 	  developer_mode(developer_mode && start_level == LevelId::Two),
 	  checkpoint_file(checkpoint_file),
-	  entry_belly_contents(belly_contents),
-	  entry_checkpoint(entry_checkpoint),
-	  checkpoint_saved(entry_checkpoint != 0),
+	  entry_belly_contents(entry.belly_contents),
+	  checkpoint_saved((entry.puzzle_flags & puzzle_flag(Level2Checkpoint::Tunnel)) != 0),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
@@ -35,14 +34,16 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 	} else {
 		assert(level_id == LevelId::Two && "play mode requires a supported level");
 		level2.emplace(fish_texture, fish_height, max_swim_speed);
-		carried_body = level2->setup(physics, camera, fish_body, belly_contents);
-		if (entry_checkpoint == 1) {
-			level2->resume_checkpoint(physics, fish_body, key_in_cave);
+		carried_body = level2->setup(physics, camera, fish_body, entry.belly_contents);
+
+		// restore solved puzzles before placing the jellyfish
+		if (entry.checkpoint != Level2Checkpoint::Entrance) {
+			level2->resume_checkpoint(physics, fish_body, entry, carried_body, key_in_cave);
 			camera.center = camera.constrain(physics.bodies[fish_body].position, physics.bounds_min, physics.bounds_max);
 		}
 
 		// place the jellyfish beside the final spawn
-		if (jelly_nearby) {
+		if (entry.jelly_nearby) {
 			level2->place_jelly_nearby(physics, fish_body);
 		}
 
@@ -124,7 +125,10 @@ void PlayMode::update(float elapsed) {
 		if (transition_time >= transition_fade_time) {
 			//keep this mode alive until update returns after replacing it
 			std::shared_ptr<Mode> const keep = shared_from_this();
-			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, carried_contents(), checkpoint_file, display_gain));
+
+			// carry the swallowed item into level two
+			const Checkpoint entry{.level = 2, .belly_contents = carried_contents()};
+			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, entry, checkpoint_file, display_gain));
 		}
 		return;
 	}
@@ -242,7 +246,9 @@ void PlayMode::update(float elapsed) {
 	if (restart) {
 		//keep this mode alive until update returns after replacing it
 		std::shared_ptr<Mode> const keep = shared_from_this();
-		int checkpoint = level2 ? int(level2->tunnel_finished()) : entry_checkpoint;
+
+		// remember where the fish last solved a puzzle
+		Checkpoint checkpoint = level2 ? level2->puzzle_progress() : Checkpoint{};
 
 		// keep what the fish held when it died
 		std::optional<Body2D> belly = level2 ? carried_contents() : entry_belly_contents;
@@ -256,8 +262,10 @@ void PlayMode::update(float elapsed) {
 		}
 
 		// return to the last completed puzzle
-		Mode::set_current(std::make_shared<PlayMode>(level_id, belly, checkpoint_file,
-			display_gain, developer_mode, checkpoint, jelly_nearby, key_in_cave));
+		checkpoint.belly_contents = belly;
+		checkpoint.jelly_nearby = jelly_nearby;
+		Mode::set_current(std::make_shared<PlayMode>(level_id, checkpoint, checkpoint_file,
+			display_gain, developer_mode, key_in_cave));
 	}
 }
 

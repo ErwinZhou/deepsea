@@ -57,7 +57,12 @@ void Tentacles::setup(glm::vec2 center) {
 	strike_time = StrikeCycle;
 }
 
-void Tentacles::distract(glm::vec2 const &position) {
+void Tentacles::distract(glm::vec2 const &position, bool already_holding) {
+	// skip reaching if the arms already hold it
+	if (already_holding) {
+		distraction = 1.0f;
+	}
+
 	pearl = position;
 	distracted = true;
 }

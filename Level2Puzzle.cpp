@@ -195,6 +195,76 @@ void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t play
 	if (!fish.active) death_time += elapsed;
 }
 
+void Level2Puzzle::restore(UnderwaterPhysics &physics, Body2D &fish, Checkpoint const &entry,
+	std::optional<size_t> carried, glm::vec2 door_center) {
+	using Point = Level2Checkpoint;
+
+	// check which puzzles the player already solved
+	const auto done = [&entry](Point point) {
+		return (entry.puzzle_flags & puzzle_flag(point)) != 0; // using the bitmask style puzzle_flag
+	};
+
+	// leave the pipe where it was used
+	clam_wedged = done(Point::Clam);
+	Body2D &pipe = physics.bodies[pipe_body];
+	pipe.active = done(Point::Door) && !clam_wedged && carried != pipe_body;
+	pipe.position = door_center - glm::vec2(4.0f, 0.0f);
+
+	// leave the shell fully propped open
+	if (clam_wedged) {
+		wedge_time = 0.35f;
+	}
+
+	// keep one pearl in its current place
+	tentacles_distracted = done(Point::Octopus);
+	physics.bodies[pearl_body].active = clam_wedged && !tentacles_distracted && carried != pearl_body;
+
+	// put the pearl back in the arms
+	if (tentacles_distracted) {
+		held_pearl = chest_center + glm::vec2(-5.0f, 8.0f);
+		tentacles.distract(held_pearl, true);
+	}
+
+	// the chest uses up the tunnel key
+	chest_open = done(Point::Chest);
+	physics.bodies[key_body].active = !chest_open && carried != key_body;
+	physics.bodies[card_body].active = chest_open && !done(Point::Machine) && carried != card_body;
+
+	// leave trash below the running machine
+	if (done(Point::Machine)) {
+		machine_time = 0.0f;
+
+		// use another piece if one was swallowed
+		drops_spawned = carried == trash_bodies.front() ? 1 : 0;
+		Body2D &trash = physics.bodies[trash_bodies[drops_spawned]];
+		trash.position = glm::vec2(outlets[0].x, physics.bounds_min.y + trash.radius);
+		trash.active = true;
+		++drops_spawned;
+	}
+
+	// leave clear space around the player so they won't get killed again
+	switch (entry.checkpoint) {
+	case Point::Clam:
+		fish.position = clam_center + glm::vec2(7.0f, 0.0f);
+		break;
+
+	case Point::Octopus:
+		fish.position = chest_center + glm::vec2(16.0f, 6.0f);
+		break;
+
+	case Point::Chest:
+		fish.position = chest_center + glm::vec2(5.0f, 3.0f);
+		break;
+
+	case Point::Machine:
+		fish.position = scanner_center - glm::vec2(5.0f, 0.0f);
+		break;
+
+	default:
+		break;
+	}
+}
+
 void Level2Puzzle::draw_backdrop(glm::mat4 const &world_to_clip) const {
 	tentacles.draw_backdrop(world_to_clip);
 }

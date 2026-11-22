@@ -12,7 +12,7 @@ struct Tentacles {
 	Tentacles &operator=(Tentacles const &) = delete;
 
 	void setup(glm::vec2 center);
-	void distract(glm::vec2 const &position);
+	void distract(glm::vec2 const &position, bool already_holding = false);
 	bool update(float elapsed, glm::vec2 const &fish, bool active);
 	void push_fish(Body2D &fish, float clock);
 	bool holding_fish() const { return caught; }

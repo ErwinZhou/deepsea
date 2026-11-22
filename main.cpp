@@ -145,28 +145,28 @@ int main(int argc, char **argv) {
 	std::string checkpoint_file;
 	std::string brightness_file = preference_path("brightness.txt");
 	std::optional<int> brightness = BrightnessMode::load(brightness_file);
-	std::optional<Body2D> belly_contents;
 
-	bool jelly_nearby = false;
-	int entry_checkpoint = 0; // the checkpoint to enter
+	// the checkpoint to enter
+	Checkpoint entry;
 	if (argc == 1) {
 		checkpoint_file = preference_path("checkpoint.csv");
 		if (!checkpoint_file.empty()) {
 			const std::optional<Checkpoint> saved = load_checkpoint(checkpoint_file);
 			if (saved) {
 				start_level = saved->level == 2 ? PlayMode::LevelId::Two : PlayMode::LevelId::One;
-				belly_contents = saved->belly_contents;
-				jelly_nearby = saved->jelly_nearby;
-				entry_checkpoint = static_cast<int>(saved->checkpoint);
+				entry = *saved;
 			}
 		}
 	}
 	auto start_game = [&](int value) {
 		brightness = value;
-		auto play = [start_level, belly_contents, checkpoint_file, value, developer_mode, entry_checkpoint, jelly_nearby]() {
-			Mode::set_current(std::make_shared<PlayMode>(start_level, belly_contents, checkpoint_file,
-				BrightnessMode::display_gain(value), developer_mode, entry_checkpoint, jelly_nearby));
+
+		// enter the level now or after the intro
+		auto play = [start_level, entry, checkpoint_file, value, developer_mode]() {
+			Mode::set_current(std::make_shared<PlayMode>(start_level, entry, checkpoint_file,
+				BrightnessMode::display_gain(value), developer_mode));
 		};
+
 		if (do_skip_intro) play();
 		else Mode::set_current(std::make_shared<GP26IntroMode>(play));
 	};

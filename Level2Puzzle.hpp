@@ -18,6 +18,8 @@ struct Level2Puzzle {
 		glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index);
 	void check_puzzle_hits(UnderwaterPhysics &physics, Checkpoint *progress = nullptr);
 	void update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera);
+	void restore(UnderwaterPhysics &physics, Body2D &fish, Checkpoint const &entry,
+		std::optional<size_t> carried, glm::vec2 door_center);
 	void add_lights(Water::Look &look) const;
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	void draw_backdrop(glm::mat4 const &world_to_clip) const;

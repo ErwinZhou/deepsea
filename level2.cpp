@@ -1224,16 +1224,39 @@ void Level2::place_jelly_nearby(UnderwaterPhysics &physics, size_t player_body) 
 	jellyfish_texture.emplace(data_path("jellyfish.png"));
 }
 
-void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, bool key_in_cave) {
-	progress.finish_puzzle(Level2Checkpoint::Tunnel);
+void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, Checkpoint const &entry,
+	std::optional<size_t> carried_body, bool key_in_cave) {
+	using Point = Level2Checkpoint;
+
+	// keep the last stop and solved puzzles
+	progress.checkpoint = entry.checkpoint;
+	progress.puzzle_flags = entry.puzzle_flags;
 	Body2D &player = physics.bodies[player_body];
-	player.position = glm::vec2(tunnel_center.x + 0.5f * tunnel_size.x + 8.0f, physics.bounds_min.y + 8.0f);
-	previous_player_position = player.position;
-	worm.stopped = true;
-	worm.awake = false;
-	shake_left = 0.0f;
-	// leave the key nearby unless already swallowed
-	if (!key_in_cave) {
-		physics.bodies[*key_body].position = player.position + glm::vec2(2.0f, 0.0f);
+
+	// leave room below the narrow tunnel mouth
+	const glm::vec2 mouth = tunnel_center + (glm::vec2(TunnelEntranceUV.x, 1.0f - TunnelEntranceUV.y) - 0.5f) * tunnel_size;
+	const glm::vec2 tunnel_spawn = mouth - glm::vec2(0.0f, 6.0f);
+	if (tunnel_finished()) {
+		worm.stopped = true;
+		if (!key_in_cave) {
+			physics.bodies[*key_body].position = tunnel_spawn + glm::vec2(2.0f, 0.0f);
+		}
 	}
+
+	// leave the wheel off the open door
+	door_open = (entry.puzzle_flags & puzzle_flag(Point::Door)) != 0;
+	if (door_open) {
+		physics.bodies[wheel_body].active = false;
+	}
+
+	// only the latest puzzle places the player
+	if (entry.checkpoint == Point::Tunnel) {
+		player.position = tunnel_spawn;
+	} else if (entry.checkpoint == Point::Door) {
+		player.position = door_center - glm::vec2(wheel_radius + 2.0f, 0.0f);
+	}
+
+	// restore the shell, arms, chest and machine
+	puzzle.restore(physics, player, entry, carried_body, door_center);
+	previous_player_position = player.position;
 }

@@ -18,9 +18,8 @@ struct PlayMode : Mode {
 	enum class FishState { Normal, Kirby, Fat };
 	enum class LevelId { One = 1, Two = 2, Test };
 
-	explicit PlayMode(LevelId start_level = LevelId::One, std::optional<Body2D> const &belly_contents = std::nullopt,
-		std::string const &checkpoint_file = "", float display_gain = 1.0f, bool developer_mode = false, int entry_checkpoint = 0,
-		bool jelly_nearby = false, bool key_in_cave = false);
+	explicit PlayMode(LevelId start_level = LevelId::One, Checkpoint const &entry = {},
+		std::string const &checkpoint_file = "", float display_gain = 1.0f, bool developer_mode = false, bool key_in_cave = false);
 	void clear_input();
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
@@ -67,7 +66,6 @@ private:
 	std::string checkpoint_file;
 	//retry restores the entrance checkpoint rather than the player's later inventory
 	std::optional<Body2D> entry_belly_contents;
-	int entry_checkpoint = 0;
 	bool checkpoint_saved = false;
 
 	struct {

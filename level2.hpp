@@ -27,7 +27,8 @@ struct Level2 {
 	bool has_jelly() const { return jelly_body.has_value(); }
 	bool inside_tunnel(glm::vec2 position) const;
 	void place_jelly_nearby(UnderwaterPhysics &physics, size_t player_body);
-	void resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, bool key_in_cave);
+	void resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, Checkpoint const &entry,
+		std::optional<size_t> carried_body, bool key_in_cave);
 	void push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
