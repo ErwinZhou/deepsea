@@ -5,6 +5,8 @@
 
 #include <glm/glm.hpp>
 
+#include <array>
+
 struct Tentacles {
 	Tentacles();
 	~Tentacles();
@@ -14,6 +16,7 @@ struct Tentacles {
 	void setup(glm::vec2 center);
 	void setup(glm::vec2 center, glm::vec2 guard, glm::vec2 span, float base_width, float solid_fraction);
 	void distract(glm::vec2 const &position, bool already_holding = false);
+	void release_pearl(); // let go of the pearl
 	bool update(float elapsed, glm::vec2 const &fish, bool active);
 	void push_fish(Body2D &fish, float clock);
 	bool holding_fish() const { return caught; }
@@ -21,6 +24,16 @@ struct Tentacles {
 	bool touches(glm::vec2 const &position, float radius, float clock) const;
 	void draw(glm::mat4 const &world_to_clip, float clock, bool grip_only = false) const;
 	void draw_backdrop(glm::mat4 const &world_to_clip) const;
+
+	/**
+	 * Level2 Finale
+	 */
+	void shoot(std::array<glm::vec2, 8> const &roots); // start reaching for big fish
+	void hold_big_fish(std::array<glm::vec2, 8> const &targets, float elapsed); 
+	bool holding_big_fish() const; // every arm fully extended
+	bool shooting = false;
+	std::array<glm::vec2, 8> grip_targets{};
+	std::array<float, 8> extend{}; // 0 = still at the root, 1 = tip on the target
 
 private:
 	glm::vec2 spine(int arm, float along, float clock) const;
@@ -39,6 +52,8 @@ private:
 	bool distracted = false;
 	float distraction = 0.0f;
 	float strike_time = 0.0f;
+	float shoot_time = 0.0f; //seconds since shoot, staggers each arm's reach
+	glm::vec2 shoot_spine(int arm, float along, float clock) const;
 	GLuint buffer = 0;
 	GLuint vao = 0;
 };

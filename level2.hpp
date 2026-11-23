@@ -7,6 +7,7 @@
 #include "Water.hpp"
 #include "Level2Puzzle.hpp"
 #include "Sound.hpp"
+#include "Tentacles.hpp"
 #include "level1.hpp"
 
 #include <cstddef>
@@ -57,6 +58,8 @@ struct Level2 {
 	// push flashlight to another angle
 	void push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	bool restart_requested() const;
+	// true once the player swims into the held-open mouth in the finale
+	bool exit_reached() const { return escaped; }
 	// for arrival of worm, could be reused for big fish and final combat
 	glm::vec2 arrival_shake() const;
 
@@ -309,4 +312,44 @@ private:
 	float clockwise_turn = 0.0f;
 
 	Checkpoint progress{.level = 2};
+
+	/*
+	* Finale stuff
+	*/
+	static constexpr float finale_trigger_offset = 30.0f; // trigger line distance right of the octopus pit
+	float finale_trigger_x = 0.0f;  // set in setup(): to the right of the octopus pit
+	bool finale_started = false;
+	bool escaped = false; // the player swam into the held-open mouth
+	// separate from the pit octopus, these rise from the floor instead
+	Tentacles arms;
+	static constexpr float finale_root_depth = 1.0f; // roots start this far under the floor, out of sight
+	std::array<glm::vec2, 8> finale_arm_targets() const;
+
+	/**
+	 * Finale rockfall: a couple seconds after the arms grab the jaws, big rocks fall left of the fish
+	 * and crush the player unless they swim into the mouth
+	 */
+	SpriteTexture big_rock_texture;
+	Level1::Target big_rock_target; // same collision boxes as level 1's fallen rock, at rock_size
+	// copies of level 1's hanging rock values (HangingSize, FallGravity, FallSpin, RestHeight in level1.cpp)
+	static constexpr float rock_size = 9.0f;
+	static constexpr float rock_gravity = 25.0f;
+	static constexpr float rock_spin = 0.6f;
+	static constexpr float rock_rest_height = 0.32f;
+	struct FallingRock {
+		glm::vec2 position{0.0f};
+		float velocity = 0.0f; // downward speed
+		float angle = 0.0f;
+		float rest_time = -1.0f; // negative while falling, then seconds since it landed
+	};
+	std::vector<FallingRock> falling_rocks;
+	float grab_time = -1.0f; // seconds since every arm gripped, negative before that
+	float next_rock_time = 0.0f;
+	static constexpr float rock_delay = 2.0f; // wait to have the cave start collapsing
+	static constexpr float rock_ramp_time = 6.0f; // rocks reach their fastest rate this long after they start
+	static constexpr glm::vec2 rock_interval{0.9f, 0.35f}; // seconds between rocks, first and fastest
+	static constexpr float rock_fade_time = 3.0f; // seconds a landed rock stays before it's gone
+	float ceiling_at(float x, UnderwaterPhysics const &physics) const;
+	void update_rockfall(float elapsed, UnderwaterPhysics const &physics, Body2D &player, Camera2D const &camera);
+	void draw_rockfall(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 };

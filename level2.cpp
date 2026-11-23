@@ -100,10 +100,12 @@ Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max
 	door_texture(data_path("level2/door.png")),
 	floor_texture(glm::u8vec4(0, 0, 0, 255)),
 	wheel_mark_texture(glm::u8vec4(255)),
-	door_wheel_texture(data_path("level2/door_wheel.png")) {
+	door_wheel_texture(data_path("level2/door_wheel.png")),
+	big_rock_texture(data_path("level1/big_rock3.png")) {
 	for (int stage = 0; stage < 3; ++stage) {
 		column_targets[stage] = Level1::load_target(data_path("level1/wall" + std::to_string(stage + 1) + ".png"));
 	}
+	big_rock_target = Level1::load_target(data_path("level1/big_rock3.png"));
 }
 
 float Level2::camera_floor(float x) const {
@@ -586,6 +588,8 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 
 	const float floor = seafloor_y;
 	pit_center = glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 1.0f / 6.0f), floor);
+	finale_trigger_x = pit_center.x + finale_trigger_offset;
+	finale_started = false;
 	const size_t ground_start = physics.obstacles.size();
 	setup_octopus_pit(physics);
 	puzzle.setup(physics, glm::vec2(clam_x, floor + 0.5f * Level2Puzzle::clam_height),
@@ -760,6 +764,39 @@ void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &c
 	puzzle.update(elapsed, physics, player_body, camera, pit_seal.hits_left == 0);
 	update_big_fish(elapsed, physics.bodies[player_body], camera);
 	update_fish_group(std::min(elapsed, 0.1f), physics, player_body, player_step);
+
+	if (!finale_started && big_fish.swimming() && player.active
+		&& big_fish.mouth_position().x <= finale_trigger_x
+		&& big_fish.mouth_position().x < camera.center.x + 0.5f * camera.view_size.x
+		&& player.position.x < big_fish.mouth_position().x) {
+		// Octopus grabs big fish jaws and holds them open
+		finale_started = true;
+		big_fish.hold_open();
+		// the octopus has lost its pearl
+		puzzle.lose_pearl();
+		stop_chase_sounds();
+
+		// root new tentacles in the floor (illusion that they're reaching from pit)
+		// lower-jaw arms (0-3) grab lower jaw, upper-jaw arms (4-7) grab upper jaw
+		const float teeth_x = big_fish.mouth_position().x;
+		const float root_y = seafloor_y - finale_root_depth;
+		std::array<glm::vec2, 8> roots;
+		for (size_t i = 0; i < 4; ++i) {
+			roots[i] = glm::vec2(teeth_x - 2.0f + 0.8f * float(i), root_y);
+			roots[4 + i] = glm::vec2(teeth_x - 3.0f - 1.5f * float(i), root_y);
+		}
+		arms.shoot(roots);
+	}
+
+	if (finale_started) {
+		arms.hold_big_fish(finale_arm_targets(), elapsed);
+		update_rockfall(elapsed, physics, physics.bodies[player_body], camera);
+		if (player.active && !escaped && big_fish.in_mouth(big_fish.prey - glm::vec2(20.0f, 0.0f))) {
+			// go to level 3
+			escaped = true;
+			if (ambient) ambient->set_volume(0.0f, death_fade_time);
+		}
+	}
 
 	if (!player.active) {
 		shake_left = 0.0f;
@@ -1373,6 +1410,7 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 		glm::u8vec4(0, 0, 0, 255), 0.0f, DrawSprites::Pillar);
 	puzzle.draw(sprites, world_to_clip, physics);
 	draw_pit_seal(sprites, world_to_clip);
+	draw_rockfall(sprites, world_to_clip);
 	for (StaticBox2D const &part : ceiling) {
 		sprites.draw(floor_texture, world_to_clip, 0.5f * (part.min + part.max), part.max - part.min,
 			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Emissive);
@@ -1380,6 +1418,10 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 
 	// draw the approaching jaws over the scenery
 	big_fish.draw(sprites, world_to_clip);
+
+	if (finale_started) {
+		arms.draw(world_to_clip, clock);
+	}
 
 	//show solid ground wherever the camera looks below the swimming area
 	for (StaticBox2D const &part : ground) {
@@ -1417,6 +1459,103 @@ void Level2::stop_chase_sounds() {
 			sound->reset();
 		}
 	}
+}
+
+float Level2::ceiling_at(float x, UnderwaterPhysics const &physics) const {
+	float roof = physics.bounds_max.y;
+	for (StaticBox2D const &part : ceiling) {
+		if (x >= part.min.x && x <= part.max.x) roof = std::min(roof, part.min.y);
+	}
+	return roof;
+}
+
+void Level2::update_rockfall(float elapsed, UnderwaterPhysics const &physics, Body2D &player, Camera2D const &camera) {
+	// start the clock once every arm has hold of the jaws
+	if (grab_time < 0.0f) {
+		if (!arms.holding_big_fish()) return;
+		grab_time = 0.0f;
+		next_rock_time = rock_delay;
+	}
+	grab_time += elapsed;
+
+	// only drop rocks left of the fish, between the edge of the view and its teeth
+	const float view_left = camera.center.x - 0.5f * camera.view_size.x;
+	const float teeth_x = big_fish.mouth_position().x;
+	if (!escaped && player.active && grab_time >= next_rock_time) {
+		const float ramp = std::clamp((grab_time - rock_delay) / rock_ramp_time, 0.0f, 1.0f);
+		next_rock_time = grab_time + glm::mix(rock_interval.x, rock_interval.y, ramp);
+
+		const float half = 0.5f * rock_size;
+		const float left = view_left + half;
+		const float right = teeth_x - half - 1.0f;
+		if (right > left) {
+			// anywhere left of the fish
+			const float x = mimic_random_between(left, right);
+			FallingRock rock;
+			// start hidden above the ceiling
+			rock.position = glm::vec2(x, ceiling_at(x, physics) + half);
+			rock.angle = mimic_random_between(0.0f, 6.2831853f);
+			falling_rocks.push_back(rock);
+		}
+	}
+
+	for (FallingRock &rock : falling_rocks) {
+		if (rock.rest_time >= 0.0f) {
+			rock.rest_time += elapsed;
+			continue;
+		}
+		// same fall as level 1's hanging rock, straight down
+		rock.velocity += rock_gravity * elapsed;
+		rock.position.y -= rock.velocity * elapsed;
+		rock.angle += rock_spin * elapsed;
+
+		// crush the player if they touch the rock's silhouette, using the boxes built from the png
+		const glm::vec2 size(rock_size);
+		for (glm::vec4 const &part : big_rock_target.parts) {
+			if (!player.active) break;
+			const StaticBox2D box = Level1::world_box(part, rock.position, size, rock.angle);
+			const glm::vec2 offset = player.position - glm::clamp(player.position, box.min, box.max);
+			if (glm::dot(offset, offset) < player.radius * player.radius) {
+				player.active = false;
+				player.velocity = glm::vec2(0.0f);
+				player.force = glm::vec2(0.0f);
+			}
+		}
+
+		// settles with its middle the same height above the floor as level 1's fallen rock
+		const float rest_y = camera_floor(rock.position.x) + rock_rest_height * rock_size;
+		if (rock.position.y <= rest_y) {
+			rock.position.y = rest_y;
+			rock.rest_time = 0.0f;
+			shake_left = std::max(shake_left, 0.35f);
+			for (int c = 0; c < 10; ++c) {
+				chips.push_back({glm::vec2(rock.position.x, rest_y - rock_rest_height * rock_size),
+					glm::vec2(mimic_random_between(-4.0f, 4.0f), mimic_random_between(1.0f, 4.0f)), 0.7f});
+			}
+			Sound::play_3D(*seal_hit_sound, 0.6f, glm::vec3(rock.position, 0.0f), 30.0f);
+		}
+	}
+	falling_rocks.erase(std::remove_if(falling_rocks.begin(), falling_rocks.end(),
+		[](FallingRock const &rock) { return rock.rest_time > rock_fade_time; }), falling_rocks.end());
+}
+
+void Level2::draw_rockfall(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
+	for (FallingRock const &rock : falling_rocks) {
+		// landed rocks fade out over their last second, drawn like level 1's hanging rock
+		const float fade = rock.rest_time < 0.0f ? 1.0f : std::clamp(rock_fade_time - rock.rest_time, 0.0f, 1.0f);
+		sprites.draw(big_rock_texture, world_to_clip, rock.position, glm::vec2(rock_size), rock.angle, false,
+			glm::u8vec4(255, 255, 255, uint8_t(255.0f * fade)), 0.0f, DrawSprites::Pillar);
+	}
+}
+
+std::array<glm::vec2, 8> Level2::finale_arm_targets() const {
+	constexpr std::array<float, 4> along{0.95f, 0.88f, 0.81f, 0.74f};
+	std::array<glm::vec2, 8> targets;
+	for (size_t i = 0; i < along.size(); ++i) {
+		targets[i] = big_fish.tentacle_point(false, along[i]);
+		targets[7 - i] = big_fish.tentacle_point(true, along[i]);
+	}
+	return targets;
 }
 
 void Level2::update_big_fish(float elapsed, Body2D &player, Camera2D const &camera) {

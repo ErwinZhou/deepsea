@@ -6,6 +6,7 @@
 #include "Camera2D.hpp"
 #include "level1.hpp"
 #include "level2.hpp"
+#include "level3.hpp"
 #include "TestLevel.hpp"
 #include "CaveBackground.hpp"
 #include "Water.hpp"
@@ -16,7 +17,7 @@
 
 struct PlayMode : Mode {
 	enum class FishState { Normal, Kirby, Fat };
-	enum class LevelId { One = 1, Two = 2, Test };
+	enum class LevelId { One = 1, Two = 2, Three = 3, Test };
 
 	explicit PlayMode(LevelId start_level = LevelId::One, Checkpoint const &entry = {},
 		std::string const &checkpoint_file = "", float display_gain = 1.0f, bool developer_mode = false);
@@ -52,6 +53,7 @@ struct PlayMode : Mode {
 	LevelId const level_id;
 	std::optional<Level1> level1;
 	std::optional<Level2> level2;
+	std::optional<Level3> level3;
 	std::optional<TestLevel> test_level;
 	float display_gain;
 	bool const developer_mode;

@@ -15,6 +15,7 @@ struct BigFish {
 		Charging, //speeding up and opening wider
 		Slamming, //jaws shutting
 		Stunned, //pinned by falling rock, stops moving
+		Held, // Level 2 finale - octopus holds jaws open
 	} state = Waiting;
 
 	//pivot at the back of the mouth, shared by both jaws
@@ -80,6 +81,14 @@ struct BigFish {
 	static constexpr float arrival_volume = 1.2f;
 	static constexpr float arrival_reach = 90.0f;
 	static constexpr float arrival_shake_size = 0.08f;
+
+	/**
+	 * Level2 Finale 
+	 */
+	// Octopus holds jaws open
+	void hold_open(); 
+	// Point for tentacle to grab jaw
+	glm::vec2 tentacle_point(bool upper, float along) const; 
 private:
 	void update_turn(float elapsed);
 	glm::vec2 local_point(glm::vec2 const &point) const;

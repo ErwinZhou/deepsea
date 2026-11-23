@@ -36,6 +36,8 @@ struct Level2Puzzle {
 	bool touches_arm(glm::vec2 const &position, float radius) const { return tentacles.touches(position, radius, clock); }
 	void hide_pipe(UnderwaterPhysics &physics, glm::vec2 const &position);
 	void launch_pipe(UnderwaterPhysics &physics);
+	// finale: the pit octopus loses its pearl (it goes after the big fish instead)
+	void lose_pearl();
 
 private:
 	void drop_nearby_trash(UnderwaterPhysics &physics, glm::vec2 fish_position); // to avoid piling up, only drop trash once the player swims close to them

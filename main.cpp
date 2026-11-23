@@ -42,18 +42,22 @@ int main(int argc, char **argv) {
 	PlayMode::LevelId start_level = PlayMode::LevelId::One;
 	bool do_skip_intro = false;
 	bool developer_mode = false;
+	bool start_at_chase = false;
 	if (argc != 1) {
 		std::string level = argc >= 3 ? argv[2] : "";
 		if ((argc != 3 && argc != 4) || std::string(argv[1]) != "--level" ||
-			(level != "1" && level != "2" && level != "test" && level != "2-dev") ||
+			(level != "1" && level != "2" && level != "3" && level != "test" && level != "2-dev" && level != "2-chase") ||
 			(argc == 4 && std::string(argv[3]) != "--skip-intro")) {
-			std::cerr << "Usage: game [--level 1|2|test|2-dev] [--skip-intro]\n";
+			std::cerr << "Usage: game [--level 1|2|3|test|2-dev|2-chase] [--skip-intro]\n";
 			return 1;
 		}
-		if (level == "2" || level == "2-dev") start_level = PlayMode::LevelId::Two;
+		if (level == "2" || level == "2-dev" || level == "2-chase") start_level = PlayMode::LevelId::Two;
+		if (level == "3") start_level = PlayMode::LevelId::Three;
 		if (level == "test") start_level = PlayMode::LevelId::Test;
-		developer_mode = level == "2-dev";
-		do_skip_intro = argc == 4 || developer_mode || level == "test";
+		// 2-chase also gets the dev fast swim (hold shift)
+		developer_mode = level == "2-dev" || level == "2-chase";
+		start_at_chase = level == "2-chase";
+		do_skip_intro = argc == 4 || developer_mode || level == "test" || level == "3";
 	}
 #ifdef _WIN32
 	{ //when compiled on windows, check that code page is forced to utf-8 (makes file loading/saving work right):
@@ -157,6 +161,15 @@ int main(int argc, char **argv) {
 				entry = *saved;
 			}
 		}
+	} else if (start_at_chase) {
+		// every level 2 puzzle solved and the machine running: the big fish enters right away
+		using Point = Level2Checkpoint;
+		entry.level = 2;
+		entry.checkpoint = Point::Machine;
+		for (Point point : {Point::Tunnel, Point::Door, Point::Clam, Point::Octopus, Point::Chest, Point::Machine}) {
+			entry.puzzle_flags |= puzzle_flag(point);
+		}
+		entry.puzzle_flags |= Checkpoint::pit_open;
 	} else if (start_level == PlayMode::LevelId::Two && !developer_mode) {
 		entry.level = 2;
 		entry.jelly_nearby = true;

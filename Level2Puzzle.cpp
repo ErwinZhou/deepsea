@@ -542,3 +542,10 @@ void Level2Puzzle::launch_pipe(UnderwaterPhysics &physics) {
 	pipe.active = true;
 	pipe.apply_impulse(glm::vec2(-pipe_launch_impulse, 0.0f));
 }
+
+void Level2Puzzle::lose_pearl() {
+	// stops drawing the held pearl. The chest is already open, so nothing else depends on this flag
+	if (!tentacles_distracted) return;
+	tentacles_distracted = false;
+	tentacles.release_pearl();
+}

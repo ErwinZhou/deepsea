@@ -165,6 +165,8 @@ void BigFish::update(float elapsed) {
 			shake_left = ShakeTime;
 		}
 		if (timer <= 0.0f) state = Normal;
+	} else if (state == Held) {
+		timer -= elapsed;
 	} else {
 		timer -= elapsed;
 		if (timer <= 0.0f) state = Normal;
@@ -240,6 +242,11 @@ bool BigFish::swimming() const {
 	return state == Normal || state == Charging;
 }
 
+void BigFish::hold_open(){
+	state = Held;
+	turn_speed = 0.0f;
+}
+
 bool BigFish::in_reach(glm::vec2 const &point) const {
 	return state == Normal && local_point(point).x - MouthFront * size < ChargeRange;
 }
@@ -284,6 +291,15 @@ glm::vec2 BigFish::mouth_position() const {
 	float co = std::cos(angle);
 	float si = std::sin(angle);
 	return position + glm::vec2(direction * (co * front - si * offset), si * front + co * offset);
+}
+
+glm::vec2 BigFish::tentacle_point(bool upper, float along) const {
+        float x = along * MouthFront * size;
+        glm::vec2 edges = mouth_edges(jaw);
+        float y = upper ? edges.x : edges.y;
+        // same rotate + mirror as mouth_position()
+        float co = std::cos(angle), si = std::sin(angle);
+        return position + glm::vec2(direction * (co * x - si * y), si * x + co * y);
 }
 
 glm::vec2 BigFish::shake() const {
