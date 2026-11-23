@@ -285,6 +285,7 @@ void Level2Puzzle::drop_nearby_trash(UnderwaterPhysics &physics, glm::vec2 fish_
 	for (size_t step = 0; step < ceiling_pipes.size(); ++step) {
 		const size_t pipe_index = (next_pipe + step) % ceiling_pipes.size();
 		const CeilingPipe &pipe = ceiling_pipes[pipe_index];
+		
 		if (std::abs(fish_position.x - pipe.mouth.x) > nearby_distance) {
 			continue;
 		}

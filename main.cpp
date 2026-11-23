@@ -157,6 +157,9 @@ int main(int argc, char **argv) {
 				entry = *saved;
 			}
 		}
+	} else if (start_level == PlayMode::LevelId::Two && !developer_mode) {
+		entry.level = 2;
+		entry.jelly_nearby = true;
 	}
 	auto start_game = [&](int value) {
 		brightness = value;
