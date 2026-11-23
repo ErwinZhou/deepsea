@@ -3,6 +3,7 @@
 #include "ColorProgram.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/constants.hpp>
 
 #include <algorithm>
 #include <array>
@@ -16,8 +17,20 @@ constexpr float ExtendTime = 0.4f;
 constexpr float HoldTime = 0.2f;
 constexpr float ReturnTime = 1.6f;
 constexpr float StrikeCycle = WarningTime + ExtendTime + HoldTime + ReturnTime + 2.5f;
-constexpr int Segments = 32;
+constexpr float GripStart = 0.82f;
+constexpr float TipStart = 0.88f;
+constexpr float GripRadius = 0.85f;
+constexpr float GripCloseTime = 0.15f;
+constexpr float PullTime = 1.0f;
+constexpr float PullDistance = 22.0f;
+constexpr int Segments = 64;
 constexpr int StripSize = 2 * (Segments + 1);
+
+glm::vec2 bezier(glm::vec2 const &a, glm::vec2 const &b, glm::vec2 const &c, glm::vec2 const &d, float t) {
+	float back = 1.0f - t;
+	return back * back * back * a + 3.0f * back * back * t * b +
+		3.0f * back * t * t * c + t * t * t * d;
+}
 
 struct Vertex {
 	glm::vec2 position;
@@ -47,8 +60,16 @@ Tentacles::~Tentacles() {
 }
 
 void Tentacles::setup(glm::vec2 center) {
+	setup(center, center + glm::vec2(0.0f, 8.0f), glm::vec2(19.0f, 16.0f), 1.25f, 0.0f);
+}
+
+void Tentacles::setup(glm::vec2 center, glm::vec2 guard, glm::vec2 span, float base_width, float solid_fraction) {
+	guard_center = guard;
+	size = span;
+	thickness = base_width;
+	solid_base = solid_fraction;
 	for (int i = 0; i < 8; ++i) {
-		roots[i] = center + glm::vec2(-9.5f + float(i) * (19.0f / 7.0f), 0.0f);
+		roots[i] = center + glm::vec2(-0.5f * size.x + float(i) * (size.x / 7.0f), 0.0f);
 	}
 	distracted = false;
 	distraction = 0.0f;
@@ -65,9 +86,16 @@ void Tentacles::distract(glm::vec2 const &position) {
 bool Tentacles::update(float elapsed, glm::vec2 const &fish, bool active) {
 	if (caught) {
 		caught_time += elapsed;
-		float pull = glm::smoothstep(0.0f, 0.7f, caught_time);
-		glm::vec2 direction = glm::normalize(roots[strike_arm] - caught_position);
-		target = caught_position + direction * (2.5f * pull);
+		float pull = glm::clamp((caught_time - GripCloseTime) / PullTime, 0.0f, 1.0f);
+		glm::vec2 offset = roots[strike_arm] - caught_position;
+		float distance = glm::length(offset);
+		glm::vec2 direction = offset / std::max(distance, 0.001f);
+		target = caught_position + direction * (std::clamp(distance - 2.0f, 0.0f, PullDistance) * pull * pull);
+		if (size.y > 32.0f) {
+			//clear the chest's ledge before dragging the fish into the shaft
+			target.x = glm::mix(caught_position.x, guard_center.x + 0.32f * size.x,
+				glm::smoothstep(0.0f, 0.55f, pull));
+		}
 		return false;
 	}
 	if (distracted) {
@@ -76,7 +104,10 @@ bool Tentacles::update(float elapsed, glm::vec2 const &fish, bool active) {
 	}
 	if (strike_time < StrikeCycle) {
 		strike_time += elapsed;
-	} else if (active && glm::distance(fish, 0.5f * (roots[0] + roots[7]) + glm::vec2(0.0f, 8.0f)) < StrikeRange) {
+		//track the fish until the grab ends
+		if (active && strike_time <= WarningTime + ExtendTime + HoldTime &&
+			glm::distance(fish, guard_center) < StrikeRange) target = fish;
+	} else if (active && glm::distance(fish, guard_center) < StrikeRange) {
 		target = fish;
 		strike_arm = 0;
 		for (int i = 1; i < 8; ++i) {
@@ -89,6 +120,21 @@ bool Tentacles::update(float elapsed, glm::vec2 const &fish, bool active) {
 }
 
 glm::vec2 Tentacles::spine(int arm, float along, float clock) const {
+	if (caught && arm == strike_arm) {
+		//wrap the tip around the captured fish
+		float side = arm < 4 ? 1.0f : -1.0f;
+		glm::vec2 grip = target - glm::vec2(0.0f, GripRadius);
+		if (along >= GripStart) {
+			float turn = (along - GripStart) / (1.0f - GripStart);
+			float close = glm::smoothstep(0.0f, GripCloseTime, caught_time);
+			float angle = -glm::half_pi<float>() + side * glm::mix(0.5f, 1.7f * glm::pi<float>(), close) * turn;
+			return target + GripRadius * glm::vec2(std::cos(angle), std::sin(angle));
+		}
+		float t = along / GripStart;
+		glm::vec2 first = roots[arm] + 0.5f * (grip - roots[arm]);
+		glm::vec2 second = grip - glm::vec2(side * 4.0f, 0.0f);
+		return bezier(roots[arm], first, second, grip, t);
+	}
 	float extend = std::clamp((strike_time - WarningTime) / ExtendTime, 0.0f, 1.0f);
 	float retract = std::clamp((strike_time - WarningTime - ExtendTime - HoldTime) / ReturnTime, 0.0f, 1.0f);
 	extend *= 2.0f - extend;
@@ -100,28 +146,50 @@ glm::vec2 Tentacles::spine(int arm, float along, float clock) const {
 	float warning = arm == strike_arm && strike_time < WarningTime + ExtendTime + HoldTime ?
 		std::clamp(strike_time / WarningTime, 0.0f, 1.0f) : 0.0f;
 	glm::vec2 rest((arm < 4 ? 1.0f : -1.0f) * (3.0f + 0.4f * float(arm % 4)),
-		15.0f + 1.2f * float(arm % 3) - 8.0f * warning);
+		size.y * (0.9375f + 0.075f * float(arm % 3)) - 8.0f * warning);
+	//spread the long arms around the chest
+	float long_blend = glm::clamp((size.y - 16.0f) / 32.0f, 0.0f, 1.0f);
+	float order = float(arm < 4 ? 3 - arm : arm - 4);
+	float spread = (arm < 4 ? -1.0f : 1.0f) * (4.0f + 2.5f * order);
+	rest.x = glm::mix(rest.x, guard_center.x - roots[arm].x + spread, long_blend);
+	rest.y = glm::mix(rest.y, guard_center.y - roots[arm].y + 6.0f + 3.0f * order - 8.0f * warning, long_blend);
 	glm::vec2 tip = glm::mix(rest, target - roots[arm], lunge);
 	float sway = (1.0f - lunge) * std::sin(0.55f * clock - 4.0f * along + float(arm));
 	float curl = (1.0f - lunge) * 1.5f * along * (1.0f - along);
 	float x = along * along * (tip.x + 0.85f * sway) - curl;
 	glm::vec2 point = roots[arm] + glm::vec2(x, along * tip.y);
+	//the tips of the long arms curl back down toward the chest
+	if (long_blend > 0.0f) {
+		float side = arm < 4 ? -1.0f : 1.0f;
+		glm::vec2 end = roots[arm] + tip;
+		glm::vec2 first = roots[arm] + glm::vec2(side * (2.0f + 0.3f * order), 0.55f * tip.y);
+		glm::vec2 second = end + glm::vec2(side * 3.5f, 6.0f);
+		glm::vec2 curve = bezier(roots[arm], first, second, end, along);
+		//a slow wave bends the exposed length while the buried base stays still
+		float phase = 0.65f * clock + 1.35f * float(arm);
+		curve.x += 2.2f * std::sin(phase - 8.0f * along) * glm::smoothstep(0.45f, 0.85f, along);
+		curve.y += 0.7f * std::sin(0.8f * phase) * glm::smoothstep(0.7f, 1.0f, along);
+		point = glm::mix(point, curve, long_blend * (1.0f - lunge));
+	}
 	if (!distracted) return point;
 	//separate arcs keep the arms readable as they gather around the pearl
 	float angle = float(arm) * 6.2831853f / 8.0f;
 	glm::vec2 grip = pearl + 0.45f * glm::vec2(std::cos(angle), std::sin(angle));
 	float side = pearl.x < roots[arm].x ? 1.0f : -1.0f;
-	glm::vec2 first = roots[arm] + glm::vec2(0.0f, 5.0f + 0.6f * float(arm));
+	glm::vec2 first = roots[arm] + glm::vec2(0.0f, 0.3125f * size.y + 0.6f * float(arm));
 	glm::vec2 second = grip + glm::vec2(side * (1.8f + 0.3f * float(arm)), 2.0f + 0.3f * float(arm));
-	float back = 1.0f - along;
-	glm::vec2 curve = back * back * back * roots[arm] + 3.0f * back * back * along * first +
-		3.0f * back * along * along * second + along * along * along * grip;
+	glm::vec2 curve = bezier(roots[arm], first, second, grip, along);
 	return glm::mix(point, curve, reach);
 }
 
 float Tentacles::width(int arm, float along) const {
-	return glm::mix(1.25f, 0.65f, distraction) * (1.0f - along) *
-		(1.0f + 0.11f * std::sin(17.0f * along + float(arm)));
+	if (caught && arm == strike_arm && along >= GripStart) {
+		return glm::mix(0.35f, 0.04f, (along - GripStart) / (1.0f - GripStart));
+	}
+	float long_blend = glm::clamp((size.y - 16.0f) / 32.0f, 0.0f, 1.0f);
+	float taper = 1.0f - 0.7f * long_blend * glm::smoothstep(0.45f, 0.75f, along);
+	return glm::mix(thickness, 0.52f * thickness, distraction) * (1.0f - along) *
+		taper * (1.0f + 0.11f * std::sin(17.0f * along + float(arm)));
 }
 
 bool Tentacles::touches(glm::vec2 const &position, float radius, float clock) const {
@@ -141,7 +209,7 @@ bool Tentacles::touches(glm::vec2 const &position, float radius, float clock) co
 }
 
 void Tentacles::push_fish(Body2D &fish, float clock) {
-	if (!fish.active || distracted) return;
+	if (!fish.active || (distracted && solid_base == 0.0f)) return;
 	//match collisions to the drawn arms
 	for (int i = 0; i < 8; ++i) {
 		glm::vec2 start = spine(i, 0.0f, clock);
@@ -154,11 +222,14 @@ void Tentacles::push_fish(Body2D &fish, float clock) {
 			glm::vec2 offset = fish.position - (start + t * segment);
 			float distance = glm::length(offset);
 			float at = (float(j - 1) + t) / float(Segments);
+			//the lower arms stay solid while the tips hold the pearl
+			if (distracted && at > solid_base) { start = end; continue; }
 			float radius = fish.radius + width(i, at);
 			if (distance < radius) {
-				if (i == strike_arm && at > 0.35f && strike_time >= WarningTime &&
+				if (!distracted && i == strike_arm && at > TipStart && strike_time >= WarningTime &&
 					strike_time < WarningTime + ExtendTime + HoldTime) {
 					fish.active = false;
+					fish.velocity = glm::vec2(0.0f);
 					caught = true;
 					caught_time = 0.0f;
 					caught_position = fish.position;
@@ -176,7 +247,8 @@ void Tentacles::push_fish(Body2D &fish, float clock) {
 	}
 }
 
-void Tentacles::draw(glm::mat4 const &world_to_clip, float clock) const {
+void Tentacles::draw(glm::mat4 const &world_to_clip, float clock, bool grip_only) const {
+	if (grip_only && !caught) return;
 	std::array<Vertex, 8 * StripSize> vertices;
 	constexpr glm::vec4 ink(0.0015f, 0.0015f, 0.0015f, 1.0f);
 	//reference for the wiggling silhouette: https://www.youtube.com/watch?v=qlfh_rv6khY
@@ -200,8 +272,13 @@ void Tentacles::draw(glm::mat4 const &world_to_clip, float clock) const {
 	glUseProgram(color_program->program);
 	glUniformMatrix4fv(color_program->OBJECT_TO_CLIP_mat4, 1, GL_FALSE, glm::value_ptr(world_to_clip));
 	glBindVertexArray(vao);
-	for (int strip = 0; strip < 8; ++strip) {
-		glDrawArrays(GL_TRIANGLE_STRIP, strip * StripSize, StripSize);
+	if (grip_only) {
+		const int first = 2 * int(TipStart * float(Segments));
+		glDrawArrays(GL_TRIANGLE_STRIP, strike_arm * StripSize + first, StripSize - first);
+	} else {
+		for (int strip = 0; strip < 8; ++strip) {
+			glDrawArrays(GL_TRIANGLE_STRIP, strip * StripSize, StripSize);
+		}
 	}
 	glBindVertexArray(0);
 	glUseProgram(0);

@@ -9,9 +9,6 @@ static constexpr float ClamWarningTime = 0.8f;
 static constexpr float ClamClosedTime = 1.5f;
 static constexpr float PipeAngle = -0.7853982f;
 
-static Load<Sound::Sample> arm_sound(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("modified_rock_hit.opus"));
-});
 static Load<Sound::Sample> capture_sound(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("modified_chomp.opus"));
 });
@@ -32,20 +29,25 @@ Level2Puzzle::Level2Puzzle()
 }
 
 void Level2Puzzle::setup(UnderwaterPhysics &physics, glm::vec2 const &clam_position,
-	glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index) {
-	float floor = physics.bounds_min.y;
+	glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index, float pit_depth) {
+	float floor = clam_position.y - 0.5f * clam_height;
 	clam_center = clam_position;
 	chest_center = chest_position;
 	scanner_center = machine_position;
 	key_body = key_index;
-	chest = {glm::vec2(chest_center.x - 0.42f * chest_height, floor), chest_center + chest_height * glm::vec2(0.42f, 0.3f)};
+	chest = {chest_center + chest_height * glm::vec2(-0.42f, -0.38f), chest_center + chest_height * glm::vec2(0.42f, 0.3f)};
 	scanner = {glm::vec2(scanner_center.x - 0.26f * scanner_height, floor), scanner_center + scanner_height * glm::vec2(0.27f, 0.48f)};
 	physics.obstacles.push_back(chest);
 	physics.obstacles.push_back(scanner);
 	//only the lower shell is solid; the open mouth must be reachable
 	physics.obstacles.push_back({clam_center + clam_height * glm::vec2(-0.41f, -0.5f),
 		clam_center + clam_height * glm::vec2(0.41f, -0.34f)});
-	tentacles.setup(glm::vec2(chest_center.x, floor - 0.1f));
+	if (pit_depth > 0.0f) {
+		tentacles.setup(glm::vec2(chest_center.x, floor - pit_depth), chest_center + glm::vec2(0.0f, 5.0f),
+			glm::vec2(22.0f, chest_center.y - (floor - pit_depth) + 12.0f), 6.0f, 0.45f);
+	} else {
+		tentacles.setup(glm::vec2(chest_center.x, floor - 0.1f));
+	}
 	pipe_body = physics.bodies.size();
 	physics.bodies.push_back({.position = clam_center + glm::vec2(-8.0f, 0.0f),
 		.radius = 0.8f, .current_scale = 0.0f, .kind = Body2D::Pipe});
@@ -55,14 +57,11 @@ void Level2Puzzle::setup(UnderwaterPhysics &physics, glm::vec2 const &clam_posit
 	card_body = physics.bodies.size();
 	physics.bodies.push_back({.position = chest_center + glm::vec2(0.0f, 0.66f * chest_height),
 		.radius = 0.46f, .current_scale = 0.0f, .active = false, .kind = Body2D::Keycard});
-	corals = {glm::vec2(clam_center.x - 9.5f, floor + 0.7f), glm::vec2(clam_center.x + 5.5f, floor + 0.7f),
-		glm::vec2(chest_center.x - 12.0f, floor + 0.7f), glm::vec2(chest_center.x - 3.5f, floor + 0.7f),
-		scanner_center + scanner_height * glm::vec2(-0.30f, 0.14f),
-		glm::vec2(chest_center.x - 29.0f, floor + 0.7f),
-		glm::vec2(glm::mix(chest_center.x, clam_center.x, 1.0f / 3.0f), floor + 0.7f),
-		glm::vec2(glm::mix(chest_center.x, clam_center.x, 2.0f / 3.0f), floor + 0.7f),
-		glm::vec2(glm::mix(clam_center.x, scanner_center.x, 1.0f / 3.0f), floor + 0.7f),
-		glm::vec2(glm::mix(clam_center.x, scanner_center.x, 2.0f / 3.0f), floor + 0.7f)};
+	coral_positions[0] = pit_depth > 0.0f ? chest_center + glm::vec2(-5.0f, -2.4f) : glm::vec2(chest_center.x - 7.0f, floor + 0.7f);
+	coral_count = pit_depth > 0.0f ? 4 : 1;
+	coral_positions[1] = glm::vec2(chest_center.x - 12.5f, floor - 15.0f);
+	coral_positions[2] = glm::vec2(chest_center.x + 12.5f, chest_center.y + 8.0f);
+	coral_positions[3] = glm::vec2(chest_center.x - 13.0f, floor + 3.0f);
 	outlets = {glm::vec2(scanner_center.x - 12.0f, floor + 22.0f),
 		glm::vec2(scanner_center.x - 6.0f, floor + 22.0f), glm::vec2(scanner_center.x + 9.0f, floor + 22.0f)};
 	//keep the body list fixed while the puzzle is running
@@ -125,7 +124,8 @@ void Level2Puzzle::check_puzzle_hits(UnderwaterPhysics &physics) {
 	}
 }
 
-void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera) {
+void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t player_body,
+	Camera2D const &camera, bool guard_active) {
 	clock += elapsed;
 	Body2D &fish = physics.bodies[player_body];
 	StaticBox2D mouth{clam_center + clam_height * glm::vec2(-0.36f, -0.27f),
@@ -144,10 +144,7 @@ void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t play
 	glm::vec2 half_view = 0.5f * camera.view_size;
 	bool in_view = chest_center.x > camera.center.x - half_view.x + 5.0f &&
 		chest_center.x < camera.center.x + half_view.x - 5.0f;
-	if (tentacles.update(elapsed, fish.position, fish.active && !chest_open && in_view)) {
-		glm::vec2 source = glm::mix(fish.position, chest_center, 0.5f);
-		Sound::play_3D(*arm_sound, 0.3f, glm::vec3(source, 0.0f), 18.0f);
-	}
+	tentacles.update(elapsed, fish.position, fish.active && !chest_open && in_view && guard_active);
 	tentacles.push_fish(fish, clock);
 	if (!fish.active && death_time == 0.0f) {
 		Sound::play_3D(*capture_sound, 0.3f, glm::vec3(fish.position, 0.0f), 18.0f);
@@ -162,7 +159,7 @@ void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t play
 				bool unused = drops_spawned < trash_bodies.size() && index == trash_bodies[drops_spawned];
 				//reuse settled debris, never an item the player has swallowed
 				bool settled = drops_spawned >= trash_bodies.size() && trash.active &&
-					trash.position.y < physics.bounds_min.y + 1.5f;
+					trash.position.y < scanner.min.y + 1.5f;
 				if (!unused && !settled) continue;
 				trash.position = outlets[drops_spawned % outlets.size()] - glm::vec2(0.0f, 0.55f);
 				trash.velocity = glm::vec2(0.0f, -2.0f);
@@ -182,30 +179,21 @@ void Level2Puzzle::draw_backdrop(glm::mat4 const &world_to_clip) const {
 }
 
 bool Level2Puzzle::show_dead_fish() const {
-	return tentacles.holding_fish() && death_time < death_hold_time + death_fade_time;
+	return tentacles.holding_fish() && death_time < capture_hold_time + death_fade_time;
 }
 
 void Level2Puzzle::add_lights(Water::Look &look) const {
-	for (size_t i = 0; i < corals.size(); ++i) {
-		//small patches along the floor lead toward the larger puzzle lights
-		float strength = i >= 5 ? 0.3f : i == 3 ? 0.6f : 0.9f;
-		glm::vec2 outward = i == 4 ? glm::vec2(-1.0f, 0.0f) : glm::vec2(0.0f, 1.0f);
-		look.glows.emplace_back(corals[i] + outward, strength);
+	for (unsigned i = 0; i < coral_count; ++i) {
+		glm::vec2 outward = i == 0 ? glm::vec2(0.0f, 1.0f) : glm::vec2(i == 2 ? -1.0f : 1.0f, 0.0f);
+		look.glows.emplace_back(coral_positions[i] + outward, i == 0 ? 1.6f : 0.8f);
 	}
-	if (machine_time >= 0.0f) {
-		for (glm::vec2 const &outlet : outlets) look.glows.emplace_back(outlet, 0.25f);
-	}
-	glm::vec2 center = 0.5f * (look.view_min + look.view_max);
-	std::stable_sort(look.glows.begin(), look.glows.end(), [&](glm::vec3 const &a, glm::vec3 const &b) {
-		return glm::distance(glm::vec2(a), center) < glm::distance(glm::vec2(b), center);
-	});
-	if (look.glows.size() > Water::max_glows) look.glows.resize(Water::max_glows);
 }
 
 void Level2Puzzle::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
-	for (size_t i = 0; i < corals.size(); ++i) {
-		sprites.draw(coral_texture, world_to_clip, corals[i], glm::vec2(i >= 5 ? 1.6f : 2.3f),
-			i == 4 ? glm::radians(90.0f) : 0.0f, false, glm::u8vec4(150, 150, 150, 255), 0.0f, DrawSprites::Emissive);
+	for (unsigned i = 0; i < coral_count; ++i) {
+		float angle = i == 0 ? 0.0f : glm::radians(i == 2 ? 90.0f : -90.0f);
+		sprites.draw(coral_texture, world_to_clip, coral_positions[i], glm::vec2(2.3f),
+			angle, false, glm::u8vec4(150, 150, 150, 255), 0.0f, DrawSprites::Emissive);
 	}
 	for (glm::vec2 const &outlet : outlets) {
 		for (float y = outlet.y + 3.85f; y < physics.bounds_max.y + 3.85f; y += 7.3f) {
@@ -286,7 +274,8 @@ void Level2Puzzle::draw(DrawSprites const &sprites, glm::mat4 const &world_to_cl
 }
 
 float Level2Puzzle::fade_amount() const {
-	return glm::clamp((death_time - death_hold_time) / death_fade_time, 0.0f, 1.0f);
+	float hold = tentacles.holding_fish() ? capture_hold_time : death_hold_time;
+	return glm::clamp((death_time - hold) / death_fade_time, 0.0f, 1.0f);
 }
 
 void Level2Puzzle::hide_pipe(UnderwaterPhysics &physics, glm::vec2 const &position) {

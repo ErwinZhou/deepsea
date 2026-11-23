@@ -57,6 +57,7 @@ struct PlayMode : Mode {
 	bool const developer_mode;
 
 private:
+	float pit_camera_blend = 0.0f;
 	glm::vec2 camera_target() const;
 	glm::vec2 camera_bounds_min() const;
 	void update_interaction();

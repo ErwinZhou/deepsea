@@ -60,6 +60,8 @@ struct Level1 {
 	};
 	Target wall_targets[3];
 	Target hanging_targets[3];
+	static Target load_target(std::string const &filename);
+	static StaticBox2D world_box(glm::vec4 const &part, glm::vec2 const &center, glm::vec2 const &size, float angle);
 
 	//impacts from the last obstacle update
 	struct Events {

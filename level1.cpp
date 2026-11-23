@@ -111,7 +111,7 @@ static constexpr float WaterDrag = 2.0f;
 static constexpr float RestHeight = 0.32f;
 
 //build collision boxes and crack hit locations from the wall or pillar image
-static Level1::Target load_target(std::string const &filename) {
+Level1::Target Level1::load_target(std::string const &filename) {
 	glm::uvec2 size;
 	std::vector< glm::u8vec4 > pixels;
 	load_png(filename, &size, &pixels, UpperLeftOrigin);
@@ -223,7 +223,7 @@ static glm::vec2 world_point(glm::vec2 const &point, glm::vec2 const &center, gl
 	return center + glm::vec2(co * offset.x - si * offset.y, si * offset.x + co * offset.y);
 }
 
-static StaticBox2D world_box(glm::vec4 const &part, glm::vec2 const &center, glm::vec2 const &size, float angle) {
+StaticBox2D Level1::world_box(glm::vec4 const &part, glm::vec2 const &center, glm::vec2 const &size, float angle) {
 	glm::vec2 middle = world_point(glm::vec2(0.5f * (part.x + part.y), 0.5f * (part.z + part.w)), center, size, angle);
 	glm::vec2 half = 0.5f * glm::abs(size) * glm::vec2(part.y - part.x, part.w - part.z);
 	float co = std::abs(std::cos(angle));

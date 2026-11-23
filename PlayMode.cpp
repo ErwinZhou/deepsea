@@ -53,16 +53,28 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 
 glm::vec2 PlayMode::camera_target() const {
 	glm::vec2 position = physics.bodies[fish_body].position;
+	if (level2 && level2->show_dead_fish()) return position;
 	if (level2) {
 		//look slightly lower near the floor so puzzle objects stay in the shot
-		float near_floor = 1.0f - glm::smoothstep(12.0f, 24.0f, position.y - physics.bounds_min.y);
+		float near_floor = 1.0f - glm::smoothstep(12.0f, 24.0f, position.y - level2->camera_floor(position.x));
 		position.y -= 3.0f * near_floor;
+		//frame the chest and its guards together
+		glm::vec2 focus = level2->pit_focus();
+		position.x = glm::mix(position.x, focus.x, 0.5f * pit_camera_blend);
+		position.y = glm::mix(position.y, std::min(position.y, focus.y), pit_camera_blend);
+		position.y = std::max(position.y, physics.bodies[fish_body].position.y - 0.5f * camera.view_size.y + 4.0f);
 	}
 	return position;
 }
 
 glm::vec2 PlayMode::camera_bounds_min() const {
-	return physics.bounds_min - glm::vec2(0.0f, level2 ? 3.0f : 0.0f);
+	glm::vec2 lower = physics.bounds_min;
+	if (level2) {
+		//retain room below the pit while the view eases back to the corridor
+		float floor = glm::mix(level2->surface_y(), level2->pit_bounds().min.y, pit_camera_blend);
+		lower.y = std::min(floor, level2->camera_floor(physics.bodies[fish_body].position.x)) - 3.0f;
+	}
+	return lower;
 }
 
 std::optional<Body2D> PlayMode::carried_contents() const {
@@ -184,6 +196,19 @@ void PlayMode::update(float elapsed) {
 
 	if (test_level) {
 		test_level->update(elapsed, physics, fish_body, camera);
+	}
+	if (level2) {
+		float reveal = level2->pit_reveal(physics.bodies[fish_body].position);
+		float response = reveal > pit_camera_blend ? 0.9f : 0.6f;
+		pit_camera_blend = glm::mix(pit_camera_blend, reveal, 1.0f - std::exp(-response * elapsed));
+		float height = glm::mix(developer_mode ? 40.0f : 24.0f, 48.0f,
+			pit_camera_blend);
+		//move closer during a capture
+		bool captured = level2->show_dead_fish();
+		if (captured) height = 28.0f;
+		camera.follow_speed = captured ? 8.0f : 4.0f;
+		camera.view_size = glm::mix(camera.view_size, glm::vec2(height * (16.0f / 9.0f), height),
+			1.0f - std::exp(-2.5f * elapsed));
 	}
 	camera.update(camera_target(), elapsed, camera_bounds_min(), physics.bounds_max);
 	if (level2) {
@@ -345,9 +370,14 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	if (level1) level = 1;
 	else if (level2) level = 2;
 
-	background.draw(sprites, world_to_clip, view_center, render_view, physics.bounds_min, physics.bounds_max, level);
+	glm::vec2 background_min = physics.bounds_min;
+	if (level2) background_min.y = level2->surface_y();
+	background.draw(sprites, world_to_clip, view_center, render_view, background_min, physics.bounds_max, level);
+	if (level2) {
+		StaticBox2D pit = level2->pit_bounds();
+		background.draw_pit(sprites, world_to_clip, pit.min, pit.max);
+	}
 	if (test_level) test_level->draw_backdrop(world_to_clip);
-	if (level2) level2->draw_backdrop(world_to_clip);
 	if (level1) {
 		level1->draw_distant(sprites, world_to_clip, view_center);
 	}
@@ -384,6 +414,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		sprites.draw(current_fish_texture, world_to_clip, fish.position, fish_size, angle, flip_x,
 			glm::u8vec4(255), 0.0f, DrawSprites::Player);
 	}
+	if (level2) level2->draw_grip(world_to_clip);
 	if (level1) {
 		level1->draw_foreground(sprites, world_to_clip);
 	}

@@ -142,6 +142,7 @@ let copies = [
 	maek.COPY('assets/level1/big_rock3.png', 'dist/level1/big_rock3.png'),
 	maek.COPY('assets/level1/exit.png', 'dist/level1/exit.png'),
 	maek.COPY('assets/level2/tunnel.png', 'dist/level2/tunnel.png'),
+	maek.COPY('assets/level2/rock_mound.png', 'dist/level2/rock_mound.png'),
 	maek.COPY('assets/level2/key.png', 'dist/level2/key.png'),
 	maek.COPY('assets/level2/chest.png', 'dist/level2/chest.png'),
 	maek.COPY('assets/level2/pipe.png', 'dist/level2/pipe.png'),

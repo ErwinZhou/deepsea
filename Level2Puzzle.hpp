@@ -14,12 +14,14 @@ struct Level2Puzzle {
 	static constexpr float pipe_height = 4.2f;
 	Level2Puzzle();
 	void setup(UnderwaterPhysics &physics, glm::vec2 const &clam_position,
-		glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index);
+		glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index, float pit_depth = 0.0f);
 	void check_puzzle_hits(UnderwaterPhysics &physics);
-	void update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera);
+	void update(float elapsed, UnderwaterPhysics &physics, size_t player_body,
+		Camera2D const &camera, bool guard_active = true);
 	void add_lights(Water::Look &look) const;
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	void draw_backdrop(glm::mat4 const &world_to_clip) const;
+	void draw_grip(glm::mat4 const &world_to_clip) const { tentacles.draw(world_to_clip, clock, true); }
 	bool show_dead_fish() const;
 	float fade_amount() const;
 	bool machine_running() const { return machine_time >= 0.0f; }
@@ -29,6 +31,7 @@ struct Level2Puzzle {
 
 private:
 	static constexpr float death_hold_time = 0.7f;
+	static constexpr float capture_hold_time = 1.25f;
 	static constexpr float death_fade_time = 1.5f;
 	static constexpr float door_pipe_size = 3.2f;
 	static constexpr float pipe_launch_impulse = 10.0f;
@@ -38,7 +41,8 @@ private:
 	Tentacles tentacles;
 	StaticBox2D chest, scanner;
 	glm::vec2 chest_center{0.0f}, scanner_center{0.0f}, clam_center{0.0f}, held_pearl{0.0f};
-	std::array<glm::vec2, 10> corals{};
+	std::array<glm::vec2, 4> coral_positions{};
+	unsigned coral_count = 1;
 	std::array<glm::vec2, 3> outlets{};
 	std::array<size_t, 24> trash_bodies{};
 	size_t pipe_body = 0, pearl_body = 0, card_body = 0, key_body = 0;

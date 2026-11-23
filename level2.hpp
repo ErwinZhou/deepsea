@@ -5,6 +5,8 @@
 #include "UnderwaterPhysics.hpp"
 #include "Water.hpp"
 #include "Level2Puzzle.hpp"
+#include "Sound.hpp"
+#include "level1.hpp"
 
 #include <cstddef>
 #include <array>
@@ -14,13 +16,21 @@
 
 struct Level2 {
 	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
+	~Level2();
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
 		std::optional<size_t> carried_body) const;
-	void check_puzzle_hits(UnderwaterPhysics &physics) { puzzle.check_puzzle_hits(physics); }
-	void draw_backdrop(glm::mat4 const &world_to_clip) const { puzzle.draw_backdrop(world_to_clip); }
+	void check_puzzle_hits(UnderwaterPhysics &physics);
+	float surface_y() const { return seafloor_y; }
+	float camera_floor(float x) const;
+	float pit_reveal(glm::vec2 const &position) const;
+	glm::vec2 pit_focus() const { return pit_center + glm::vec2(0.0f, 10.0f - chest_depth); }
+	StaticBox2D pit_bounds() const {
+		return {pit_center - glm::vec2(pit_half_width, pit_depth), pit_center + glm::vec2(pit_half_width, 0.0f)};
+	}
 	bool show_dead_fish() const { return puzzle.show_dead_fish(); }
+	void draw_grip(glm::mat4 const &world_to_clip) const { puzzle.draw_grip(world_to_clip); }
 	int checkpoint() const { return checkpoint_reached ? 1 : 0; }
 	size_t resume_checkpoint(UnderwaterPhysics &physics, size_t player_body);
 	void push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
@@ -46,6 +56,40 @@ private:
 	static constexpr float level_length = 320.0f;
 	//the corridor scrolls vertically inside the tighter view
 	static constexpr float corridor_height = 80.0f;
+	static constexpr float seafloor_y = -0.5f * corridor_height;
+	static constexpr float pit_depth = 112.0f;
+	static constexpr float chest_depth = 36.0f;
+	static constexpr float pit_half_width = 14.5f;
+	glm::vec2 pit_center{0.0f};
+	std::array<StaticBox2D, 2> ground{};
+	SpriteTexture mound_texture;
+	std::array<glm::vec2, 2> mound_centers{};
+	glm::vec2 mound_size{18.0f, pit_depth + 6.0f};
+	glm::vec2 ledge_center{0.0f};
+	static constexpr glm::vec2 ledge_size{20.0f, 3.0f};
+	void setup_octopus_pit(UnderwaterPhysics &physics);
+
+	struct Seal {
+		glm::vec2 center{0.0f};
+		glm::vec2 size{1.0f};
+		float angle = 0.0f;
+		int hits_left = 3;
+		float shudder = 0.0f;
+	};
+	Seal pit_seal;
+	SpriteTexture column_textures[3];
+	Level1::Target column_targets[3];
+	size_t pit_obstacle_start = 0;
+	void setup_pit_seal(UnderwaterPhysics &physics);
+	void update_pit_seal_obstacles(UnderwaterPhysics &physics) const;
+	void draw_pit_seal(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
+	struct Chip {
+		glm::vec2 position{0.0f}, velocity{0.0f};
+		float life = 0.0f;
+	};
+	std::vector<Chip> chips;
+	static constexpr float low_ceiling_height = 22.0f;
+	std::array<StaticBox2D, 3> ceiling{};
 	static constexpr float camera_height = 24.0f;
 	static constexpr float scene_brightness = 1.0f;
 
@@ -56,6 +100,7 @@ private:
 	static constexpr float restart_delay = 3.0f;
 	float clock = 0.0f; //seconds since entering level 2
 	float death_time = 0.0f; //seconds since the player died
+	std::shared_ptr<Sound::PlayingSample> ambient;
 
 	/**
 	 * Jellyfish and its reborn
@@ -227,6 +272,7 @@ private:
 	 */
 	SpriteTexture door_texture;
 	SpriteTexture floor_texture;
+	SpriteTexture wheel_mark_texture;
 	Level2Puzzle puzzle;
 	SpriteTexture door_wheel_texture;
 	static constexpr float door_height = 30.0f;
