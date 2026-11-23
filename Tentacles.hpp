@@ -12,19 +12,24 @@ struct Tentacles {
 	Tentacles &operator=(Tentacles const &) = delete;
 
 	void setup(glm::vec2 center);
+	void setup(glm::vec2 center, glm::vec2 guard, glm::vec2 span, float base_width, float solid_fraction);
 	void distract(glm::vec2 const &position, bool already_holding = false);
 	bool update(float elapsed, glm::vec2 const &fish, bool active);
 	void push_fish(Body2D &fish, float clock);
 	bool holding_fish() const { return caught; }
 	glm::vec2 grip_position() const { return target; }
 	bool touches(glm::vec2 const &position, float radius, float clock) const;
-	void draw(glm::mat4 const &world_to_clip, float clock) const;
+	void draw(glm::mat4 const &world_to_clip, float clock, bool grip_only = false) const;
 	void draw_backdrop(glm::mat4 const &world_to_clip) const;
 
 private:
 	glm::vec2 spine(int arm, float along, float clock) const;
 	float width(int arm, float along) const;
 	glm::vec2 roots[8] = {};
+	glm::vec2 guard_center{0.0f};
+	glm::vec2 size{19.0f, 16.0f};
+	float thickness = 1.25f;
+	float solid_base = 0.0f;
 	glm::vec2 target{0.0f};
 	glm::vec2 pearl{0.0f};
 	glm::vec2 caught_position{0.0f};

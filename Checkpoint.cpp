@@ -115,7 +115,7 @@ static bool valid_checkpoint(Checkpoint const &checkpoint) {
 
 	// the entrance comes before any puzzles
 	if (point == Point::Entrance) {
-		return flags == 0;
+		return flags == 0 || (checkpoint.level == 2 && flags == Checkpoint::pit_open);
 	}
 
 	if (checkpoint.level != 2) {
@@ -124,7 +124,7 @@ static bool valid_checkpoint(Checkpoint const &checkpoint) {
 	}
 
 	//the save format reserves one bit for each of the six puzzles
-	constexpr unsigned known_flags = 0b111111;
+	constexpr unsigned known_flags = 0b111111 | Checkpoint::pit_open;
 	if ((flags & ~known_flags) != 0) {
 		// the record marks a puzzle that does not exist
 		return false;
@@ -146,8 +146,8 @@ static bool valid_checkpoint(Checkpoint const &checkpoint) {
 		return false;
 	}
 
-	if (done(Point::Octopus) && !done(Point::Clam)) {
-		// the octopus needs the pearl from the open clam
+	if (done(Point::Octopus) && (!done(Point::Clam) || (flags & Checkpoint::pit_open) == 0)) {
+		// the octopus needs the pearl and an open pit
 		return false;
 	}
 
@@ -237,14 +237,16 @@ std::optional<Checkpoint> load_checkpoint(std::string const &filename) {
 	}
 
 	// check the column names before reading values
-	if (column_names != header) {
+	const bool legacy = column_names == "version,level,checkpoint,belly,inverse_mass,radius,drag,current_scale";
+	if (!legacy && column_names != header) {
 		return reject("unknown column names");
 	}
 
 	// read each value between the commas
 	std::array<std::string, 10> fields{};
 	std::istringstream row(record);
-	for (std::string &field : fields) {
+	for (size_t i = 0; i < (legacy ? 8u : fields.size()); ++i) {
+		std::string &field = fields[i];
 		if (!std::getline(row, field, ',') || field.empty()) {
 			return reject("missing column value");
 		}
@@ -256,7 +258,7 @@ std::optional<Checkpoint> load_checkpoint(std::string const &filename) {
 	}
 
 	// match the version to its column names
-	if (fields[0] != "3") {
+	if (legacy ? fields[0] != "1" : (fields[0] != "3" && fields[0] != "4")) {
 		return reject("version disagrees with header");
 	}
 
@@ -270,6 +272,15 @@ std::optional<Checkpoint> load_checkpoint(std::string const &filename) {
 		return reject("unknown checkpoint");
 	}
 
+	// the old tunnel save bigger than separate puzzle flags
+	if (legacy) {
+		if (fields[2] != "0" && fields[2] != "1") {
+			return reject("unknown legacy checkpoint");
+		}
+		fields[8] = fields[2];
+		fields[9] = "0";
+	}
+
 	// remember where the fish will return
 	Checkpoint checkpoint;
 	checkpoint.level = fields[1] == "2" ? 2 : 1;
@@ -280,6 +291,16 @@ std::optional<Checkpoint> load_checkpoint(std::string const &filename) {
 	const std::from_chars_result parsed = std::from_chars(fields[8].data(), end, checkpoint.puzzle_flags);
 	if (parsed.ec != std::errc{} || parsed.ptr != end) {
 		return reject("invalid puzzle flags");
+	}
+
+	// older saves reached the octopus through an open pit
+	if (fields[0] == "3") {
+		if ((checkpoint.puzzle_flags & Checkpoint::pit_open) != 0) {
+			return reject("unknown puzzle flag in older save");
+		}
+		if ((checkpoint.puzzle_flags & puzzle_flag(Level2Checkpoint::Octopus)) != 0) {
+			checkpoint.puzzle_flags |= Checkpoint::pit_open;
+		}
 	}
 
 	// read the carried item's size and movement
@@ -339,7 +360,7 @@ bool save_checkpoint(std::string const &filename, Checkpoint const &checkpoint) 
 
 	//keep enough digits to restore the carried object's exact float values
 	output << std::setprecision(std::numeric_limits<float>::max_digits10);
-	output << header << '\n' << "3," << checkpoint.level << ',' << static_cast<unsigned>(checkpoint.checkpoint) << ',';
+	output << header << '\n' << "4," << checkpoint.level << ',' << static_cast<unsigned>(checkpoint.checkpoint) << ',';
 
 	// keep the item for the next life
 	if (checkpoint.belly_contents) {

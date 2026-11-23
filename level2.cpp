@@ -2,6 +2,9 @@
 
 #include "data_path.hpp"
 #include "load_save_png.hpp"
+#include "Load.hpp"
+
+#include <glm/gtc/constants.hpp>
 
 #include <algorithm>
 #include <cassert>
@@ -11,6 +14,14 @@
 
 #include <stdexcept>
 #include <vector>
+
+static Load<Sound::Sample> ambient_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("ambient_deep.opus"));
+});
+
+static Load<Sound::Sample> seal_hit_sound(LoadTagDefault, []() -> Sound::Sample const * {
+	return new Sound::Sample(data_path("modified_rock_hit.opus"));
+});
 
 //based on https://en.cppreference.com/w/cpp/numeric/random/uniform_real_distribution,
 //used for:
@@ -33,7 +44,7 @@ static constexpr glm::vec2 InsideFlashlightUV(848.0f / 1180.0f, 292.0f / 820.0f)
 //mounts follow the passage surfaces
 static constexpr glm::vec3 CoralMounts[] = {
 	{783.0f / 1180.0f, 336.0f / 820.0f, -16.0f},
-	{934.0f / 1180.0f, 74.0f / 820.0f, 180.0f}
+	{944.0f / 1180.0f, 46.0f / 820.0f, -22.0f}
 };
 
 //lens and pivot heights for flashlight
@@ -74,7 +85,10 @@ static FlashlightContact flashlight_contact(glm::vec2 const &position, float rad
 }
 
 Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed)
-	: tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")),
+	: mound_texture(data_path("level2/rock_mound.png")),
+	column_textures{SpriteTexture(data_path("level1/wall1.png")), SpriteTexture(data_path("level1/wall2.png")),
+		SpriteTexture(data_path("level1/wall3.png"))},
+	tunnel_texture(data_path("level2/tunnel.png")), key_texture(data_path("level2/key.png")),
 	coral_texture(data_path("coral.png")),
 	flashlight_texture(data_path("level2/flashlight.png")), flashlight_base_texture(data_path("small_rock.png")),
 	worm{SpriteTexture(data_path("level2/worm.png")),
@@ -85,7 +99,154 @@ Level2::Level2(SpriteTexture const &normal_texture, float fish_height, float max
 	fish_group_speed(fish_group_speed_multiplier * max_swim_speed),
 	door_texture(data_path("level2/door.png")),
 	floor_texture(glm::u8vec4(0, 0, 0, 255)),
+	wheel_mark_texture(glm::u8vec4(255)),
 	door_wheel_texture(data_path("level2/door_wheel.png")) {
+	for (int stage = 0; stage < 3; ++stage) {
+		column_targets[stage] = Level1::load_target(data_path("level1/wall" + std::to_string(stage + 1) + ".png"));
+	}
+}
+
+float Level2::camera_floor(float x) const {
+	float across = 1.0f - glm::smoothstep(pit_half_width - 4.0f, pit_half_width + 6.0f,
+		std::abs(x - pit_center.x));
+	return seafloor_y - pit_depth * across;
+}
+
+float Level2::pit_reveal(glm::vec2 const &position) const {
+	float across = 1.0f - glm::smoothstep(pit_half_width - 4.0f, pit_half_width + 6.0f,
+		std::abs(position.x - pit_center.x));
+	float below = 1.0f - glm::smoothstep(seafloor_y - 6.0f, seafloor_y + 6.0f, position.y);
+	return across * below;
+}
+
+void Level2::setup_octopus_pit(UnderwaterPhysics &physics) {
+	ground = {{
+		{physics.bounds_min, glm::vec2(pit_center.x - pit_half_width, seafloor_y)},
+		{glm::vec2(pit_center.x + pit_half_width, physics.bounds_min.y), glm::vec2(physics.bounds_max.x, seafloor_y)}
+	}};
+	for (StaticBox2D const &part : ground) physics.obstacles.push_back(part);
+	mound_centers = {pit_center + glm::vec2(-22.0f, 3.0f - 0.5f * pit_depth),
+		pit_center + glm::vec2(22.0f, 3.0f - 0.5f * pit_depth)};
+	glm::uvec2 size;
+	std::vector<glm::u8vec4> pixels;
+	load_png(data_path("level2/rock_mound.png"), &size, &pixels, UpperLeftOrigin);
+	const glm::vec2 pixel_size = mound_size / glm::vec2(size);
+	const glm::vec2 clearance = glm::min(glm::vec2(0.04f), 0.25f * pixel_size);
+	//match collisions to the banks in the image
+	for (size_t side = 0; side < mound_centers.size(); ++side) {
+		glm::vec2 origin = mound_centers[side] - 0.5f * mound_size;
+		for (unsigned y = 0; y < size.y; y += 4) {
+			unsigned sample_y = std::min(y + 2, size.y - 1);
+			unsigned start = 0;
+			bool in_run = false;
+			for (unsigned x = 0; x <= size.x; ++x) {
+				unsigned sample_x = side == 0 ? size.x - 1 - std::min(x, size.x - 1) : std::min(x, size.x - 1);
+				bool solid = x < size.x && pixels[size_t(sample_y) * size.x + sample_x].a >= 128;
+				if (solid && !in_run) { start = x; in_run = true; }
+				if (!solid && in_run) {
+					physics.obstacles.push_back({
+						origin + pixel_size * glm::vec2(float(start), float(size.y - std::min(y + 4, size.y))) + clearance,
+						origin + pixel_size * glm::vec2(float(x), float(size.y - y)) - clearance});
+					in_run = false;
+				}
+			}
+		}
+	}
+	ledge_center = pit_center + glm::vec2(-5.0f, -chest_depth - 4.3f);
+	Level1::Target ledge = Level1::load_target(data_path("small_rock.png"));
+	for (glm::vec4 const &part : ledge.parts) {
+		physics.obstacles.push_back(Level1::world_box(part, ledge_center, ledge_size, 0.0f));
+	}
+}
+
+void Level2::setup_pit_seal(UnderwaterPhysics &physics) {
+	pit_seal = {pit_center + glm::vec2(0.0f, 5.0f), glm::vec2(3.0f / 0.56f, 30.0f), -glm::half_pi<float>()};
+	pit_obstacle_start = physics.obstacles.size();
+	update_pit_seal_obstacles(physics);
+	//place one stone per hit above the painted crack
+	glm::vec2 entry = column_targets[0].entry;
+	glm::vec2 offset = pit_seal.size * glm::vec2(entry.x - 0.5f, 0.5f - entry.y);
+	float co = std::cos(pit_seal.angle), si = std::sin(pit_seal.angle);
+	glm::vec2 crack = pit_seal.center + glm::vec2(co * offset.x - si * offset.y, si * offset.x + co * offset.y);
+	for (int i = 0; i < pit_seal.hits_left; ++i) {
+		Body2D stone;
+		stone.position = crack + glm::vec2(2.0f * (float(i) - 0.5f * float(pit_seal.hits_left - 1)), 3.0f);
+		stone.radius = 0.45f;
+		stone.current_scale = 0.0f;
+		physics.bodies.push_back(stone);
+	}
+}
+
+void Level2::update_pit_seal_obstacles(UnderwaterPhysics &physics) const {
+	physics.obstacles.resize(pit_obstacle_start);
+	Seal const &seal = pit_seal;
+	if (seal.hits_left == 0) return;
+	Level1::Target const &target = column_targets[3 - seal.hits_left];
+	for (glm::vec4 const &part : target.parts) {
+		physics.obstacles.push_back(Level1::world_box(part, seal.center, seal.size, seal.angle));
+	}
+}
+
+void Level2::check_puzzle_hits(UnderwaterPhysics &physics) {
+	for (Body2D &body : physics.bodies) {
+		if (!body.active || body.kind != Body2D::Rock || !body.player_spat || glm::length(body.velocity) < 5.0f) continue;
+		Seal &seal = pit_seal;
+		if (seal.hits_left == 0) continue;
+		Level1::Target const &target = column_targets[3 - seal.hits_left];
+		float first = std::numeric_limits<float>::infinity();
+		glm::vec2 contact(0.0f);
+		for (glm::vec4 const &part : target.parts) {
+			glm::vec2 at;
+			float when = hit_time(body, Level1::world_box(part, seal.center, seal.size, seal.angle),
+				float(UnderwaterPhysics::fixed_step), &at);
+			if (when < first) { first = when; contact = at; }
+		}
+		if (!std::isfinite(first)) continue;
+		body.player_spat = false;
+		float co = std::cos(seal.angle), si = std::sin(seal.angle);
+		glm::vec2 offset = contact - seal.center;
+		glm::vec2 local(co * offset.x + si * offset.y, -si * offset.x + co * offset.y);
+		float tolerance = 1.2f * (body.radius + 0.55f + 0.5f * glm::length(target.texel_size * seal.size));
+		bool cracked = false;
+		for (glm::vec2 const &pixel : target.cracks) {
+			if (glm::distance(seal.size * glm::vec2(pixel.x - 0.5f, 0.5f - pixel.y), local) <= tolerance) {
+				cracked = true;
+				break;
+			}
+		}
+		glm::vec2 away = -glm::normalize(body.velocity);
+		int count = cracked ? 8 : 2;
+		if (cracked) {
+			body.active = false;
+			--seal.hits_left;
+			seal.shudder = 0.25f;
+			if (seal.hits_left == 0) {
+				count = 24;
+				progress.puzzle_flags |= Checkpoint::pit_open;
+			}
+			update_pit_seal_obstacles(physics);
+		}
+		glm::vec2 side(-away.y, away.x);
+		for (int c = 0; c < count; ++c) {
+			chips.push_back({contact, away * mimic_random_between(1.0f, 4.0f) + side * mimic_random_between(-3.0f, 3.0f), 0.7f});
+		}
+		Sound::play_3D(*seal_hit_sound, 0.25f, glm::vec3(contact, 0.0f), 18.0f);
+	}
+	puzzle.check_puzzle_hits(physics, &progress);
+}
+
+void Level2::draw_pit_seal(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const {
+	Seal const &seal = pit_seal;
+	if (seal.hits_left > 0) {
+		SpriteTexture const &texture = column_textures[3 - seal.hits_left];
+		glm::vec2 shake(0.15f * std::sin(seal.shudder * 90.0f) * (seal.shudder / 0.25f), 0.0f);
+		sprites.draw(texture, world_to_clip, seal.center + shake, seal.size, seal.angle, false,
+			glm::u8vec4(255), 0.0f, DrawSprites::Pillar);
+	}
+	for (Chip const &chip : chips) {
+		sprites.draw(wheel_mark_texture, world_to_clip, chip.position, glm::vec2(0.12f), 0.0f, false,
+			glm::u8vec4(50, 50, 50, uint8_t(255.0f * std::min(1.0f, chip.life / 0.2f))), 0.0f, DrawSprites::Stone);
+	}
 }
 
 void Level2::setup_tunnel(UnderwaterPhysics &physics) {
@@ -161,7 +322,7 @@ void Level2::setup_flashlight(UnderwaterPhysics &physics) {
 	flashlights = {};
 
 	const float entrance_x = tunnel_center.x + (TunnelEntranceUV.x - 0.5f) * tunnel_size.x;
-	flashlights[0].anchor = glm::vec2(entrance_x + flashlight_entrance_offset, physics.bounds_min.y - flashlight_burial_depth);
+	flashlights[0].anchor = glm::vec2(entrance_x + flashlight_entrance_offset, seafloor_y - flashlight_burial_depth);
 	flashlights[1].anchor = tunnel_center + (glm::vec2(InsideFlashlightUV.x, 1.0f - InsideFlashlightUV.y) - 0.5f) * tunnel_size;
 	flashlights[1].tilt = -flashlight_initial_tilt; //aim up and right for the inside tunnel
 	flashlights[1].height = inside_flashlight_height;
@@ -169,8 +330,8 @@ void Level2::setup_flashlight(UnderwaterPhysics &physics) {
 
 	//static base blocks swimming and can not be swallowed
 	physics.obstacles.push_back(StaticBox2D{
-		glm::vec2(flashlights[0].anchor.x - 0.5f * flashlight_base_collision_size.x, physics.bounds_min.y - flashlight_base_size.y),
-		glm::vec2(flashlights[0].anchor.x + 0.5f * flashlight_base_collision_size.x, physics.bounds_min.y + flashlight_base_collision_size.y)});
+		glm::vec2(flashlights[0].anchor.x - 0.5f * flashlight_base_collision_size.x, seafloor_y - flashlight_base_size.y),
+		glm::vec2(flashlights[0].anchor.x + 0.5f * flashlight_base_collision_size.x, seafloor_y + flashlight_base_collision_size.y)});
 
 	for (Flashlight &flashlight : flashlights) {
 		aim_flashlight(flashlight, physics);
@@ -329,11 +490,22 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	/**
 	 * Tunnel setup
 	 */
-	//the cave is centered at the origin, so each boundary is half its full width or height away
-	physics.bounds_min = glm::vec2(-0.5f * level_length, -0.5f * corridor_height);
+	//extend the world downward for the octopus pit
+	physics.bounds_min = glm::vec2(-0.5f * level_length, seafloor_y - pit_depth - 6.0f);
 	physics.bounds_max = glm::vec2(0.5f * level_length, 0.5f * corridor_height);
 	physics.obstacles.clear();
 	setup_tunnel(physics);
+	//keep the tunnel's full height, with a lower roof over the open water
+	float tunnel_left = tunnel_center.x - 0.5f * tunnel_size.x;
+	float tunnel_right = tunnel_center.x + 0.5f * tunnel_size.x;
+	float roof = seafloor_y + low_ceiling_height;
+	float door_room_left = physics.bounds_max.x - 40.0f;
+	ceiling = {{
+		{glm::vec2(physics.bounds_min.x, roof), glm::vec2(tunnel_left, physics.bounds_max.y)},
+		{glm::vec2(tunnel_right, roof), glm::vec2(door_room_left, physics.bounds_max.y)},
+		{glm::vec2(door_room_left, seafloor_y + 34.0f), physics.bounds_max}
+	}};
+	for (StaticBox2D const &part : ceiling) physics.obstacles.push_back(part);
 	setup_flashlight(physics);
 	Body2D key{};
 	key.position = key_position;
@@ -342,7 +514,7 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	key.kind = Body2D::Key;
 	key_body = physics.bodies.size();
 	physics.bodies.push_back(key);
-	physics.bodies[player_body].position = glm::vec2(physics.bounds_min.x + entrance_distance, physics.bounds_min.y + 10.0f);
+	physics.bodies[player_body].position = glm::vec2(physics.bounds_min.x + entrance_distance, seafloor_y + 10.0f);
 
 	/**
 	 * Small scary fish logic setup
@@ -357,7 +529,7 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	//place seven fish at the shared encounter position
 	const glm::vec2 group_center(
 		physics.bounds_min.x + mimic_end_fraction * (physics.bounds_max.x - physics.bounds_min.x),
-		physics.bounds_max.y - fish_group_depth_fraction * (physics.bounds_max.y - physics.bounds_min.y));
+		roof - fish_group_depth_fraction * low_ceiling_height);
 
 	//spaced starting points prevent overlap after random shifts
 	const std::array<glm::vec2, fish_group_count> group_offsets{
@@ -398,6 +570,8 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	group_average /= float(fish_group.size());
 	for (SmallScaryFish &fish : fish_group) {
 		fish.position += group_center - group_average;
+		fish.position.y = glm::clamp(fish.position.y, seafloor_y + fish.radius,
+			roof - fish.radius - 0.2f);
 	}
 
 	fish_group_triggered = false;
@@ -410,18 +584,21 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	constexpr float clam_offset_from_lamp = 20.0f;
 	const float clam_x = flashlights[0].anchor.x + clam_offset_from_lamp;
 
-	const float floor = physics.bounds_min.y;
+	const float floor = seafloor_y;
+	pit_center = glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 1.0f / 6.0f), floor);
+	const size_t ground_start = physics.obstacles.size();
+	setup_octopus_pit(physics);
 	puzzle.setup(physics, glm::vec2(clam_x, floor + 0.5f * Level2Puzzle::clam_height),
-		glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 1.0f / 6.0f), floor + 0.38f * Level2Puzzle::chest_height),
-		glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 5.0f / 6.0f), floor + 0.5f * Level2Puzzle::scanner_height), *key_body);
+		pit_center + glm::vec2(0.0f, -chest_depth),
+		glm::vec2(glm::mix(physics.bounds_min.x, physics.bounds_max.x, 5.0f / 6.0f), floor + 0.5f * Level2Puzzle::scanner_height), *key_body, pit_depth, ground_start);
 
 	//align the visible right and bottom edges with the level bounds
 	door_center = glm::vec2(physics.bounds_max.x - door_height * (887.0f - 512.0f) / 2048.0f,
-		physics.bounds_min.y + door_height * (2020.0f - 1024.0f) / 2048.0f);
+		seafloor_y + door_height * (2020.0f - 1024.0f) / 2048.0f);
 
 	// reserve the tunnel and school before placing pipes
 	puzzle.decorate(physics, std::mt19937(random_seed),
-		{tunnel_center.x - 0.5f * tunnel_size.x, tunnel_center.x + 0.5f * tunnel_size.x}, group_center.x, door_center.x);
+		{tunnel_center.x - 0.5f * tunnel_size.x, tunnel_center.x + 0.5f * tunnel_size.x}, group_center.x, door_center, ceiling);
 
 	Body2D wheel{};
 	wheel.kind = Body2D::Wheel;
@@ -434,6 +611,7 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 	clockwise_turn = 0.0f;
 	door_open = false;
 	puzzle.hide_pipe(physics, door_center);
+	setup_pit_seal(physics);
 
 	// camera logic
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height); // reference view in world units 16:9
@@ -458,6 +636,8 @@ std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera
 		}
 	}
 
+	ambient = Sound::loop(*ambient_sound, 0.0f);
+	ambient->set_volume(1.0f, fade_in_time);
 	return carried_body;
 }
 
@@ -569,12 +749,21 @@ void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &c
 		}
 	}
 
-	puzzle.update(elapsed, physics, player_body, camera);
+	pit_seal.shudder = std::max(0.0f, pit_seal.shudder - elapsed);
+	for (Chip &chip : chips) {
+		chip.life -= elapsed;
+		chip.velocity.y -= 5.0f * elapsed;
+		chip.velocity *= std::exp(-2.0f * elapsed);
+		chip.position += chip.velocity * elapsed;
+	}
+	chips.erase(std::remove_if(chips.begin(), chips.end(), [](Chip const &chip) { return chip.life <= 0.0f; }), chips.end());
+	puzzle.update(elapsed, physics, player_body, camera, pit_seal.hits_left == 0);
 	update_big_fish(elapsed, physics.bodies[player_body], camera);
 	update_fish_group(std::min(elapsed, 0.1f), physics, player_body, player_step);
 
 	if (!player.active) {
 		shake_left = 0.0f;
+		if (death_time == 0.0f && ambient) ambient->set_volume(0.0f, death_fade_time);
 		death_time += elapsed;
 		//an arriving or copying fish immediately flees when the player dies
 		if (small_fish.state == SmallScaryFish::State::Arriving || small_fish.state == SmallScaryFish::State::Mimicking) {
@@ -981,12 +1170,12 @@ glm::vec3 Level2::prepare_water(Water::Look &look, UnderwaterPhysics const &phys
 		look.beams.push_back(flashlight.light);
 	}
 	look.blockers.clear();
+	for (StaticBox2D const &part : ceiling) look.blockers.emplace_back(part.min, part.max);
 	look.bubble_columns.clear();
-	look.glow_radius = glm::vec2(8.0f, 6.0f); //light fade distances in world units, x then y
+	look.glow_radius = glm::vec2(5.5f, 4.0f); //light falloff in world units
 	look.brightness = scene_brightness;
 	look.time = clock;
 
-	look.glows.emplace_back(door_center + glm::vec2(-0.25f * door_height, 0.0f), 0.8f);
 	puzzle.add_lights(look);
 	if (!jelly_body) {
 		return glm::vec3(0.0f);
@@ -1112,6 +1301,25 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	} else {
 		sprites.draw(door_texture, world_to_clip, door_center, door_size);
 		sprites.draw(door_wheel_texture, world_to_clip, door_center, door_size, wheel_angle);
+		//the arrow fills as the wheel opens
+		float progress = glm::clamp(clockwise_turn / wheel_open_angle, 0.0f, 1.0f);
+		float radius = wheel_radius * 1.03f;
+		auto stroke = [&](glm::vec2 const &a, glm::vec2 const &b, uint8_t shade) {
+			glm::vec2 delta = b - a;
+			sprites.draw(wheel_mark_texture, world_to_clip, 0.5f * (a + b), glm::vec2(glm::length(delta), 0.08f),
+				std::atan2(delta.y, delta.x), false, glm::u8vec4(shade, shade, shade, 255), 0.0f, DrawSprites::Stone);
+		};
+		constexpr int steps = 32;
+		for (int i = 0; i < steps; ++i) {
+			float angle = glm::pi<float>() * float(i) / float(steps);
+			float next = glm::pi<float>() * float(i + 1) / float(steps);
+			glm::vec2 a = door_center + radius * glm::vec2(-std::cos(angle), std::sin(angle));
+			glm::vec2 b = door_center + radius * glm::vec2(-std::cos(next), std::sin(next));
+			stroke(a, b, float(i + 1) / float(steps) <= progress ? 235 : 95);
+		}
+		glm::vec2 tip = door_center + glm::vec2(radius, -0.4f);
+		stroke(tip + glm::vec2(-0.45f, 0.7f), tip, 180);
+		stroke(tip + glm::vec2(0.45f, 0.7f), tip, 180);
 	}
 
 	if (jelly_body && physics.bodies[*jelly_body].active) {
@@ -1149,7 +1357,7 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	worm.draw(sprites, world_to_clip);
 	//rock hides the buried bases
 	sprites.draw(tunnel_texture, world_to_clip, tunnel_center, tunnel_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Tunnel);
-	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlights[0].anchor.x, physics.bounds_min.y),
+	sprites.draw(flashlight_base_texture, world_to_clip, glm::vec2(flashlights[0].anchor.x, seafloor_y),
 		flashlight_base_size, 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Stone);
 	if (key_body && physics.bodies[*key_body].active) {
 		const glm::vec2 key_size(key_height * float(key_texture.pixel_size.x) / float(key_texture.pixel_size.y), key_height);
@@ -1157,16 +1365,27 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 			glm::u8vec4(255), 0.0f, DrawSprites::LightOnly);
 	}
 
+	for (size_t side = 0; side < mound_centers.size(); ++side) {
+		sprites.draw(mound_texture, world_to_clip, mound_centers[side], mound_size, 0.0f, side == 0,
+			glm::u8vec4(255), 0.0f, DrawSprites::Pillar);
+	}
+	sprites.draw(flashlight_base_texture, world_to_clip, ledge_center, ledge_size, 0.0f, false,
+		glm::u8vec4(0, 0, 0, 255), 0.0f, DrawSprites::Pillar);
 	puzzle.draw(sprites, world_to_clip, physics);
-	sprites.draw(coral_texture, world_to_clip, door_center + glm::vec2(-0.25f * door_height, 0.0f), glm::vec2(coral_size),
-		glm::radians(90.0f), false, glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
+	draw_pit_seal(sprites, world_to_clip);
+	for (StaticBox2D const &part : ceiling) {
+		sprites.draw(floor_texture, world_to_clip, 0.5f * (part.min + part.max), part.max - part.min,
+			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Emissive);
+	}
 
 	// draw the approaching jaws over the scenery
 	big_fish.draw(sprites, world_to_clip);
 
 	//show solid ground wherever the camera looks below the swimming area
-	sprites.draw(floor_texture, world_to_clip, glm::vec2(0.0f, physics.bounds_min.y - 4.0f),
-		glm::vec2(level_length, 8.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Emissive);
+	for (StaticBox2D const &part : ground) {
+		sprites.draw(floor_texture, world_to_clip, 0.5f * (part.min + part.max), part.max - part.min,
+			0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Emissive);
+	}
 }
 
 void Level2::draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
@@ -1184,6 +1403,9 @@ void Level2::draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_cli
 }
 
 Level2::~Level2() {
+	if (ambient) {
+		ambient->stop(0.0f);
+	}
 	stop_chase_sounds();
 }
 
@@ -1335,6 +1557,12 @@ void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, C
 	// keep the last stop and solved puzzles
 	progress.checkpoint = entry.checkpoint;
 	progress.puzzle_flags = entry.puzzle_flags;
+
+	// reopen the pit before placing the fish
+	if ((progress.puzzle_flags & Checkpoint::pit_open) != 0) {
+		pit_seal.hits_left = 0;
+		update_pit_seal_obstacles(physics);
+	}
 	Body2D &player = physics.bodies[player_body];
 
 	// leave room below the narrow tunnel mouth
@@ -1342,9 +1570,6 @@ void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, C
 	const glm::vec2 tunnel_spawn = mouth - glm::vec2(0.0f, 6.0f);
 	if (tunnel_finished()) {
 		worm.stopped = true;
-
-		// leave the recovered key outside the tunnel
-		physics.bodies[*key_body].position = tunnel_spawn + glm::vec2(2.0f, 0.0f);
 	}
 
 	// leave the wheel off the open door
@@ -1361,6 +1586,6 @@ void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, C
 	}
 
 	// restore the shell, arms, chest and machine
-	puzzle.restore(physics, player, entry, carried_body, door_center);
+	puzzle.restore(physics, player, entry, carried_body);
 	previous_player_position = player.position;
 }

@@ -17,17 +17,19 @@ struct Level2Puzzle {
 	static constexpr float pipe_height = 4.2f;
 	Level2Puzzle();
 	void setup(UnderwaterPhysics &physics, glm::vec2 const &clam_position,
-		glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index);
+		glm::vec2 const &chest_position, glm::vec2 const &machine_position, size_t key_index, float pit_depth = 0.0f,
+		size_t ground_start = 0);
 	void decorate(UnderwaterPhysics const &physics, std::mt19937 random, glm::vec2 tunnel_edges,
-		float fish_group_x, float door_x); // add random decorations
+		float fish_group_x, glm::vec2 door_center, std::array<StaticBox2D, 3> const &roofs); // add random decorations
 	void draw_decorations(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	void check_puzzle_hits(UnderwaterPhysics &physics, Checkpoint *progress = nullptr);
-	void update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera);
+	void update(float elapsed, UnderwaterPhysics &physics, size_t player_body, Camera2D const &camera, bool guard_active = true);
 	void restore(UnderwaterPhysics &physics, Body2D &fish, Checkpoint const &entry,
-		std::optional<size_t> carried, glm::vec2 door_center);
+		std::optional<size_t> carried);
 	void add_lights(Water::Look &look) const;
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	void draw_backdrop(glm::mat4 const &world_to_clip) const;
+	void draw_grip(glm::mat4 const &world_to_clip) const { tentacles.draw(world_to_clip, clock, true); }
 	bool show_dead_fish() const;
 	float fade_amount() const;
 	bool machine_running() const { return machine_time >= 0.0f; }
@@ -39,7 +41,11 @@ private:
 	void drop_nearby_trash(UnderwaterPhysics &physics, glm::vec2 fish_position); // to avoid piling up, only drop trash once the player swims close to them
 
 	static constexpr float death_hold_time = 0.7f;
+	static constexpr float capture_hold_time = 1.25f;
 	static constexpr float death_fade_time = 1.5f;
+	static constexpr glm::vec2 key_spawn_offset{-2.0f, 1.0f};
+	static constexpr glm::vec2 pipe_spawn_offset{0.0f, 2.85f};
+	static constexpr glm::vec2 pearl_or_card_spawn_offset{2.0f, 1.0f};
 	static constexpr float door_pipe_size = 3.2f;
 	static constexpr float pipe_launch_impulse = 10.0f;
 	SpriteTexture pipe_texture, pearl_texture, clam_open_texture, clam_closed_texture;
@@ -49,11 +55,16 @@ private:
 	Tentacles tentacles;
 	StaticBox2D chest, scanner;
 	glm::vec2 chest_center{0.0f}, scanner_center{0.0f}, clam_center{0.0f}, held_pearl{0.0f};
-	std::array<glm::vec2, 10> corals{};
+	static constexpr float guide_glow = 0.3f;
+	std::array<glm::vec2, 7> coral_positions{};
+	unsigned coral_count = 1;
 
 	/**
 	 * Dumping Trash -> Last Puzzle, once you swimed back to the octopus
 	 */
+	static constexpr glm::vec2 pipe_lengths{9.0f, 13.0f};
+	static constexpr glm::vec2 large_pipe_size{7.5f, 17.0f};
+	static constexpr float large_pipe_drop = 10.0f;
 	struct CeilingPipe {
 		glm::vec2 mouth{};
 		glm::vec2 direction{};
@@ -70,6 +81,7 @@ private:
 	std::vector<CeilingPipe> ceiling_pipes;
 	std::vector<FloorTrash> floor_trash;
 	size_t next_pipe = 0;
+	size_t ground_begin = 0, ground_end = 0;
 
 	float trash_launch_speed = 4.0f; // activate trash dropping speed
 	// small pipes drop pieces of different sizes

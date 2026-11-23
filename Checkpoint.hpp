@@ -14,6 +14,9 @@
  * (2) Initial -> Door -> Tunnel -> Clam -> Octopus -> Chest -> Machine
  * (3) Initial -> Door -> Clam -> Tunnel -> Octopus -> Chest -> Machine
  * (4) Initial -> Door -> Clam -> Octopus -> Tunnel -> Chest -> Machine
+ * 
+ * "Backpack" Design - The player respawn near the place of the puzzle that they just solved 
+ * right now with all of the items that have not used by them for its corresponding puzzles
  */
 enum class Level2Checkpoint : unsigned {
 	Entrance = 0,
@@ -32,6 +35,7 @@ constexpr unsigned puzzle_flag(Level2Checkpoint point) {
 
 //this state selection is based on https://docs.godotengine.org/en/stable/tutorials/io/saving_games.html#identify-persistent-objects
 struct Checkpoint {
+	static constexpr unsigned pit_open = 1u << 6;
 	int level = 1;
 	Level2Checkpoint checkpoint = Level2Checkpoint::Entrance;
 	std::optional<Body2D> belly_contents{};

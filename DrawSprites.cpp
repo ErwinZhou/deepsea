@@ -128,11 +128,6 @@ DrawSprites::DrawSprites() {
 		"		wet_shine = 0.5 * shine * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
 		"	}\n"
 		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
-		//black pixels need a color to reflect light
-		"	if (MATERIAL == TUNNEL) {\n"
-		"		color.rgb = vec3(0.045, 0.052, 0.055);\n"
-		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
-		"	}\n"
 		//keep light-dependent objects hidden without a nearby, unblocked source
 		"	if (MATERIAL == LIGHT_ONLY) {\n"
 		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
@@ -185,6 +180,8 @@ DrawSprites::DrawSprites() {
 		"		color.rgb += vec3(0.045, 0.055, 0.055) * eye_halo + vec3(0.55, 0.60, 0.60) * eye_core;\n"
 		"		color.a = max(color.a, 0.10 * eye_halo);\n"
 		"	}\n"
+		//keep the tunnel silhouette black, including edges beside a light
+		"	if (MATERIAL == TUNNEL) color.rgb = vec3(0.0);\n"
 		"	fragColor = color;\n"
 		"}\n"
 	);
