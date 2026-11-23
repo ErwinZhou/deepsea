@@ -508,6 +508,11 @@ void Level2::update_worm(UnderwaterPhysics &physics, size_t player_body, glm::ve
 }
 
 void Level2::check_tunnel_exit(Body2D const &player, glm::vec2 previous_position, std::optional<size_t> carried_body) {
+	/**
+	 * Tunnel puzzle is tricky to leave checkpoints
+	 * Because it is not that the player catches the key means if it finished
+	 * It must swim out the tunnel alive with key in its mouth
+	 */
 	// the key must leave with a living fish
 	if (!player.active || !key_body || carried_body != key_body || tunnel_finished()) {
 		return;
@@ -565,6 +570,7 @@ void Level2::update(float elapsed, UnderwaterPhysics &physics, Camera2D const &c
 	}
 
 	puzzle.update(elapsed, physics, player_body, camera);
+	update_big_fish(elapsed, physics.bodies[player_body], camera);
 	update_fish_group(std::min(elapsed, 0.1f), physics, player_body, player_step);
 
 	if (!player.active) {
@@ -1155,6 +1161,9 @@ void Level2::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, Un
 	sprites.draw(coral_texture, world_to_clip, door_center + glm::vec2(-0.25f * door_height, 0.0f), glm::vec2(coral_size),
 		glm::radians(90.0f), false, glm::u8vec4(90, 90, 90, 255), 0.0f, DrawSprites::Emissive);
 
+	// draw the approaching jaws over the scenery
+	big_fish.draw(sprites, world_to_clip);
+
 	//show solid ground wherever the camera looks below the swimming area
 	sprites.draw(floor_texture, world_to_clip, glm::vec2(0.0f, physics.bounds_min.y - 4.0f),
 		glm::vec2(level_length, 8.0f), 0.0f, false, glm::u8vec4(255), 0.0f, DrawSprites::Emissive);
@@ -1174,12 +1183,85 @@ void Level2::draw_fish(DrawSprites const &sprites, glm::mat4 const &world_to_cli
 		glm::u8vec4(255), 0.0f, DrawSprites::Player);
 }
 
+Level2::~Level2() {
+	stop_chase_sounds();
+}
+
+void Level2::stop_chase_sounds() {
+	// clear the old chase before the next life
+	for (std::shared_ptr<Sound::PlayingSample> *sound : {&arrival_roar, &presence, &charge_roar}) {
+		if (*sound) {
+			(*sound)->stop();
+			sound->reset();
+		}
+	}
+}
+
+void Level2::update_big_fish(float elapsed, Body2D &player, Camera2D const &camera) {
+	if (!puzzle.machine_running() || (!player.active && big_fish.state == BigFish::Waiting)) {
+		return;
+	}
+
+	// start the chase again after a machine checkpoint
+	if (big_fish.state == BigFish::Waiting) {
+		big_fish.enter_from_right(camera.center.x + 0.5f * camera.view_size.x, player.position.y);
+		const Sound::Sample &sound = BigFish::arrival_sound();
+		roar_length = float(sound.data.size()) / 48000.0f;
+		arrival_roar = Sound::play_3D(sound, BigFish::arrival_volume,
+			glm::vec3(big_fish.mouth_position(), 0.0f), BigFish::arrival_reach);
+		presence = BigFish::play_presence(glm::vec3(big_fish.mouth_position(), 0.0f));
+	}
+
+	// chase and bite with the level one jaws
+	big_fish.prey = player.position;
+	big_fish.update(elapsed);
+
+	// start the roar when the jaws open
+	const glm::vec3 mouth(big_fish.mouth_position(), 0.0f);
+	if (player.active && big_fish.in_reach(player.position)) {
+		big_fish.charge();
+		charge_roar = BigFish::play_charge_roar(mouth);
+	}
+
+	// cut the roar when the jaws snap shut
+	if (big_fish.slammed && charge_roar) {
+		charge_roar->stop();
+		charge_roar.reset();
+	}
+	if (player.active && big_fish.slammed && big_fish.in_mouth(player.position)) {
+		player.active = false;
+		player.velocity = glm::vec2(0.0f);
+		player.force = glm::vec2(0.0f);
+	}
+
+	// quiet the chase as soon as the player dies
+	if (!player.active) {
+		stop_chase_sounds();
+		return;
+	}
+
+	// let the roar follow the approaching mouth
+	if (arrival_roar && big_fish.time <= roar_length) {
+		arrival_roar->set_position(mouth, elapsed);
+	}
+	if (presence) {
+		presence->set_position(mouth, elapsed);
+	}
+	if (charge_roar) {
+		charge_roar->set_position(mouth, elapsed);
+	}
+}
+
 glm::vec2 Level2::arrival_shake() const {
 	//used for worm shaking now
 	const float rise = (shake_duration - shake_left) / 0.25f;
 	const float fade = shake_left / 0.6f;
 	const float strength = shake_strength * std::min({1.0f, rise, fade});
-	return strength * glm::vec2(std::sin(clock * 67.0f), std::cos(clock * 53.0f));
+
+	// keep the camera shaking throughout the chase
+	const float chase = big_fish.state == BigFish::Waiting ? 0.0f : std::min(big_fish.time / 0.25f, 1.0f);
+	return (strength + BigFish::arrival_shake_size * chase) * glm::vec2(std::sin(clock * 67.0f), std::cos(clock * 53.0f))
+		- big_fish.shake();
 }
 
 float Level2::fade_amount() const {
@@ -1247,7 +1329,7 @@ void Level2::place_jelly_nearby(UnderwaterPhysics &physics, size_t player_body) 
 }
 
 void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, Checkpoint const &entry,
-	std::optional<size_t> carried_body, bool key_in_cave) {
+	std::optional<size_t> carried_body) {
 	using Point = Level2Checkpoint;
 
 	// keep the last stop and solved puzzles
@@ -1260,9 +1342,9 @@ void Level2::resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, C
 	const glm::vec2 tunnel_spawn = mouth - glm::vec2(0.0f, 6.0f);
 	if (tunnel_finished()) {
 		worm.stopped = true;
-		if (!key_in_cave) {
-			physics.bodies[*key_body].position = tunnel_spawn + glm::vec2(2.0f, 0.0f);
-		}
+
+		// leave the recovered key outside the tunnel
+		physics.bodies[*key_body].position = tunnel_spawn + glm::vec2(2.0f, 0.0f);
 	}
 
 	// leave the wheel off the open door

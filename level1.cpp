@@ -19,14 +19,6 @@ static Load<Sound::Sample> fish_roar(LoadTagDefault, []() -> Sound::Sample const
 	return new Sound::Sample(data_path("modified_big_fish_roar.opus"));
 });
 
-static Load<Sound::Sample> fish_roar_near(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("modified_big_fish_roar1.opus"));
-});
-
-static Load<Sound::Sample> charge_sound(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("modified_big_fish_roar_charge.opus"));
-});
-
 static Load<Sound::Sample> chomp_sound(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("modified_chomp.opus"));
 });
@@ -41,10 +33,6 @@ static Load<Sound::Sample> rock_hit_sound(LoadTagDefault, []() -> Sound::Sample 
 
 static Load<Sound::Sample> ambient_sound(LoadTagDefault, []() -> Sound::Sample const * {
 	return new Sound::Sample(data_path("ambient_deep.opus"));
-});
-
-static Load<Sound::Sample> presence_sound(LoadTagDefault, []() -> Sound::Sample const * {
-	return new Sound::Sample(data_path("big_fish_presence.opus"));
 });
 
 static std::mt19937 rng{std::random_device{}()};
@@ -161,7 +149,7 @@ void Level1::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_b
 	float passing_time = (far_start - far_end) / far_speed;
 	warning_length = far_begin + std::max(far_roar_length, passing_time) + near_roar_gap;
 	far_roar_end = far_begin + far_roar_length;
-	near_roar_end = warning_length + float(fish_roar_near->data.size()) / 48000.0f;
+	near_roar_end = warning_length + float(BigFish::arrival_sound().data.size()) / 48000.0f;
 	camera.view_size = glm::vec2(camera_height * (16.0f / 9.0f), camera_height);
 	camera.dead_zone = glm::vec2(5.0f, 2.5f);
 	camera.follow_speed = 4.0f;
@@ -612,8 +600,8 @@ void Level1::after_physics(UnderwaterPhysics &physics, Camera2D const &camera, s
 				big_fish.reset_for_world(physics.bounds_min, physics.bounds_max);
 				big_fish.enter(big_fish.out_of_sight_x(view_left));
 				glm::vec3 at = glm::vec3(big_fish.mouth_position(), 0.0f);
-				near_roar = Sound::play_3D(*fish_roar_near, near_roar_volume, at, near_roar_reach);
-				presence = Sound::loop_3D(*presence_sound, 1.0f, at, presence_reach);
+				near_roar = Sound::play_3D(BigFish::arrival_sound(), BigFish::arrival_volume, at, BigFish::arrival_reach);
+				presence = BigFish::play_presence(at);
 			}
 		}
 		glm::vec3 at = glm::vec3(big_fish.mouth_position(), 0.0f);
@@ -642,8 +630,7 @@ void Level1::after_physics(UnderwaterPhysics &physics, Camera2D const &camera, s
 		if (fish.active && !escaped && big_fish.in_reach(fish.position)) {
 			big_fish.charge();
 			//starts quiet and gets louder
-			charge_roar = Sound::play_3D(*charge_sound, charge_roar_start_volume, at, near_roar_reach);
-			charge_roar->set_volume(near_roar_volume, charge_roar_fade_in);
+			charge_roar = BigFish::play_charge_roar(at);
 		}
 		//pinned mid charge
 		if (charge_roar && big_fish.state == BigFish::Stunned) {
@@ -737,7 +724,7 @@ glm::vec2 Level1::shaken_center(glm::vec2 const &center, UnderwaterPhysics const
 		constexpr float rumble_size = 0.25f;
 		//the rumble eases off over its last moments
 		constexpr float rumble_fade = 0.3f;
-		constexpr float tremble_size = 0.08f;
+		constexpr float tremble_size = BigFish::arrival_shake_size;
 		float amount = rumble_size * std::min(1.0f, rumble / rumble_fade);
 		amount += tremble_size * roar_amount(physics);
 		view_center += amount * glm::vec2(std::sin(clock * 67.0f), std::cos(clock * 53.0f));

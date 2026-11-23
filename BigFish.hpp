@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DrawSprites.hpp"
+#include "Sound.hpp"
 
 #include <glm/glm.hpp>
 
@@ -63,6 +64,22 @@ struct BigFish {
 	SpriteTexture upper_jaw;
 	SpriteTexture lower_jaw;
 
+	/**
+	 * Level2 reuse same textures
+	 */
+	void enter_from_right(float view_right, float mouth_y);
+	static Sound::Sample const &arrival_sound();
+
+	// both levels use the same chase sounds
+	static std::shared_ptr<Sound::PlayingSample> play_presence(glm::vec3 const &mouth);
+	static std::shared_ptr<Sound::PlayingSample> play_charge_roar(glm::vec3 const &mouth);
+	static constexpr float presence_reach = 20.0f;
+	static constexpr float charge_start_volume = 0.45f;
+	static constexpr float charge_fade_in = 3.0f;
+
+	static constexpr float arrival_volume = 1.2f;
+	static constexpr float arrival_reach = 90.0f;
+	static constexpr float arrival_shake_size = 0.08f;
 private:
 	void update_turn(float elapsed);
 	glm::vec2 local_point(glm::vec2 const &point) const;
@@ -78,4 +95,18 @@ private:
 	float jaw = 0.0f;
 	float slam_from = 0.0f;
 	float shake_left = 0.0f;
+
+
+	/**
+	 * Level2
+	 */
+	// level1 swims right, level2 swims left
+	float direction = 1.0f;
+
+	// level2 speed is higher
+	static constexpr float finale_speed_scale = 4.0f;
+
+	// use the normal pace until the chase starts
+	float swim_speed_scale = 1.0f;
+
 };

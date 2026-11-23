@@ -19,7 +19,7 @@ struct PlayMode : Mode {
 	enum class LevelId { One = 1, Two = 2, Test };
 
 	explicit PlayMode(LevelId start_level = LevelId::One, Checkpoint const &entry = {},
-		std::string const &checkpoint_file = "", float display_gain = 1.0f, bool developer_mode = false, bool key_in_cave = false);
+		std::string const &checkpoint_file = "", float display_gain = 1.0f, bool developer_mode = false);
 	void clear_input();
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;

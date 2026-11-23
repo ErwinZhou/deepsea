@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Camera2D.hpp"
+#include "BigFish.hpp"
 #include "DrawSprites.hpp"
 #include "UnderwaterPhysics.hpp"
 #include "Water.hpp"
@@ -18,6 +19,7 @@ struct Level2 {
 	inline static const std::mt19937::result_type random_seed = std::random_device{}();
 
 	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
+	~Level2();
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 		std::optional<Body2D> const &belly_contents);
 	glm::vec3 prepare_water(Water::Look &look, UnderwaterPhysics const &physics, size_t player_body,
@@ -32,7 +34,7 @@ struct Level2 {
 	bool inside_tunnel(glm::vec2 position) const;
 	void place_jelly_nearby(UnderwaterPhysics &physics, size_t player_body);
 	void resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, Checkpoint const &entry,
-		std::optional<size_t> carried_body, bool key_in_cave);
+		std::optional<size_t> carried_body);
 	void push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
@@ -238,6 +240,16 @@ private:
 	SpriteTexture door_texture;
 	SpriteTexture floor_texture;
 	Level2Puzzle puzzle;
+
+	// wake the big fish when the machine starts
+	BigFish big_fish;
+	std::shared_ptr<Sound::PlayingSample> arrival_roar;
+	std::shared_ptr<Sound::PlayingSample> presence;
+	std::shared_ptr<Sound::PlayingSample> charge_roar;
+	void stop_chase_sounds();
+
+	float roar_length = 0.0f;
+	void update_big_fish(float elapsed, Body2D &player, Camera2D const &camera);
 	SpriteTexture door_wheel_texture;
 	static constexpr float door_height = 30.0f;
 	static constexpr float wheel_radius = door_height * 0.17f; //include the handles

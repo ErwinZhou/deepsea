@@ -12,7 +12,7 @@
 #include <cmath>
 
 PlayMode::PlayMode(LevelId start_level, Checkpoint const &entry, std::string const &checkpoint_file,
-	float display_gain, bool developer_mode, bool key_in_cave)
+	float display_gain, bool developer_mode)
 	: level_id(start_level),
 	  display_gain(display_gain),
 	  developer_mode(developer_mode && start_level == LevelId::Two),
@@ -38,7 +38,7 @@ PlayMode::PlayMode(LevelId start_level, Checkpoint const &entry, std::string con
 
 		// restore solved puzzles before placing the jellyfish
 		if (entry.checkpoint != Level2Checkpoint::Entrance) {
-			level2->resume_checkpoint(physics, fish_body, entry, carried_body, key_in_cave);
+			level2->resume_checkpoint(physics, fish_body, entry, carried_body);
 			camera.center = camera.constrain(physics.bodies[fish_body].position, physics.bounds_min, physics.bounds_max);
 		}
 
@@ -278,7 +278,7 @@ void PlayMode::update(float elapsed) {
 		checkpoint.belly_contents = belly;
 		checkpoint.jelly_nearby = jelly_nearby;
 		const std::shared_ptr<PlayMode> next = std::make_shared<PlayMode>(level_id, checkpoint, checkpoint_file,
-			display_gain, developer_mode, key_in_cave);
+			display_gain, developer_mode);
 
 		// keep an unfinished save across a death
 		next->pending_save = pending_save;
