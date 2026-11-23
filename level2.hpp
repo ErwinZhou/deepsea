@@ -1,20 +1,26 @@
 #pragma once
 
 #include "Camera2D.hpp"
+#include "BigFish.hpp"
 #include "DrawSprites.hpp"
 #include "UnderwaterPhysics.hpp"
 #include "Water.hpp"
 #include "Level2Puzzle.hpp"
 #include "Sound.hpp"
+#include "Tentacles.hpp"
 #include "level1.hpp"
 
 #include <cstddef>
 #include <array>
 #include <deque>
 #include <optional>
+#include <random>
 #include <vector>
 
 struct Level2 {
+	// share one seed for this run of level two
+	inline static const std::mt19937::result_type random_seed = std::random_device{}();
+
 	Level2(SpriteTexture const &normal_texture, float fish_height, float max_swim_speed);
 	~Level2();
 	std::optional<size_t> setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
@@ -31,11 +37,19 @@ struct Level2 {
 	}
 	bool show_dead_fish() const { return puzzle.show_dead_fish(); }
 	void draw_grip(glm::mat4 const &world_to_clip) const { puzzle.draw_grip(world_to_clip); }
-	int checkpoint() const { return checkpoint_reached ? 1 : 0; }
-	size_t resume_checkpoint(UnderwaterPhysics &physics, size_t player_body);
+	const Checkpoint &puzzle_progress() const { return progress; }
+	bool tunnel_finished() const { return (progress.puzzle_flags & puzzle_flag(Level2Checkpoint::Tunnel)) != 0; }
+	void check_tunnel_exit(Body2D const &player, glm::vec2 previous_position, std::optional<size_t> carried_body);
+	bool has_jelly() const { return jelly_body.has_value(); }
+	bool inside_tunnel(glm::vec2 position) const;
+	void place_jelly_nearby(UnderwaterPhysics &physics, size_t player_body);
+	void resume_checkpoint(UnderwaterPhysics &physics, size_t player_body, Checkpoint const &entry,
+		std::optional<size_t> carried_body);
 	void push_door_wheel(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const;
 	float fade_amount() const;
+	void draw_exit_fade(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
+		glm::vec2 center, glm::vec2 size, float amount) const;
 
 	// main player update logic
 	void update(float elapsed, UnderwaterPhysics &physics, Camera2D const &camera, size_t player_body,
@@ -46,6 +60,14 @@ struct Level2 {
 	// push flashlight to another angle
 	void push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
 	bool restart_requested() const;
+	//true when the player reaches the right edge inside the held-open mouth
+	bool exit_reached() const { return escaped; }
+	bool ending_started() const { return finale_started; }
+	static constexpr float ending_height = 40.0f;
+	glm::vec2 ending_frame() const { return pit_center + glm::vec2(9.0f, 6.0f); }
+	glm::vec2 ending_exit() const {
+		return {ending_frame().x + 0.5f * ending_height * (16.0f / 9.0f) - 2.0f, seafloor_y + 2.0f};
+	}
 	// for arrival of worm, could be reused for big fish and final combat
 	glm::vec2 arrival_shake() const;
 
@@ -61,6 +83,7 @@ private:
 	static constexpr float chest_depth = 36.0f;
 	static constexpr float pit_half_width = 14.5f;
 	glm::vec2 pit_center{0.0f};
+	std::array<size_t, 2> mound_begin{}, mound_end{};
 	std::array<StaticBox2D, 2> ground{};
 	SpriteTexture mound_texture;
 	std::array<glm::vec2, 2> mound_centers{};
@@ -206,6 +229,7 @@ private:
 		void chase(glm::vec2 player, glm::vec2 entrance, float elapsed);
 		void draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 	} worm;
+	std::shared_ptr<Sound::PlayingSample> worm_screech;
 
 	static constexpr float shake_duration = 12.373f; //length of the big fish arrival roar
 	static constexpr float shake_strength = 0.08f;
@@ -274,15 +298,59 @@ private:
 	SpriteTexture floor_texture;
 	SpriteTexture wheel_mark_texture;
 	Level2Puzzle puzzle;
+
+	// wake the big fish when the machine starts
+	BigFish big_fish;
+	std::shared_ptr<Sound::PlayingSample> arrival_roar;
+	std::shared_ptr<Sound::PlayingSample> presence;
+	std::shared_ptr<Sound::PlayingSample> charge_roar;
+	void stop_chase_sounds();
+
+	float roar_length = 0.0f;
+	void update_big_fish(float elapsed, Body2D &player, Camera2D const &camera);
 	SpriteTexture door_wheel_texture;
 	static constexpr float door_height = 30.0f;
 	static constexpr float wheel_radius = door_height * 0.17f; //include the handles
 	size_t wheel_body = 0;
 	static constexpr float wheel_turn_speed = 2.5f; //radians per second at full push
 	glm::vec2 door_center{0.0f};
-	static constexpr float wheel_open_angle = glm::radians(180.0f); //180 out of 360 counterclockwise opens the door
+	static constexpr float wheel_open_angle = glm::radians(180.0f); // counterclockwise turn needed to open the door
 	bool door_open = false;
 	float wheel_angle = 0.0f; // initial is 0
 
-	bool checkpoint_reached = false;
+	Checkpoint progress{.level = 2};
+
+	bool finale_started = false;
+	std::shared_ptr<Sound::PlayingSample> collapse_sound;
+	bool escaped = false;
+	//the pit arms reach up to hold the jaws
+	Tentacles arms;
+	std::array<glm::vec2, 8> finale_arm_targets() const;
+
+	//the ceiling collapses after the arms grip the jaws
+	SpriteTexture big_rock_texture;
+	Level1::Target big_rock_target; //collision boxes from the level 1 rock
+	//match the hanging rock's fall in level 1
+	static constexpr float rock_size = 9.0f;
+	static constexpr float rock_gravity = 25.0f;
+	static constexpr float rock_spin = 0.6f;
+	static constexpr float rock_rest_height = 0.32f;
+	struct FallingRock {
+		glm::vec2 position{0.0f};
+		float velocity = 0.0f; // downward speed
+		float angle = 0.0f;
+		float warning_left = 1.5f;
+		float dust_left = 0.0f;
+		float rest_time = -1.0f; // negative while falling, then seconds since it landed
+	};
+	std::vector<FallingRock> falling_rocks;
+	float grab_time = -1.0f; // seconds since every arm gripped, negative before that
+	float next_rock_time = 0.0f;
+	static constexpr float rock_delay = 6.0f; //seconds between the grab and the first rock
+	static constexpr float rock_ramp_time = 6.0f; // rocks reach their fastest rate this long after they start
+	static constexpr glm::vec2 rock_interval{0.9f, 0.35f}; // seconds between rocks, first and fastest
+	static constexpr float rock_fade_time = 3.0f; // seconds a landed rock stays before it's gone
+	float ceiling_at(float x, UnderwaterPhysics const &physics) const;
+	void update_rockfall(float elapsed, UnderwaterPhysics const &physics, Body2D &player, Camera2D const &camera);
+	void draw_rockfall(DrawSprites const &sprites, glm::mat4 const &world_to_clip) const;
 };

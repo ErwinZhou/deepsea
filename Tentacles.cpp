@@ -23,6 +23,11 @@ constexpr float GripRadius = 0.85f;
 constexpr float GripCloseTime = 0.15f;
 constexpr float PullTime = 1.0f;
 constexpr float PullDistance = 22.0f;
+//the arms reach the jaws one after another
+constexpr float ShootTime = 0.3f;
+constexpr float ShootStagger = 0.05f;
+constexpr float ShootHook = 3.0f;
+constexpr float ShootSag = 2.5f;
 constexpr int Segments = 64;
 constexpr int StripSize = 2 * (Segments + 1);
 
@@ -78,9 +83,18 @@ void Tentacles::setup(glm::vec2 center, glm::vec2 guard, glm::vec2 span, float b
 	strike_time = StrikeCycle;
 }
 
-void Tentacles::distract(glm::vec2 const &position) {
+void Tentacles::distract(glm::vec2 const &position, bool already_holding) {
+	//stop reaching once the pearl is held
+	if (already_holding) {
+		distraction = 1.0f;
+	}
+
 	pearl = position;
 	distracted = true;
+}
+
+void Tentacles::release_pearl() {
+	distracted = false;
 }
 
 bool Tentacles::update(float elapsed, glm::vec2 const &fish, bool active) {
@@ -102,6 +116,8 @@ bool Tentacles::update(float elapsed, glm::vec2 const &fish, bool active) {
 		distraction = std::min(1.0f, distraction + elapsed / 1.8f);
 		return false;
 	}
+	//after letting go of the pearl, ease back out of the holding pose
+	distraction = std::max(0.0f, distraction - elapsed / 1.8f);
 	if (strike_time < StrikeCycle) {
 		strike_time += elapsed;
 		//track the fish until the grab ends
@@ -119,7 +135,31 @@ bool Tentacles::update(float elapsed, glm::vec2 const &fish, bool active) {
 	return false;
 }
 
+glm::vec2 Tentacles::shoot_spine(int arm, float along, float clock) const {
+	//ease out so the arm fires fast and slows as it lands
+	float e = 1.0f - (1.0f - shoot_extend[arm]) * (1.0f - shoot_extend[arm]);
+	glm::vec2 root = roots[arm];
+	glm::vec2 tip = glm::mix(root, grip_targets[arm], e);
+	glm::vec2 reach = tip - root;
+	float length = glm::length(reach);
+	glm::vec2 forward = length > 0.001f ? reach / length : glm::vec2(1.0f, 0.0f);
+	glm::vec2 normal(-forward.y, forward.x);
+
+	//arms 4-7 grab the upper jaw, arms 0-3 grab the lower jaw
+	float side = arm < 4 ? -1.0f : 1.0f;
+	float sag = (arm % 2 == 0 ? 1.0f : -1.0f) * std::min(12.0f, ShootSag + 0.08f * length);
+	glm::vec2 first = root + 0.35f * reach + normal * sag;
+	glm::vec2 second = tip - forward * (ShootHook * e) + glm::vec2(0.0f, side * ShootHook * e);
+	glm::vec2 point = bezier(root, first, second, tip, along);
+
+	float bulge = along * (1.0f - along);
+	float whip = 1.5f * (1.0f - e) * std::sin(12.0f * along - 25.0f * shoot_time + float(arm));
+	float strain = 0.25f * glm::smoothstep(0.8f, 1.0f, e) * std::sin(19.0f * clock + float(arm));
+	return point + normal * ((whip + strain) * 4.0f * bulge);
+}
+
 glm::vec2 Tentacles::spine(int arm, float along, float clock) const {
+	if (shooting) return shoot_spine(arm, along, clock);
 	if (caught && arm == strike_arm) {
 		//wrap the tip around the captured fish
 		float side = arm < 4 ? 1.0f : -1.0f;
@@ -171,7 +211,7 @@ glm::vec2 Tentacles::spine(int arm, float along, float clock) const {
 		curve.y += 0.7f * std::sin(0.8f * phase) * glm::smoothstep(0.7f, 1.0f, along);
 		point = glm::mix(point, curve, long_blend * (1.0f - lunge));
 	}
-	if (!distracted) return point;
+	if (!distracted && distraction <= 0.0f) return point;
 	//separate arcs keep the arms readable as they gather around the pearl
 	float angle = float(arm) * 6.2831853f / 8.0f;
 	glm::vec2 grip = pearl + 0.45f * glm::vec2(std::cos(angle), std::sin(angle));
@@ -183,6 +223,9 @@ glm::vec2 Tentacles::spine(int arm, float along, float clock) const {
 }
 
 float Tentacles::width(int arm, float along) const {
+	if (shooting) {
+		return glm::mix(1.4f, 0.18f, along) * (1.0f + 0.11f * std::sin(17.0f * along + float(arm)));
+	}
 	if (caught && arm == strike_arm && along >= GripStart) {
 		return glm::mix(0.35f, 0.04f, (along - GripStart) / (1.0f - GripStart));
 	}
@@ -304,4 +347,28 @@ void Tentacles::draw_backdrop(glm::mat4 const &world_to_clip) const {
 	glDrawArrays(GL_TRIANGLE_FAN, 0, GLsizei(vertices.size()));
 	glBindVertexArray(0);
 	glUseProgram(0);
+}
+
+void Tentacles::shoot(std::array<glm::vec2, 8> const &from) {
+	for (int i = 0; i < 8; ++i) {
+		roots[i] = from[i];
+	}
+	grip_targets = from;
+	shoot_extend.fill(0.0f);
+	shoot_time = 0.0f;
+	shooting = true;
+}
+
+void Tentacles::hold_big_fish(std::array<glm::vec2, 8> const &targets, float elapsed) {
+	if (!shooting) return;
+	//follow the jaws every frame
+	grip_targets = targets;
+	shoot_time += elapsed;
+	for (int i = 0; i < 8; ++i) {
+		shoot_extend[i] = std::clamp((shoot_time - float(i) * ShootStagger) / ShootTime, 0.0f, 1.0f);
+	}
+}
+
+bool Tentacles::holding_big_fish() const {
+	return shooting && std::all_of(shoot_extend.begin(), shoot_extend.end(), [](float e) { return e >= 1.0f; });
 }

@@ -274,6 +274,9 @@ void TestLevel::prepare_water(Water::Look &look) const {
 }
 
 void TestLevel::draw(DrawSprites const &sprites, glm::mat4 const &world_to_clip, UnderwaterPhysics const &physics) const {
+	// draw the pipes behind the test objects
+	puzzle.draw_decorations(sprites, world_to_clip);
+
 	for (Flashlight const &flashlight : flashlights) {
 		const glm::vec2 size(flashlight.height * float(flashlight_texture.pixel_size.x) / float(flashlight_texture.pixel_size.y),
 			flashlight.height);

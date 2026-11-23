@@ -11,15 +11,14 @@
 #include <cassert>
 #include <cmath>
 
-PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_contents, std::string const &checkpoint_file,
-	float display_gain, bool developer_mode, int entry_checkpoint)
+PlayMode::PlayMode(LevelId start_level, Checkpoint const &entry, std::string const &checkpoint_file,
+	float display_gain, bool developer_mode)
 	: level_id(start_level),
 	  display_gain(display_gain),
 	  developer_mode(developer_mode && start_level == LevelId::Two),
 	  checkpoint_file(checkpoint_file),
-	  entry_belly_contents(belly_contents),
-	  entry_checkpoint(entry_checkpoint),
-	  checkpoint_saved(entry_checkpoint != 0),
+	  entry_belly_contents(entry.belly_contents),
+	  saved_puzzles(entry.puzzle_flags),
 	  fish_texture(data_path("normal.png")),
 	  kirby_texture(data_path("kirby.png")),
 	  fat_texture(data_path("fat.png")),
@@ -32,14 +31,32 @@ PlayMode::PlayMode(LevelId start_level, std::optional<Body2D> const &belly_conte
 	} else if (level_id == LevelId::Test) {
 		test_level.emplace();
 		test_level->setup(physics, camera, fish_body);
+	} else if (level_id == LevelId::Three) {
+		level3.emplace();
+		level3->setup(physics, camera, fish_body);
 	} else {
 		assert(level_id == LevelId::Two && "play mode requires a supported level");
 		level2.emplace(fish_texture, fish_height, max_swim_speed);
-		carried_body = level2->setup(physics, camera, fish_body, belly_contents);
-		if (entry_checkpoint == 1) {
-			carried_body = level2->resume_checkpoint(physics, fish_body);
+		// loose puzzle items come back beside the checkpoint
+		std::optional<Body2D> belly = entry.belly_contents;
+		bool jelly_nearby = entry.jelly_nearby || developer_mode;
+		if (entry.puzzle_flags != 0 && belly && belly->kind != Body2D::Rock && belly->kind != Body2D::Trash) {
+			jelly_nearby = jelly_nearby || belly->kind == Body2D::Jelly;
+			belly.reset();
+		}
+		carried_body = level2->setup(physics, camera, fish_body, belly);
+
+		// restore solved puzzles before placing the jellyfish
+		if (entry.puzzle_flags != 0) {
+			level2->resume_checkpoint(physics, fish_body, entry, carried_body);
 			camera.center = camera.constrain(physics.bodies[fish_body].position, physics.bounds_min, physics.bounds_max);
 		}
+
+		// place the jellyfish beside the final spawn
+		if (jelly_nearby) {
+			level2->place_jelly_nearby(physics, fish_body);
+		}
+
 		if (carried_body) {
 			state = FishState::Fat;
 		}
@@ -64,6 +81,13 @@ glm::vec2 PlayMode::camera_target() const {
 		position.y = glm::mix(position.y, std::min(position.y, focus.y), pit_camera_blend);
 		position.y = std::max(position.y, physics.bodies[fish_body].position.y - 0.5f * camera.view_size.y + 4.0f);
 	}
+	if (level2 && level2->ending_started()) {
+		glm::vec2 fish = physics.bodies[fish_body].position;
+		glm::vec2 frame = level2->ending_frame();
+		glm::vec2 focus(std::min(fish.x + 12.0f, frame.x), frame.y);
+		position = glm::mix(position, focus, ending_camera_blend);
+		position.x = std::min(position.x, frame.x);
+	}
 	return position;
 }
 
@@ -73,6 +97,9 @@ glm::vec2 PlayMode::camera_bounds_min() const {
 		//retain room below the pit while the view eases back to the corridor
 		float floor = glm::mix(level2->surface_y(), level2->pit_bounds().min.y, pit_camera_blend);
 		lower.y = std::min(floor, level2->camera_floor(physics.bodies[fish_body].position.x)) - 3.0f;
+		if (level2->ending_started()) {
+			lower.y = std::min(lower.y, glm::mix(-43.0f, level2->ending_frame().y - 28.0f, ending_camera_blend));
+		}
 	}
 	return lower;
 }
@@ -130,7 +157,15 @@ void PlayMode::update(float elapsed) {
 		if (transition_time >= transition_fade_time) {
 			//keep this mode alive until update returns after replacing it
 			std::shared_ptr<Mode> const keep = shared_from_this();
-			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, carried_contents(), checkpoint_file, display_gain));
+
+			if (level2) {
+				Mode::set_current(std::make_shared<PlayMode>(LevelId::Three, Checkpoint{.level = 3}, checkpoint_file, display_gain));
+				return;
+			}
+
+			// carry the swallowed item into level two
+			const Checkpoint entry{.level = 2, .belly_contents = carried_contents()};
+			Mode::set_current(std::make_shared<PlayMode>(LevelId::Two, entry, checkpoint_file, display_gain));
 		}
 		return;
 	}
@@ -140,6 +175,8 @@ void PlayMode::update(float elapsed) {
 		return;
 	}
 	glm::vec2 move(float(input.right) - float(input.left), float(input.up) - float(input.down));
+	// stop swimming once level 3's exit starts the ending
+	if (level3 && level3->exit_reached()) move = glm::vec2(0.0f);
 	if (move != glm::vec2(0.0f)) {
 		move = glm::normalize(move);
 		if (level1) {
@@ -176,20 +213,27 @@ void PlayMode::update(float elapsed) {
 			swim_thrust = swim_thrust * acceleration_scale + fish.velocity * fish.drag * (1.0f - acceleration_scale);
 		}
 		const glm::vec2 previous_position = fish.position;
+
 		if (developer_mode && input.fast && fish.active) fish.velocity = move * 24.0f;
+
 		fish.add_force(swim_thrust);
 		if (test_level) test_level->check_puzzle_hits(physics);
 		if (level2) level2->check_puzzle_hits(physics);
+
 		physics.step();
+
 		if (test_level) {
 			test_level->push_flashlight(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
 		} else if (level2) {
 			level2->push_door_wheel(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
 			level2->push_flashlight(physics, fish_body, move, float(UnderwaterPhysics::fixed_step));
 			level2->update_worm(physics, fish_body, previous_position, float(UnderwaterPhysics::fixed_step));
+			level2->check_tunnel_exit(fish, previous_position, carried_body);
 		}
+
 		float speed = glm::length(fish.velocity);
 		float speed_limit = developer_mode && input.fast ? 24.0f : max_swim_speed;
+
 		if (fish.active && speed > speed_limit) fish.velocity *= speed_limit / speed;
 		accumulated_time -= UnderwaterPhysics::fixed_step;
 	}
@@ -197,25 +241,66 @@ void PlayMode::update(float elapsed) {
 	if (test_level) {
 		test_level->update(elapsed, physics, fish_body, camera);
 	}
+	if (level3) {
+		level3->update(elapsed, physics, fish_body);
+	}
 	if (level2) {
-		float reveal = level2->pit_reveal(physics.bodies[fish_body].position);
+		ending_camera_blend = glm::mix(ending_camera_blend, level2->ending_started() ? 1.0f : 0.0f,
+			1.0f - std::exp(-1.2f * elapsed));
+		float reveal = level2->ending_started() ? 0.0f : level2->pit_reveal(physics.bodies[fish_body].position);
 		float response = reveal > pit_camera_blend ? 0.9f : 0.6f;
 		pit_camera_blend = glm::mix(pit_camera_blend, reveal, 1.0f - std::exp(-response * elapsed));
 		float height = glm::mix(developer_mode ? 40.0f : 24.0f, 48.0f,
 			pit_camera_blend);
+		height = glm::mix(height, Level2::ending_height, ending_camera_blend);
 		//move closer during a capture
 		bool captured = level2->show_dead_fish();
 		if (captured) height = 28.0f;
 		camera.follow_speed = captured ? 8.0f : 4.0f;
+		camera.dead_zone = glm::mix(glm::vec2(5.0f, 2.5f), glm::vec2(1.0f, 1.5f), ending_camera_blend);
 		camera.view_size = glm::mix(camera.view_size, glm::vec2(height * (16.0f / 9.0f), height),
 			1.0f - std::exp(-2.5f * elapsed));
+		if (level2->ending_started() && camera.view_size.y > Level2::ending_height) {
+			camera.view_size = glm::vec2(Level2::ending_height * (16.0f / 9.0f), Level2::ending_height);
+		}
 	}
 	camera.update(camera_target(), elapsed, camera_bounds_min(), physics.bounds_max);
+	if (level2 && level2->ending_started()) {
+		camera.center.x = std::min(camera.center.x, level2->ending_frame().x);
+	}
 	if (level2) {
 		level2->update(elapsed, physics, camera, fish_body, move, fish_visual_angle);
-		if (!checkpoint_saved && level2->checkpoint() == 1) {
-			checkpoint_saved = true;
-			if (!checkpoint_file.empty()) save_checkpoint(checkpoint_file, Checkpoint{.level = 2, .checkpoint = 1});
+
+		if (level2->exit_reached() && transition_time < 0.0f) {
+			transition_time = 0.0f;
+			input = {};
+			hit_stop = 0.0f;
+		}
+
+		// save newly completed puzzles
+		const Checkpoint &progress = level2->puzzle_progress();
+		if (!checkpoint_file.empty() && progress.puzzle_flags != saved_puzzles &&
+			(!pending_save || pending_save->puzzle_flags != progress.puzzle_flags)) {
+			save_retry_remaining = 0.0f;
+			pending_save = progress;
+			pending_save->belly_contents = carried_contents();
+
+			//restore the jellyfish only if it was brought into level 2
+			pending_save->jelly_nearby = level2->has_jelly();
+			if (pending_save->belly_contents && pending_save->belly_contents->kind == Body2D::Jelly) {
+				pending_save->belly_contents.reset();
+			}
+		}
+
+		// keep this exact checkpoint if writing fails
+		save_retry_remaining = std::max(0.0f, save_retry_remaining - elapsed);
+		if (pending_save && save_retry_remaining == 0.0f) {
+			if (save_checkpoint(checkpoint_file, *pending_save)) {
+				saved_puzzles = pending_save->puzzle_flags;
+				pending_save.reset();
+			} else {
+				save_retry_remaining = save_retry_delay;
+			}
 		}
 	}
 	Sound::listener.set_position_right(glm::vec3(camera.center, listener_depth), glm::vec3(1.0f, 0.0f, 0.0f), elapsed);
@@ -230,22 +315,46 @@ void PlayMode::update(float elapsed) {
 			hit_stop = 0.0f;
 			level1->stop_sounds(transition_fade_time);
 			if (!checkpoint_file.empty()) {
-				save_checkpoint(checkpoint_file, Checkpoint{.level = 2, .checkpoint = 0, .belly_contents = carried_contents()});
+				// save on entering level two
+				save_checkpoint(checkpoint_file, Checkpoint{.level = 2, .belly_contents = carried_contents()});
 			}
 		} else {
 			restart = level1->restart_requested(physics);
 		}
 	} else if (test_level) {
 		restart = test_level->restart_requested();
-	} else {
+	} else if (level2) {
 		restart = level2->restart_requested();
 	}
 	if (restart) {
 		//keep this mode alive until update returns after replacing it
 		std::shared_ptr<Mode> const keep = shared_from_this();
-		int checkpoint = level2 ? level2->checkpoint() : entry_checkpoint;
-		Mode::set_current(std::make_shared<PlayMode>(level_id, entry_belly_contents, checkpoint_file,
-			display_gain, developer_mode, checkpoint));
+
+		// remember where the fish last solved a puzzle
+		Checkpoint checkpoint = level2 ? level2->puzzle_progress() : Checkpoint{};
+
+		//recover unused items on respawn
+		std::optional<Body2D> belly = level2 ? carried_contents() : entry_belly_contents;
+		const bool jelly_nearby = level2 && level2->has_jelly();
+		const bool key_in_cave = level2 && belly && belly->kind == Body2D::Key &&
+			(!level2->tunnel_finished() || level2->inside_tunnel(physics.bodies[fish_body].position));
+
+		// return the cave key and release the jellyfish
+		if (key_in_cave || (jelly_nearby && belly && belly->kind == Body2D::Jelly)) {
+			belly.reset();
+		}
+
+		// return to the last completed puzzle
+		checkpoint.belly_contents = belly;
+		checkpoint.jelly_nearby = jelly_nearby;
+		const std::shared_ptr<PlayMode> next = std::make_shared<PlayMode>(level_id, checkpoint, checkpoint_file,
+			display_gain, developer_mode);
+
+		// keep an unfinished save across a death
+		next->pending_save = pending_save;
+		next->save_retry_remaining = save_retry_remaining;
+		next->saved_puzzles = saved_puzzles;
+		Mode::set_current(next);
 	}
 }
 
@@ -345,6 +454,7 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	glm::vec2 half_view = 0.5f * render_view;
 	//keep horizontal shake inside the entrance and exit
 	view_center.x = camera.constrain(view_center, physics.bounds_min, physics.bounds_max).x;
+	if (level2 && level2->ending_started()) view_center.x = std::min(view_center.x, level2->ending_frame().x);
 	glm::mat4 world_to_clip = glm::ortho(view_center.x - half_view.x, view_center.x + half_view.x,
 		view_center.y - half_view.y, view_center.y + half_view.y);
 
@@ -355,6 +465,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		jelly_light = level1->prepare_water(water_look, physics, carried_body, view_center, render_view);
 	} else if (test_level) {
 		test_level->prepare_water(water_look);
+	} else if (level3) {
+		level3->prepare_water(water_look);
 	} else {
 		jelly_light = level2->prepare_water(water_look, physics, fish_body, carried_body);
 	}
@@ -386,6 +498,8 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 		level1->draw(sprites, world_to_clip, physics);
 	} else if (test_level) {
 		test_level->draw(sprites, world_to_clip, physics);
+	} else if (level3) {
+		level3->draw(sprites, world_to_clip);
 	} else {
 		level2->draw(sprites, world_to_clip, physics);
 	}
@@ -433,7 +547,15 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 	} else if (test_level) {
 		fade = test_level->fade_amount();
 	}
-	background.draw_fade(sprites, world_to_clip, view_center, render_view, fade, level);
+	if (level2 && level2->ending_started() && fish.active) {
+		float distance = glm::distance(fish.position, level2->ending_exit());
+		float white = 0.8f * (1.0f - glm::smoothstep(0.0f, 14.0f, distance));
+		if (level2->exit_reached()) white = glm::mix(0.8f, 1.0f, std::clamp(fade, 0.0f, 1.0f));
+		level2->draw_exit_fade(sprites, world_to_clip, view_center, render_view, white);
+	} else {
+		background.draw_fade(sprites, world_to_clip, view_center, render_view, fade, level);
+	}
+	if (level3) level3->draw_overlay(sprites, world_to_clip, view_center, render_view);
 
 	glDisable(GL_BLEND);
 	glViewport(0, 0, drawable_size.x, drawable_size.y);
