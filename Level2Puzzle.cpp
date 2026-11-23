@@ -280,12 +280,12 @@ void Level2Puzzle::update(float elapsed, UnderwaterPhysics &physics, size_t play
 }
 
 void Level2Puzzle::drop_nearby_trash(UnderwaterPhysics &physics, glm::vec2 fish_position) {
-	// only pipes above the fish can drop trash
+	// use the distance to either side of the pipe
 	constexpr float nearby_distance = 40.0f; // [-40, 40] -> surrounding of dropping zones
 	for (size_t step = 0; step < ceiling_pipes.size(); ++step) {
 		const size_t pipe_index = (next_pipe + step) % ceiling_pipes.size();
 		const CeilingPipe &pipe = ceiling_pipes[pipe_index];
-		if (fish_position.y > pipe.mouth.y || std::abs(fish_position.x - pipe.mouth.x) > nearby_distance) {
+		if (std::abs(fish_position.x - pipe.mouth.x) > nearby_distance) {
 			continue;
 		}
 
