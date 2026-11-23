@@ -17,6 +17,7 @@
  * 
  * "Backpack" Design - The player respawn near the place of the puzzle that they just solved 
  * right now with all of the items that have not used by them for its corresponding puzzles
+ * inspired by classic escape room game like my personal fav: https://www.rustylake.com/
  */
 enum class Level2Checkpoint : unsigned {
 	Entrance = 0,
