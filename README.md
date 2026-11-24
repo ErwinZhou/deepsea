@@ -2,7 +2,7 @@
 
 A 2D underwater horror exploration game about a small fish surviving the chase of a mysterious monstrous creature and a much larger world.
 
-![Screen Shot](docs/screenshot.png)
+![Screen Shot](docs/screenshot.jpg)
 
 Team: Haoran Xie, Yuchen Zhou, Sarah Garland.
 
@@ -21,5 +21,10 @@ For testing, `--level 2` starts Level 2 fresh, `--level 2-dev` adds fast swimmin
 
 Built on the course's base code. See [LICENSE](LICENSE).
 
-Credits: the fish, jaw, rock, wall, cavern background, jellyfish, coral and seaweed art in `assets/` was drawn by Sarah Garland for this game.
-`cavern_rock.png` is a softened version of Sarah's cavern background. The roar, rumble, chomp and rock hit sounds in `assets/sound/` were provided by Sarah Garland, and the `modified_` files are edited versions of them.
+## Credits
+1. Art and Music Assets: the fish, jaw, rock, wall, cavern background, jellyfish, coral, octopus, door, and seaweed art, etc., in `assets/` were all drawn by our art lead Sarah Garland for this game. `cavern_rock.png` is a softened version of Sarah's cavern background. The roar, rumble, chomp and rock hit sounds in `assets/sound/` were provided by Sarah Garland, and the `modified_` files are edited versions of them.
+
+2. This game is inspired by the following games:
+- Overall Atomosphere: [Limbo](https://en.wikipedia.org/wiki/Limbo_(video_game))
+- Fish related suction mechnisams: [Kirby](https://en.wikipedia.org/wiki/Kirby_(series))
+- Traditional Escape Room theme puzzle games such as Rusty Lake, a.k.a [Cube Escape Room Series](https://en.wikipedia.org/wiki/Cube_Escape)
