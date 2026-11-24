@@ -14,11 +14,19 @@
 SpriteTexture::SpriteTexture(std::string const &filename) {
 	std::vector<glm::u8vec4> pixels;
 	load_png(filename, &pixel_size, &pixels, LowerLeftOrigin);
+	upload(pixels.data());
+}
+
+SpriteTexture::SpriteTexture(glm::u8vec4 const &color) : pixel_size(1) {
+	upload(&color);
+}
+
+void SpriteTexture::upload(glm::u8vec4 const *pixels) {
 	glGenTextures(1, &texture);
 	glActiveTexture(GL_TEXTURE0);
 	glBindTexture(GL_TEXTURE_2D, texture);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_SRGB8_ALPHA8, pixel_size.x, pixel_size.y,
-		0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+		0, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 	//based on https://registry.khronos.org/OpenGL-Refpages/gl4/html/glGenerateMipmap.xhtml
 	glGenerateMipmap(GL_TEXTURE_2D);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
@@ -44,7 +52,9 @@ DrawSprites::DrawSprites() {
 		"#define PILLAR " + std::to_string(Pillar) + "\n" +
 		"#define LIGHT_ONLY " + std::to_string(LightOnly) + "\n" +
 		"#define TUNNEL " + std::to_string(Tunnel) + "\n" +
-		"#define FAR_TAIL " + std::to_string(FarTail) + "\n";
+		"#define FAR_TAIL " + std::to_string(FarTail) + "\n" +
+		"#define SOFT_LIGHT " + std::to_string(SoftLight) + "\n" +
+		"#define HELD_PREDATOR " + std::to_string(HeldPredator) + "\n";
 
 	program = gl_compile_program(
 		"#version 330\n"
@@ -73,6 +83,14 @@ DrawSprites::DrawSprites() {
 		"void main() {\n"
 		"	vec2 sample_uv = mix(TEX_RECT.xy, TEX_RECT.zw, texCoord);\n"
 		"	vec4 color = texture(TEX, sample_uv) * TINT;\n"
+		"	if (MATERIAL == HELD_PREDATOR) color.a *= smoothstep(0.0, 0.12, sample_uv.x);\n"
+		"	if (MATERIAL == SOFT_LIGHT) {\n"
+		"	  vec2 p = 2.0 * texCoord - 1.0;\n"
+		"	  vec2 edge = 1.0 - smoothstep(vec2(0.65), vec2(1.0), abs(p));\n"
+		"	  color.a *= exp(-3.0 * dot(p, p)) * edge.x * edge.y;\n"
+		"	  fragColor = color;\n"
+		"	  return;\n"
+		"	}\n"
 		"	if (MATERIAL == FAR_TAIL) color.a *= smoothstep(0.0, 1.0, texCoord.x);\n"
 		"	float eye_halo = 0.0;\n"
 		"	float eye_core = 0.0;\n"
@@ -86,13 +104,13 @@ DrawSprites::DrawSprites() {
 		"	}\n"
 		"	if (color.a < 0.0039 && eye_halo < 0.01) discard;\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, 0.5 * clip + 0.5);\n"
-		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR || MATERIAL == LIGHT_ONLY || MATERIAL == TUNNEL;\n"
+		"	bool surface = MATERIAL == SURFACE || MATERIAL == STONE || MATERIAL == PREDATOR || MATERIAL == HELD_PREDATOR || MATERIAL == PLAYER || MATERIAL == CRACKED || MATERIAL == PILLAR || MATERIAL == LIGHT_ONLY || MATERIAL == TUNNEL;\n"
 		"	float lit = MATERIAL != EMISSIVE ? light(world, surface) : 1.0;\n"
 		"	float shade = surface ? 0.45 + 0.55 * lit : lit;\n"
 		//adjust brightness for each kind of sprite
 		"	if (MATERIAL == PLAYER) shade = 0.03 + 0.55 * lit + 0.35 * eye_light;\n"
 		"	float wet_shine = 0.0;\n"
-		"	if (MATERIAL == PREDATOR) {\n"
+		"	if (MATERIAL == PREDATOR || MATERIAL == HELD_PREDATOR) {\n"
 		//use jaw shading to give teeth rounded lighting
 		// based on https://en.wikipedia.org/wiki/Normal_mapping
 		"		const float BLUR = 5.0;\n"
@@ -120,11 +138,6 @@ DrawSprites::DrawSprites() {
 		"		wet_shine = 0.5 * shine * color.a * dot(color.rgb, vec3(1.0 / 3.0));\n"
 		"	}\n"
 		"	if (MATERIAL == STONE) shade = 0.12 + 0.6 * lit;\n"
-		//black pixels need a color to reflect light
-		"	if (MATERIAL == TUNNEL) {\n"
-		"		color.rgb = vec3(0.045, 0.052, 0.055);\n"
-		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
-		"	}\n"
 		//keep light-dependent objects hidden without a nearby, unblocked source
 		"	if (MATERIAL == LIGHT_ONLY) {\n"
 		"		shade = max(0.0, lit - BRIGHTNESS * DIM);\n"
@@ -177,6 +190,8 @@ DrawSprites::DrawSprites() {
 		"		color.rgb += vec3(0.045, 0.055, 0.055) * eye_halo + vec3(0.55, 0.60, 0.60) * eye_core;\n"
 		"		color.a = max(color.a, 0.10 * eye_halo);\n"
 		"	}\n"
+		//keep the tunnel silhouette black, including edges beside a light
+		"	if (MATERIAL == TUNNEL) color.rgb = vec3(0.0);\n"
 		"	fragColor = color;\n"
 		"}\n"
 	);

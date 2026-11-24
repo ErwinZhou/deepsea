@@ -4,6 +4,7 @@
 //The 'PlayMode' mode plays the game:
 #include "PlayMode.hpp"
 #include "Checkpoint.hpp"
+#include "BrightnessMode.hpp"
 
 //For asset loading:
 #include "Load.hpp"
@@ -40,15 +41,23 @@ extern "C" { uint32_t GetACP(); }
 int main(int argc, char **argv) {
 	PlayMode::LevelId start_level = PlayMode::LevelId::One;
 	bool do_skip_intro = false;
+	bool developer_mode = false;
+	bool start_at_chase = false;
 	if (argc != 1) {
-		if (argc < 3 || std::string(argv[1]) != "--level" || (std::string(argv[2]) != "1" && std::string(argv[2]) != "2")) {
-			std::cerr << "Usage: game [--level 1|2] [--skip-intro]\n";
+		std::string level = argc >= 3 ? argv[2] : "";
+		if ((argc != 3 && argc != 4) || std::string(argv[1]) != "--level" ||
+			(level != "1" && level != "2" && level != "3" && level != "test" && level != "2-dev" && level != "2-chase") ||
+			(argc == 4 && std::string(argv[3]) != "--skip-intro")) {
+			std::cerr << "Usage: game [--level 1|2|3|test|2-dev|2-chase] [--skip-intro]\n";
 			return 1;
 		}
-		start_level = std::string(argv[2]) == "1" ? PlayMode::LevelId::One : PlayMode::LevelId::Two;
-		if (argc > 3 && std::string(argv[3]) ==  "--skip-intro"){
-			do_skip_intro = true;
-		}
+		if (level == "2" || level == "2-dev" || level == "2-chase") start_level = PlayMode::LevelId::Two;
+		if (level == "3") start_level = PlayMode::LevelId::Three;
+		if (level == "test") start_level = PlayMode::LevelId::Test;
+		// 2-chase also gets the dev fast swim (hold shift)
+		developer_mode = level == "2-dev" || level == "2-chase";
+		start_at_chase = level == "2-chase";
+		do_skip_intro = argc == 4 || developer_mode || level == "test" || level == "3";
 	}
 #ifdef _WIN32
 	{ //when compiled on windows, check that code page is forced to utf-8 (makes file loading/saving work right):
@@ -138,26 +147,48 @@ int main(int argc, char **argv) {
 
 	//------------ create game mode + make current --------------
 	std::string checkpoint_file;
-	std::optional<Body2D> belly_contents;
+	std::string brightness_file = preference_path("brightness.txt");
+	std::optional<int> brightness = BrightnessMode::load(brightness_file);
+
+	Checkpoint entry;
 	if (argc == 1) {
-		checkpoint_file = checkpoint_path();
+		checkpoint_file = preference_path("checkpoint.csv");
 		if (!checkpoint_file.empty()) {
 			const std::optional<Checkpoint> saved = load_checkpoint(checkpoint_file);
 			if (saved) {
 				start_level = saved->level == 2 ? PlayMode::LevelId::Two : PlayMode::LevelId::One;
-				belly_contents = saved->belly_contents;
+				entry = *saved;
 			}
 		}
-	}
-
-	{ //create mode:
-		auto intro = std::make_shared< GP26IntroMode >([&checkpoint_file, &start_level, &belly_contents](){
-			Mode::set_current(std::make_shared< PlayMode >(start_level, belly_contents, checkpoint_file));
-		} );
-		if (do_skip_intro) {
-			intro->time = 10.0f; //force intro to end immediately
+	} else if (start_at_chase) {
+		//start the chase with all puzzles completed
+		using Point = Level2Checkpoint;
+		entry.level = 2;
+		entry.checkpoint = Point::Machine;
+		for (Point point : {Point::Tunnel, Point::Door, Point::Clam, Point::Octopus, Point::Chest, Point::Machine}) {
+			entry.puzzle_flags |= puzzle_flag(point);
 		}
-		Mode::set_current( intro );
+		entry.puzzle_flags |= Checkpoint::pit_open;
+	} else if (start_level == PlayMode::LevelId::Two && !developer_mode) {
+		entry.level = 2;
+		entry.jelly_nearby = true;
+	}
+	auto start_game = [&](int value) {
+		brightness = value;
+
+		// enter the level now or after the intro
+		auto play = [start_level, entry, checkpoint_file, value, developer_mode]() {
+			Mode::set_current(std::make_shared<PlayMode>(start_level, entry, checkpoint_file,
+				BrightnessMode::display_gain(value), developer_mode));
+		};
+
+		if (do_skip_intro) play();
+		else Mode::set_current(std::make_shared<GP26IntroMode>(play));
+	};
+	if (argc == 1 && !brightness && !brightness_file.empty()) {
+		Mode::set_current(std::make_shared<BrightnessMode>(brightness_file, std::nullopt, start_game));
+	} else {
+		start_game(brightness.value_or(BrightnessMode::default_brightness));
 	}
 
 	//------------ main loop ------------
@@ -193,11 +224,27 @@ int main(int argc, char **argv) {
 					continue;
 				}
 				//handle resizing:
-				if (evt.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+				if (evt.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED || evt.type == SDL_EVENT_WINDOW_RESIZED) {
 					on_resize();
 				}
+				auto current = Mode::current;
+				if (evt.type == SDL_EVENT_KEY_DOWN && evt.key.key == SDLK_F2) {
+					if (auto game = std::dynamic_pointer_cast<PlayMode>(current)) {
+						auto resume = [&, game](int value) {
+							brightness = value;
+							game->display_gain = BrightnessMode::display_gain(value);
+							Mode::set_current(game);
+							Sound::set_paused(false);
+						};
+						auto menu = std::make_shared<BrightnessMode>(brightness_file, brightness, resume);
+						game->clear_input();
+						Sound::set_paused(true);
+						Mode::set_current(menu);
+					}
+					continue;
+				}
 				//handle input:
-				if (Mode::current && Mode::current->handle_event(evt, window_size)) {
+				if (current && current->handle_event(evt, window_size)) {
 					// mode handled it; great
 				} else if (evt.type == SDL_EVENT_QUIT) {
 					Mode::set_current(nullptr);

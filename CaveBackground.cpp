@@ -33,6 +33,13 @@ void CaveBackground::draw(DrawSprites const &sprites, glm::mat4 const &world_to_
 	draw_layer(cavern_texture, 0.28f, 34.0f, 0.45f, 55);
 }
 
+void CaveBackground::draw_pit(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
+	glm::vec2 const &bounds_min, glm::vec2 const &bounds_max) const {
+	//coral lights the shaft background behind the arms
+	sprites.draw(background_texture_1, world_to_clip, 0.5f * (bounds_min + bounds_max), bounds_max - bounds_min,
+		0.0f, false, glm::u8vec4(255), 0.72f, DrawSprites::Background);
+}
+
 void CaveBackground::draw_fade(DrawSprites const &sprites, glm::mat4 const &world_to_clip,
 	glm::vec2 const &view_center, glm::vec2 const &view_size, float amount, int level) const {
 	if (amount > 0.0f) {

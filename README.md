@@ -17,6 +17,8 @@ node Maekfile.js
 
 On Windows, run `dist\game.exe`. Escape quits.
 
+For testing, `--level 2` starts Level 2 fresh, `--level 2-dev` adds fast swimming with Shift and a wider camera, and `--level 2-chase` starts after activating the machine with the same developer controls. `--level 3` previews the exit. These commands leave checkpoint saves alone.
+
 Built on the course's base code. See [LICENSE](LICENSE).
 
 Credits: the fish, jaw, rock, wall, cavern background, jellyfish, coral and seaweed art in `assets/` was drawn by Sarah Garland for this game.

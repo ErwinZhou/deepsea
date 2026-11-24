@@ -60,6 +60,8 @@ struct Level1 {
 	};
 	Target wall_targets[3];
 	Target hanging_targets[3];
+	static Target load_target(std::string const &filename);
+	static StaticBox2D world_box(glm::vec4 const &part, glm::vec2 const &center, glm::vec2 const &size, float angle);
 
 	//impacts from the last obstacle update
 	struct Events {
@@ -207,15 +209,10 @@ private:
 	static constexpr float far_roar_depth = 40.0f;
 	static constexpr float far_roar_volume = 0.75f;
 	static constexpr float far_roar_reach = 24.0f;
-	static constexpr float near_roar_volume = 1.2f;
-	static constexpr float near_roar_reach = 90.0f;
-	static constexpr float charge_roar_start_volume = 0.45f;
-	static constexpr float charge_roar_fade_in = 3.0f;
 	static constexpr float charge_roar_fade_out = 0.5f;
 	//distance at which each sound is half as loud
 	static constexpr float roar_reach = 60.0f;
 	static constexpr float rumble_reach = 15.0f;
-	static constexpr float presence_reach = 20.0f;
 	static constexpr float rock_reach = 10.0f;
 	static constexpr float rock_miss_volume = 0.5f;
 	SpriteTexture fade_texture;

@@ -87,7 +87,7 @@ std::string const Water::glsl =
 	"	}\n"
 	"	return amount;\n"
 	"}\n"
-	"float light(vec2 world, bool shadows) {\n"
+	"float point_light(vec2 world, bool shadows) {\n"
 	"	float amount = DIM;\n"
 	"	for (int i = 0; i < GLOW_COUNT; ++i) {\n"
 	"		vec2 offset = (world - GLOWS[i].xy) / GLOW_RADIUS;\n"
@@ -95,7 +95,10 @@ std::string const Water::glsl =
 	"		float strength = distance2 < 9.0 ? exp(-distance2) : 0.0;\n"
 	"		if (strength > 0.0001) amount += GLOWS[i].z * strength * (shadows ? visible(GLOWS[i].xy, world) : 1.0);\n"
 	"	}\n"
-	"	return BRIGHTNESS * (amount + beam_light(world, shadows));\n"
+	"	return amount;\n"
+	"}\n"
+	"float light(vec2 world, bool shadows) {\n"
+	"	return BRIGHTNESS * (point_light(world, shadows) + beam_light(world, shadows));\n"
 	"}\n"
 	"float noise(vec2 p) {\n"
 	"	ivec2 cell = ivec2(floor(p));\n"
@@ -183,8 +186,9 @@ Water::Water() {
 		"out vec4 fragColor;\n"
 		"void main() {\n"
 		"	vec2 world = mix(VIEW_MIN, VIEW_MAX, uv);\n"
-		"	float glow = max(0.0, light(world, false) - BRIGHTNESS * DIM);\n"
-		"	float beam_glow = BRIGHTNESS * beam_light(world, false);\n"
+		"	float beam = beam_light(world, false);\n"
+		"	float beam_glow = BRIGHTNESS * beam;\n"
+		"	float glow = max(0.0, BRIGHTNESS * (point_light(world, false) + beam) - BRIGHTNESS * DIM);\n"
 		"	vec2 drifting = world / 1.1 + vec2(TIME * 0.02, TIME * 0.045);\n"
 		"	uvec2 cell = uvec2(ivec2(floor(drifting)));\n"
 		"	uint key = hash(cell.x ^ hash(cell.y));\n"
@@ -219,8 +223,9 @@ Water::Water() {
 		"#version 330\n" + glsl +
 		"uniform sampler2D SCENE;\n"
 		"uniform uint FRAME;\n"
+		"uniform float DISPLAY_GAIN;\n"
 		"const float EDGE_DARKNESS = 0.6;\n"
-		"const float GRAIN = 0.012;\n"
+		"uniform float GRAIN;\n"
 		//based on https://en.wikipedia.org/wiki/SRGB#Transfer_function_(%22gamma%22)
 		"vec3 to_srgb(vec3 linear) {\n"
 		"	return mix(12.92 * linear, 1.055 * pow(linear, vec3(1.0 / 2.4)) - 0.055, step(0.0031308, linear));\n"
@@ -231,6 +236,9 @@ Water::Water() {
 		"	vec3 color = texture(SCENE, uv).rgb;\n"
 		// darker toward the edges, darkest in the corners
 		"	color *= 1.0 - EDGE_DARKNESS * smoothstep(0.5, 1.45, length(2.0 * uv - 1.0));\n"
+		//lift shadows while keeping black and white fixed
+		"	float peak = clamp(max(color.r, max(color.g, color.b)), 0.0, 1.0);\n"
+		"	color *= DISPLAY_GAIN / mix(1.0, DISPLAY_GAIN, peak);\n"
 		//grain reduces color banding in dark water
 		"	uvec2 pixel = uvec2(gl_FragCoord.xy);\n"
 		"	float grain = random(pixel.x ^ hash(pixel.y ^ hash(FRAME)));\n"
@@ -239,6 +247,8 @@ Water::Water() {
 	);
 	haze_uniforms = Uniforms(haze_program);
 	frame_uniform = glGetUniformLocation(finish_program, "FRAME");
+	display_gain_uniform = glGetUniformLocation(finish_program, "DISPLAY_GAIN");
+	grain_uniform = glGetUniformLocation(finish_program, "GRAIN");
 	glUseProgram(finish_program);
 	glUniform1i(glGetUniformLocation(finish_program, "SCENE"), 0);
 	glUseProgram(0);
@@ -301,12 +311,14 @@ void Water::haze() {
 	glUseProgram(0);
 }
 
-void Water::finish() {
+void Water::finish(float display_gain, bool grain) {
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 	glViewport(viewport[0], viewport[1], viewport[2], viewport[3]);
 
 	glUseProgram(finish_program);
 	glUniform1ui(frame_uniform, frame++);
+	glUniform1f(display_gain_uniform, display_gain);
+	glUniform1f(grain_uniform, grain ? 0.012f : 0.0f);
 	glDisable(GL_BLEND);
 	// add grain after converting to sRGB
 	glDisable(GL_FRAMEBUFFER_SRGB);

@@ -6,6 +6,8 @@
 #include "Camera2D.hpp"
 #include "level1.hpp"
 #include "level2.hpp"
+#include "level3.hpp"
+#include "TestLevel.hpp"
 #include "CaveBackground.hpp"
 #include "Water.hpp"
 
@@ -15,10 +17,11 @@
 
 struct PlayMode : Mode {
 	enum class FishState { Normal, Kirby, Fat };
-	enum class LevelId { One = 1, Two = 2 };
+	enum class LevelId { One = 1, Two = 2, Three = 3, Test };
 
-	explicit PlayMode(LevelId start_level = LevelId::One, std::optional<Body2D> const &belly_contents = std::nullopt,
-		std::string const &checkpoint_file = "");
+	explicit PlayMode(LevelId start_level = LevelId::One, Checkpoint const &entry = {},
+		std::string const &checkpoint_file = "", float display_gain = 1.0f, bool developer_mode = false);
+	void clear_input();
 	~PlayMode() override = default;
 	bool handle_event(SDL_Event const &, glm::uvec2 const &window_size) override;
 	void update(float elapsed) override;
@@ -50,8 +53,16 @@ struct PlayMode : Mode {
 	LevelId const level_id;
 	std::optional<Level1> level1;
 	std::optional<Level2> level2;
+	std::optional<Level3> level3;
+	std::optional<TestLevel> test_level;
+	float display_gain;
+	bool const developer_mode;
 
 private:
+	float pit_camera_blend = 0.0f;
+	float ending_camera_blend = 0.0f;
+	glm::vec2 camera_target() const;
+	glm::vec2 camera_bounds_min() const;
 	void update_interaction();
 	void spit();
 	std::optional<Body2D> carried_contents() const;
@@ -60,11 +71,24 @@ private:
 	//retry restores the entrance checkpoint rather than the player's later inventory
 	std::optional<Body2D> entry_belly_contents;
 
+	// puzzles already saved to disk
+	unsigned saved_puzzles = 0;
+
+	// checkpoint still waiting to be written
+	std::optional<Checkpoint> pending_save;
+
+	// seconds to wait after a failed save
+	static constexpr float save_retry_delay = 2.0f;
+
+	// seconds left before trying again
+	float save_retry_remaining = 0.0f;
+
 	struct {
 		bool up = false;
 		bool down = false;
 		bool left = false;
 		bool right = false;
+		bool fast = false;
 		bool space = false;
 		bool space_pressed = false;
 		bool suppress_suction = false;

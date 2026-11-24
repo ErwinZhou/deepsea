@@ -753,10 +753,10 @@ void GP26IntroMode::draw(glm::uvec2 const &drawable_size) {
 		screen_min = 0.5f * (scene_max + scene_min) - glm::vec2(aspect, 1.0f) / scale;
 		screen_max = 0.5f * (scene_max + scene_min) + glm::vec2(aspect, 1.0f) / scale;
 	}
-	
+
 	//compute triangles to draw:
 	std::vector< Vertex > attribs;
-	
+
 	//--- gradient drawing helpers ---
 	glm::vec2 grad_start = glm::vec2(0.0f, 0.0f);
 	glm::vec2 grad_end = glm::vec2(0.0f, 100.0f);
@@ -895,7 +895,7 @@ void GP26IntroMode::draw(glm::uvec2 const &drawable_size) {
 		}
 
 		if (circle_r > 0.0f) { //circle
-			
+
 			const glm::vec2 c = 0.5f * (screen_max + screen_min);
 			constexpr size_t steps = 32;
 

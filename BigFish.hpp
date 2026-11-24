@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DrawSprites.hpp"
+#include "Sound.hpp"
 
 #include <glm/glm.hpp>
 
@@ -14,6 +15,7 @@ struct BigFish {
 		Charging, //speeding up and opening wider
 		Slamming, //jaws shutting
 		Stunned, //pinned by falling rock, stops moving
+		Held, //jaws held open by the octopus
 	} state = Waiting;
 
 	//pivot at the back of the mouth, shared by both jaws
@@ -43,6 +45,7 @@ struct BigFish {
 	//check whether the player is close enough to trigger a charge or be caught
 	bool in_reach(glm::vec2 const &point) const;
 	bool in_mouth(glm::vec2 const &point) const;
+	glm::vec2 escape_target() const;
 
 	//0 when the mouth is at its widest, 1 when it's shut
 	float closed() const;
@@ -62,12 +65,33 @@ struct BigFish {
 
 	SpriteTexture upper_jaw;
 	SpriteTexture lower_jaw;
+	SpriteTexture passage_light;
 
+	void enter_from_right(float view_right, float mouth_y);
+	static Sound::Sample const &arrival_sound();
+
+	//both levels use the same chase sounds
+	static std::shared_ptr<Sound::PlayingSample> play_presence(glm::vec3 const &mouth);
+	static std::shared_ptr<Sound::PlayingSample> play_charge_roar(glm::vec3 const &mouth);
+	static constexpr float presence_reach = 20.0f;
+	static constexpr float charge_start_volume = 0.45f;
+	static constexpr float charge_fade_in = 3.0f;
+
+	static constexpr float arrival_volume = 1.2f;
+	static constexpr float arrival_reach = 90.0f;
+	static constexpr float arrival_shake_size = 0.08f;
+
+	//keep the jaws open while the octopus holds them
+	void hold_open();
+	void hold_open(float passage_y);
+	//attachment point along either jaw
+	glm::vec2 tentacle_point(bool upper, float along) const;
 private:
 	void update_turn(float elapsed);
 	glm::vec2 local_point(glm::vec2 const &point) const;
 	float angle = 0.0f;
 	float turn_speed = 0.0f;
+	float held_mouth_x = 0.0f;
 	float charge_speed() const;
 	//upper and lower bite limits at the teeth
 	glm::vec2 mouth_edges(float shut) const;
@@ -78,4 +102,14 @@ private:
 	float jaw = 0.0f;
 	float slam_from = 0.0f;
 	float shake_left = 0.0f;
+
+	//swims right in level 1 and left in level 2
+	float direction = 1.0f;
+
+	//faster approach during the final chase
+	static constexpr float finale_speed_scale = 4.0f;
+
+	//use the normal pace until the chase starts
+	float swim_speed_scale = 1.0f;
+
 };

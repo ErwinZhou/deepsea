@@ -15,9 +15,14 @@ struct Body2D {
 	float current_scale = 1.0f;
 	bool active = true;
 	//identify the player and collectible bodies
-	enum Kind { Fish, Rock, Jelly, Key } kind = Rock;
+	enum Kind { Fish, Rock, Jelly, Key, Keycard, Pipe, Pearl, Trash, Wheel } kind = Rock;
 	// only a fresh player spit can damage cave targets, falling rocks start harmless
 	bool player_spat = false;
+
+	float half_segment = 0.0f; //horizontal length from the center to either rounded end
+	float wheel_angle = 0.0f;
+	float spin = 0.0f;
+	float wheel_clearance(glm::vec2 point, glm::vec2 &normal) const; // wheel inside rotation
 
 	void add_force(glm::vec2 const &value);
 	void apply_impulse(glm::vec2 const &value);
@@ -27,6 +32,9 @@ struct StaticBox2D {
 	glm::vec2 min{0.0f};
 	glm::vec2 max{0.0f};
 };
+
+//find when a moving body reaches the box, or infinity if it misses
+float hit_time(Body2D const &body, StaticBox2D const &box, float elapsed, glm::vec2 *contact);
 
 struct UnderwaterPhysics {
 	static constexpr double fixed_step = 1.0 / 120.0;
