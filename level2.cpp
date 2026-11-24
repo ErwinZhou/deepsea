@@ -479,6 +479,18 @@ void Level2::push_flashlight(Flashlight &flashlight, UnderwaterPhysics &physics,
 
 std::optional<size_t> Level2::setup(UnderwaterPhysics &physics, Camera2D &camera, size_t player_body,
 	std::optional<Body2D> const &belly_contents) {
+	/**
+	 * Whole Level setup
+	 * (1) Tunnel
+	 * (2) Small scary fish
+	 * 
+	 * TODO:
+	 * (1) Octopus with chest
+	 * (2) Door
+	 * (3) Pipes with trash
+	 * (4) Clamp with Pearl
+	 * (5) Keymachine
+	 */
 	assert(physics.bodies.size() == 1 && player_body == 0 && physics.bodies[player_body].kind == Body2D::Fish
 		&& "level 2 setup requires only the player at body zero");
 
