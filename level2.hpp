@@ -73,20 +73,6 @@ struct Level2 {
 
 	void react_to_suction(glm::vec2 const &mouth, glm::vec2 const &facing, float range, float cone_cos, float any_side);
 
-	// main player update logic
-	void update(float elapsed, UnderwaterPhysics &physics, Camera2D const &camera, size_t player_body,
-		glm::vec2 const &player_movement, float player_angle);
-	
-	// draw worm update moving
-	void update_worm(UnderwaterPhysics &physics, size_t player_body, glm::vec2 previous_position, float elapsed);
-	// push flashlight to another angle
-	void push_flashlight(UnderwaterPhysics &physics, size_t player_body, glm::vec2 const &movement, float elapsed);
-	bool restart_requested() const;
-	// for arrival of worm, could be reused for big fish and final combat
-	glm::vec2 arrival_shake() const;
-
-	void react_to_suction(glm::vec2 const &mouth, glm::vec2 const &facing, float range, float cone_cos, float any_side);
-
 private:
 	//width and height of the swimming area
 	static constexpr float level_length = 320.0f;
